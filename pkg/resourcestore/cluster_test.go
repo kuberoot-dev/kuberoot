@@ -351,6 +351,48 @@ func TestRestartKeepsStateAndRevisions(t *testing.T) {
 	}
 }
 
+// A snapshot from the Maintenance API restores into a store of its own,
+// as an installation carries a control plane's store to its disk.
+func TestRestoreFromASnapshot(t *testing.T) {
+	ms := newCluster(t, 3, nil)
+	ctx := context.Background()
+	var last int64
+	for i := range 20 {
+		p, err := ms[i%3].client.Put(ctx, fmt.Sprintf("/k%02d", i), "v")
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = p.Header.Revision
+	}
+	rc, err := ms[1].client.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "snapshot.db")
+	if err := writeFile(file, rc); err != nil {
+		t.Fatal(err)
+	}
+	rc.Close()
+	m := newMember(t, "restored", nil)
+	if err := Restore(file, m.dir); err != nil {
+		t.Fatal(err)
+	}
+	m.start(map[string][]string{m.name: {m.peerURL}}, "new")
+	waitLeader(t, []*member{m})
+	g, err := m.client.Get(ctx, "/k", clientv3.WithPrefix())
+	if err != nil || len(g.Kvs) != 20 || g.Header.Revision != last {
+		t.Fatalf("restored: %d keys at %d, want 20 at %d: %v", len(g.Kvs), g.Header.Revision, last, err)
+	}
+	p, err := m.client.Put(ctx, "/k00", "w")
+	if err != nil || p.Header.Revision != last+1 {
+		t.Fatalf("a write after the restore: %v %v", p, err)
+	}
+	l, err := m.client.MemberList(ctx)
+	if err != nil || len(l.Members) != 1 || l.Members[0].ID != m.node.ID() {
+		t.Fatalf("members after the restore: %v %v", l, err)
+	}
+}
+
 func TestLeasesAreReplicated(t *testing.T) {
 	ms := newCluster(t, 3, nil)
 	ctx := context.Background()

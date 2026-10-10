@@ -43,6 +43,14 @@ type flags struct {
 }
 
 func main() {
+	// kuberoot-store snapshot restore FILE --data-dir DIR, as etcdutl's.
+	if len(os.Args) > 2 && os.Args[1] == "snapshot" && os.Args[2] == "restore" {
+		if err := restore(os.Args[3:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	var f flags
 	flag.StringVar(&f.name, "name", "default", "this member's name in --initial-cluster")
 	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/kuberoot-store", "the member's data: its state and Raft log")
@@ -273,6 +281,26 @@ func run(f flags) error {
 	default:
 	}
 	return nil
+}
+
+// restore makes a data directory from a snapshot. It takes etcdutl's
+// flags; the member's name and peers are those it is started with.
+func restore(args []string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return errors.New("usage: kuberoot-store snapshot restore FILE --data-dir DIR")
+	}
+	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
+	dataDir := fs.String("data-dir", "", "the member's data directory to create")
+	fs.String("name", "", "ignored: the member is named when it starts")
+	fs.String("initial-cluster", "", "ignored: the member starts a store of its own")
+	fs.String("initial-advertise-peer-urls", "", "ignored: taken when the member starts")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *dataDir == "" {
+		return errors.New("--data-dir is required")
+	}
+	return resourcestore.Restore(args[0], *dataDir)
 }
 
 func metrics(n *resourcestore.Node) http.Handler {

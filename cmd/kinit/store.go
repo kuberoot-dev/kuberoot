@@ -176,16 +176,18 @@ func restoreStore(node nodeInfo) error {
 	if _, err := os.Stat(etcdstore.RestoreFile); err != nil {
 		return nil
 	}
+	// The lab store restores its own snapshots, with etcdutl's arguments.
+	tool, data := "/usr/bin/etcdutl", "member"
 	if etcdstore.Kind() == etcdstore.KuberootStore {
-		return fmt.Errorf("restore the cluster store: the resource store lab cannot restore etcd snapshots")
+		tool, data = etcdstore.Binary(etcdstore.KuberootStore), "raft.db"
 	}
-	if _, err := os.Stat(filepath.Join(etcdstore.DataDir, "member")); err == nil {
+	if _, err := os.Stat(filepath.Join(etcdstore.DataDir, data)); err == nil {
 		log.Printf("cluster store: a snapshot to restore, and a store already: keeping the store")
 		return os.Remove(etcdstore.RestoreFile)
 	}
 	peer := etcdstore.PeerURL(node.ip.String())
 	_ = os.RemoveAll(etcdstore.DataDir)
-	out, err := exec.Command("/usr/bin/etcdutl", "snapshot", "restore", etcdstore.RestoreFile,
+	out, err := exec.Command(tool, "snapshot", "restore", etcdstore.RestoreFile,
 		"--data-dir", etcdstore.DataDir, "--name", node.name,
 		"--initial-cluster", node.name+"="+peer, "--initial-advertise-peer-urls", peer).CombinedOutput()
 	if err != nil {
