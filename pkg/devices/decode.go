@@ -69,6 +69,17 @@ func Decode(p v1.Point, regs []uint16, bit bool) (float64, error) {
 	return v * scale, nil
 }
 
+// scaled multiplies a value that may have decimals of its own, as Redfish
+// and SNMP send them, and drops the binary noise of the product: 344 *
+// 0.001 is 0.344, not 0.34400000000000003.
+func scaled(p v1.Point, v float64) (float64, error) {
+	s, err := Scale(p)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(strconv.FormatFloat(v*s, 'g', 12, 64), 64)
+}
+
 func decimals(scale string) int {
 	if i := strings.IndexByte(scale, '.'); i >= 0 {
 		return len(scale) - i - 1

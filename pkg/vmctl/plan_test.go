@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	routerv1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
 	v1 "github.com/tym83/kuberoot/pkg/apis/vm/v1alpha1"
 )
 
@@ -84,5 +85,32 @@ func TestPlanMovesOnlyToACurrentCopy(t *testing.T) {
 	}
 	if p := PlanFor(m, cluster("a", now.Add(-time.Minute)), nil, nil, map[string]bool{}, now); p.Moved || p.Waiting == "" {
 		t.Errorf("moved without a current copy: %+v", p)
+	}
+}
+
+func TestNewestLeaseWins(t *testing.T) {
+	now := time.Now()
+	leases := []routerv1.Lease{
+		{MAC: "52:54:00:aa:bb:cc", Address: "10.123.0.242", Expires: metav1.NewTime(now.Add(12 * time.Hour))},
+		{MAC: "52:54:00:AA:BB:CC", Address: "10.123.0.241", Expires: metav1.NewTime(now.Add(2 * time.Hour))},
+		{MAC: "52:54:00:00:00:01", Address: "10.123.0.10", Expires: metav1.NewTime(now.Add(time.Hour))},
+	}
+	got := newestLeases(leases)
+	if got["52:54:00:aa:bb:cc"] != "10.123.0.242" || got["52:54:00:00:00:01"] != "10.123.0.10" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestSystemSerialPointsToTheSeed(t *testing.T) {
+	m := &v1.VirtualMachine{}
+	m.Name = "desk"
+	if got := systemSerial(m); got != "" {
+		t.Fatalf("a machine without user data got %q", got)
+	}
+	seedBase.Store("http://10.123.0.1:8091")
+	defer seedBase.Store("")
+	m.Spec.UserData = "#cloud-config\n"
+	if got := systemSerial(m); got != "ds=nocloud;s=http://10.123.0.1:8091/desk/" {
+		t.Fatalf("got %q", got)
 	}
 }

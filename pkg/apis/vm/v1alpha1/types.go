@@ -62,6 +62,21 @@ type VirtualMachineSpec struct {
 	// machine runs, the machine moves there alive.
 	// +optional
 	Node string `json:"node,omitempty"`
+	// UserData is cloud-init's user data for the machine, a #cloud-config
+	// document or a script, which the machines' gateway serves to it alone;
+	// an image that runs cloud-init reads it at its first boot.
+	// +optional
+	UserData string `json:"userData,omitempty"`
+	// UserDataSecret names a Secret whose key userData holds the user data
+	// instead, for user data with credentials in it.
+	// +optional
+	UserDataSecret *SecretRef `json:"userDataSecret,omitempty"`
+}
+
+// SecretRef names a Secret.
+type SecretRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
 }
 
 type Disk struct {

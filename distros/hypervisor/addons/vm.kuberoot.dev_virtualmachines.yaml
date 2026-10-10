@@ -106,6 +106,25 @@ spec:
                 description: 'Running: the machine runs; false shuts it down and keeps
                   its disk.'
                 type: boolean
+              userData:
+                description: |-
+                  UserData is cloud-init's user data for the machine, a #cloud-config
+                  document or a script, which the machines' gateway serves to it alone;
+                  an image that runs cloud-init reads it at its first boot.
+                type: string
+              userDataSecret:
+                description: |-
+                  UserDataSecret names a Secret whose key userData holds the user data
+                  instead, for user data with credentials in it.
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
             required:
             - disk
             type: object

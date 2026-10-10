@@ -18,6 +18,8 @@ import (
 	"text/template"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/tym83/kuberoot/pkg/apis/node"
 )
 
@@ -27,7 +29,19 @@ import (
 var (
 	StateDir = "/var/lib/kuberoot/vm"
 	RunDir   = "/run/kuberoot/vm"
+	// Reserve is the room a volume leaves the node: its own state, and a
+	// release staged for an upgrade.
+	Reserve int64 = 1 << 30
 )
+
+// freeBytes is the room left on the filesystem holding dir.
+func freeBytes(dir string) (int64, bool) {
+	var st unix.Statfs_t
+	if err := unix.Statfs(dir, &st); err != nil {
+		return 0, false
+	}
+	return int64(st.Bavail) * int64(st.Bsize), true
+}
 
 // ResourceName is a volume's DRBD resource.
 func ResourceName(volume string) string { return "vm-" + volume }
@@ -151,6 +165,17 @@ func (v *Volumes) Apply(ctx context.Context, name string, s node.VolumeSpec) err
 	}
 	img := v.imageFile(name)
 	if _, err := os.Stat(img); os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Dir(img), 0o700); err != nil {
+			return err
+		}
+		// The file is sparse, but its copy fills it: the node keeps room
+		// for its own state and an upgrade, or the volume is not made here.
+		if free, ok := freeBytes(filepath.Dir(img)); ok {
+			if need := s.SizeBytes + metadataBytes(s.SizeBytes) + Reserve; free < need {
+				return fmt.Errorf("no room for the volume: %d MiB free, %d MiB needed with the node's own %d MiB",
+					free>>20, need>>20, Reserve>>20)
+			}
+		}
 		f, err := os.Create(img)
 		if err != nil {
 			return err

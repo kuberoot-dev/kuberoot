@@ -1,0 +1,186 @@
+# The workstation distribution: people's desktops as virtual machines of the
+# cluster. It is the hypervisor distribution (cloud-hypervisor on KVM, disks
+# replicated with DRBD, machines moved off failed nodes and alive between
+# nodes) with workspaces (workstation.kuberoot.dev) on top: kuberoot-wsctl
+# makes each a machine whose desktop cloud-init installs, and its gateway on
+# the control plane opens the desktop in a browser (port 6080) or for an RDP
+# client. The kubelet stays for registration and heartbeats. No pods run.
+apiVersion: kuberoot.dev/v1alpha1
+kind: Distribution
+metadata:
+  name: workstation
+spec:
+  # DRBD 9 for replicated volumes (LINSTOR, Piraeus); the operator manages
+  # it, so DRBD runs no helper programs of its own.
+  modules:
+  - name: drbd
+    params: usermode_helper=disabled
+  - name: drbd_transport_tcp
+  sysctls:
+    net.ipv4.ip_forward: "1"
+    net.ipv6.conf.all.forwarding: "1"
+    net.bridge.bridge-nf-call-iptables: "1"
+    net.bridge.bridge-nf-call-ip6tables: "1"
+    fs.inotify.max_user_instances: "8192"
+    fs.inotify.max_user_watches: "524288"
+  roles:
+    controlPlane:
+      generators: [node, cluster, containers, kubelet]
+      addons: true
+      services:
+      - name: kuberoot-node
+        args:
+        - /usr/bin/kuberoot-node
+        - --node-name={{.Node.Name}}
+        - --advertise-address={{.Node.IP}}
+        - --tls-cert-file={{pki "node-api.crt"}}
+        - --tls-private-key-file={{pki "node-api.key"}}
+        - --client-ca-file={{pki "node-client-ca.crt"}}
+        - --kubeconfigs=admin={{kube "admin.kubeconfig"}}
+        - --requestheader-client-ca-file={{pki "front-proxy-ca.crt"}}
+        - --cluster-tls-cert-file={{pki "node-api-cluster.crt"}}
+        - --cluster-tls-private-key-file={{pki "node-api-cluster.key"}}
+        - --cluster-kubeconfig={{kube "node-api-delegation.kubeconfig"}}
+        - --cluster-ca-file={{pki "ca.crt"}}
+        - --cluster-ca-key-file={{pki "ca.key"}}
+        - --admin-kubeconfig={{kube "admin.kubeconfig"}}
+        - --proxy-client-cert-file={{pki "node-api-proxy.crt"}}
+        - --proxy-client-key-file={{pki "node-api-proxy.key"}}
+        - --routes-kubeconfig={{kube "admin.kubeconfig"}}
+        - --pod-cidr={{.Net.Pod}}
+        - --pod-network={{.Net.PodNetwork}}
+        - --service-cidr={{.Net.Service}}
+        - --machines
+        - --vm-network-kubeconfig={{kube "admin.kubeconfig"}}
+      - name: containerd
+        args: [/usr/bin/containerd, --config, /etc/containerd/config.toml]
+      - name: kine
+        args:
+        - /usr/bin/kine
+        - --endpoint
+        # Writers wait for each other (busy timeout, transactions taking the
+        # write lock up front, as k3s runs it) instead of failing with
+        # "database is locked"; FULL sync keeps the state across power loss.
+        - sqlite:///var/lib/kine/state.db?_journal=WAL&_synchronous=FULL&cache=shared&_busy_timeout=30000&_txlock=immediate
+        - --listen-address
+        - unix:///run/kine/kine.sock
+        # The API server compacts the history every five minutes, as with etcd;
+        # kine's own floor of 1000 revisions kept a quiet cluster's old
+        # versions for hours, so list continuations never expired.
+        - --compact-min-retain=100
+      - name: kube-apiserver
+        args:
+        - /usr/bin/kube-apiserver
+        - --etcd-servers=unix:///run/kine/kine.sock
+        - --advertise-address={{.Node.IP}}
+        - --secure-port=6443
+        - --service-cluster-ip-range={{.Net.Service}}
+        - --client-ca-file={{pki "ca.crt"}}
+        - --tls-cert-file={{pki "apiserver.crt"}}
+        - --tls-private-key-file={{pki "apiserver.key"}}
+        - --kubelet-client-certificate={{pki "apiserver-kubelet-client.crt"}}
+        - --kubelet-client-key={{pki "apiserver-kubelet-client.key"}}
+        - --kubelet-preferred-address-types=InternalIP
+        - --kubelet-certificate-authority={{pki "ca.crt"}}
+        - --service-account-issuer=https://kubernetes.default.svc.cluster.local
+        - --service-account-key-file={{pki "sa.pub"}}
+        - --service-account-signing-key-file={{pki "sa.key"}}
+        - --authorization-mode=Node,RBAC
+        - --enable-admission-plugins=NodeRestriction
+        - --allow-privileged=true
+        - --enable-bootstrap-token-auth=true
+        - --admission-control-config-file={{kube "admission.yaml"}}
+        - --encryption-provider-config={{pki "encryption.yaml"}}
+        - --audit-policy-file={{kube "audit-policy.yaml"}}
+        - --audit-log-path=/var/log/kuberoot/audit.log
+        - --audit-log-maxsize=50
+        - --audit-log-maxbackup=3
+        # Aggregation: the node API joins the cluster API through the front proxy.
+        - --requestheader-client-ca-file={{pki "front-proxy-ca.crt"}}
+        - --requestheader-allowed-names=front-proxy-client
+        - --requestheader-username-headers=X-Remote-User
+        - --requestheader-group-headers=X-Remote-Group
+        - --requestheader-extra-headers-prefix=X-Remote-Extra-
+        - --proxy-client-cert-file={{pki "front-proxy-client.crt"}}
+        - --proxy-client-key-file={{pki "front-proxy-client.key"}}
+        - --enable-aggregator-routing=true
+      - name: kube-controller-manager
+        after: apiserver
+        args:
+        - /usr/bin/kube-controller-manager
+        - --kubeconfig={{kube "controller-manager.kubeconfig"}}
+        - --authentication-kubeconfig={{kube "controller-manager.kubeconfig"}}
+        - --authorization-kubeconfig={{kube "controller-manager.kubeconfig"}}
+        - --root-ca-file={{pki "ca.crt"}}
+        - --service-account-private-key-file={{pki "sa.key"}}
+        - --cluster-signing-cert-file={{pki "ca.crt"}}
+        - --cluster-signing-key-file={{pki "ca.key"}}
+        - --use-service-account-credentials=true
+        - --controllers=*,bootstrapsigner,tokencleaner
+        # Pod subnets are assigned here, not chosen by each node: routes to them
+        # cannot be redirected by a node that lies about itself.
+        - --allocate-node-cidrs=true
+        - --cluster-cidr={{.Net.Pod}}
+        - --node-cidr-mask-size=24
+        - --service-cluster-ip-range={{.Net.Service}}
+        - --leader-elect=false
+      - name: kubelet
+        after: apiserver
+        args:
+        - /usr/bin/kubelet
+        - --config={{kube "kubelet.yaml"}}
+        - --kubeconfig={{kube "kubelet-client.kubeconfig"}}
+        - --hostname-override={{.Node.Name}}
+        - --node-ip={{.Node.IP}}
+      # Intents: lowers Apps to primitives and runs Overrides.
+      - name: kuberoot-intents
+        after: apiserver
+        args: [/usr/bin/kuberoot-intents, '--kubeconfig={{kube "intents.kubeconfig"}}']
+      # Places the cluster's machines and moves them off failed nodes; the
+      # gateway of the machines' network.
+      - name: kuberoot-vmctl
+        after: apiserver
+        args:
+        - /usr/bin/kuberoot-vmctl
+        - --kubeconfig={{kube "admin.kubeconfig"}}
+        - --network=10.123.0.0/24
+      # Makes each workspace a machine with a desktop; its gateway opens the
+      # desktops in a browser at port 6080, and for RDP clients.
+      - name: kuberoot-wsctl
+        after: apiserver
+        args:
+        - /usr/bin/kuberoot-wsctl
+        - --kubeconfig={{kube "admin.kubeconfig"}}
+        - --advertise-address={{.Node.IP}}
+        - --port=6080
+
+    worker:
+      generators: [node, member, containers, kubelet]
+      services:
+      - name: kuberoot-node
+        args:
+        - /usr/bin/kuberoot-node
+        - --node-name={{.Node.Name}}
+        - --advertise-address={{.Node.IP}}
+        - --tls-cert-file={{pki "node-api.crt"}}
+        - --tls-private-key-file={{pki "node-api.key"}}
+        - --client-ca-file={{pki "node-client-ca.crt"}}
+        - --cluster-tls-cert-file={{cluster "node-api.crt"}}
+        - --cluster-tls-private-key-file={{cluster "node-api.key"}}
+        - --proxy-trust-ca-file={{cluster "ca.crt"}}
+        - --routes-kubeconfig=/var/lib/kubelet/kubeconfig
+        - --pod-cidr={{.Net.Pod}}
+        - --pod-network={{.Net.PodNetwork}}
+        - --machines
+        - --vm-network-kubeconfig=/var/lib/kubelet/kubeconfig
+      - name: containerd
+        args: [/usr/bin/containerd, --config, /etc/containerd/config.toml]
+      - name: kubelet
+        args:
+        - /usr/bin/kubelet
+        - --config={{kube "kubelet.yaml"}}
+        - --bootstrap-kubeconfig={{kube "bootstrap.kubeconfig"}}
+        - --kubeconfig=/var/lib/kubelet/kubeconfig
+        - --cert-dir=/var/lib/kubelet/pki
+        - --hostname-override={{.Node.Name}}
+        - --node-ip={{.Node.IP}}

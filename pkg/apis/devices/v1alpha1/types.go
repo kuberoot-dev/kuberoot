@@ -1,7 +1,10 @@
-// Package v1alpha1 is the devices.kuberoot.dev API: the devices a gateway
-// node talks to, and where what they say goes, as Kubernetes resources. The
-// iot distribution's controller polls the devices, evaluates the routes and
-// publishes, with no pod and no container runtime.
+// Package v1alpha1 is the devices.kuberoot.dev API: the devices a node
+// talks to, and where what they say goes, as Kubernetes resources. A device
+// is anything the node reads over the network: a PLC over Modbus, a server's
+// BMC over Redfish, a switch or a PDU over SNMP, or a service it probes.
+// kuberoot-devices polls them, evaluates the routes and publishes, exports
+// every value as a metric and sends heartbeats, with no pod and no
+// container runtime.
 // +kubebuilder:object:generate=true
 // +groupName=devices.kuberoot.dev
 package v1alpha1
@@ -17,7 +20,8 @@ var GroupVersion = schema.GroupVersion{Group: "devices.kuberoot.dev", Version: "
 
 var (
 	SchemeBuilder = runtime.NewSchemeBuilder(func(s *runtime.Scheme) error {
-		s.AddKnownTypes(GroupVersion, &Device{}, &DeviceList{}, &Route{}, &RouteList{}, &Safeguard{}, &SafeguardList{})
+		s.AddKnownTypes(GroupVersion, &Device{}, &DeviceList{}, &Route{}, &RouteList{}, &Safeguard{}, &SafeguardList{},
+			&Heartbeat{}, &HeartbeatList{})
 		metav1.AddToGroupVersion(s, GroupVersion)
 		return nil
 	})
@@ -31,7 +35,8 @@ type Status struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// Device is a device the node reads: a PLC, a meter, a sensor.
+// Device is a device the node reads: a PLC, a meter, a sensor, a server's
+// BMC, a switch, a PDU, or a service it probes.
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster,shortName=dev
 // +kubebuilder:subresource:status
@@ -48,13 +53,18 @@ type Device struct {
 	Status DeviceStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self.protocol != 'modbus-tcp' || (has(self.points) && size(self.points) > 0)",message="a Modbus device needs points"
+// +kubebuilder:validation:XValidation:rule="self.protocol != 'snmp' || (has(self.points) && size(self.points) > 0 && self.points.all(p, has(p.oid)))",message="an SNMP device needs points with an oid"
 type DeviceSpec struct {
-	// Protocol the device speaks.
-	// +kubebuilder:validation:Enum=modbus-tcp
+	// Protocol the device speaks: modbus-tcp; snmp; redfish, a server's
+	// BMC; or a probe of a service: http, tcp, icmp.
+	// +kubebuilder:validation:Enum=modbus-tcp;snmp;redfish;http;tcp;icmp
 	Protocol string `json:"protocol"`
-	// Address of the device, host:port.
+	// Address of the device: host:port for modbus-tcp, snmp (port 161 when
+	// left out) and tcp; the BMC's https://host for redfish; the URL for
+	// http; the host for icmp.
 	Address string `json:"address"`
-	// UnitID addresses the device behind a gateway; 1 when unset.
+	// UnitID addresses a Modbus device behind a gateway; 1 when unset.
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=255
@@ -65,11 +75,44 @@ type DeviceSpec struct {
 	// Timeout of one request.
 	// +kubebuilder:default="2s"
 	Timeout metav1.Duration `json:"timeout,omitempty"`
-	// Points are the values read from the device.
-	// +kubebuilder:validation:MinItems=1
+	// Credentials names a Secret with what the device asks for: username
+	// and password for redfish; community for snmp version 2c; username,
+	// and authProtocol (MD5, SHA, SHA256, SHA512), authPassword, privProtocol
+	// (DES, AES, AES256) and privPassword as it needs them, for version 3.
+	// +optional
+	Credentials *SecretRef `json:"credentials,omitempty"`
+	// SNMP settings.
+	// +optional
+	SNMP *SNMP `json:"snmp,omitempty"`
+	// TLS for redfish and https probes.
+	// +optional
+	TLS *TLS `json:"tls,omitempty"`
+	// Points are the values read from the device. A BMC and a probe report
+	// theirs by themselves; points there only pick which to keep.
+	// +optional
 	// +listType=map
 	// +listMapKey=name
-	Points []Point `json:"points"`
+	Points []Point `json:"points,omitempty"`
+}
+
+// SecretRef names a Secret; in kube-system when no namespace is given.
+type SecretRef struct {
+	Name string `json:"name"`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type SNMP struct {
+	// +kubebuilder:default="2c"
+	// +kubebuilder:validation:Enum="2c";"3"
+	Version string `json:"version,omitempty"`
+}
+
+type TLS struct {
+	// InsecureSkipVerify accepts any certificate: BMCs mostly have their
+	// own, self-signed.
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
 // Point is a value of the device: where it is and how to read it.
@@ -78,16 +121,22 @@ type Point struct {
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z_][a-zA-Z0-9_]*$`
 	Name string `json:"name"`
 	// Kind of Modbus table: holding or input registers, coils or discrete
-	// inputs.
+	// inputs. Modbus only.
 	// +kubebuilder:default=holding
 	// +kubebuilder:validation:Enum=holding;input;coil;discrete
 	Kind string `json:"kind,omitempty"`
-	// Register is the address in the table, counted from 0.
+	// Register is the address in the Modbus table, counted from 0.
+	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=65535
-	Register int32 `json:"register"`
-	// Type of the value: 16-bit registers as they are, 32-bit ones from two
-	// registers, the high word first; bool for coils and discrete inputs.
+	Register int32 `json:"register,omitempty"`
+	// OID of an SNMP value, as 1.3.6.1.2.1.1.3.0.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^\.?[0-9]+(\.[0-9]+)*$`
+	OID string `json:"oid,omitempty"`
+	// Type of a Modbus value: 16-bit registers as they are, 32-bit ones from
+	// two registers, the high word first; bool for coils and discrete
+	// inputs. SNMP values carry their own types.
 	// +kubebuilder:default=uint16
 	// +kubebuilder:validation:Enum=int16;uint16;int32;uint32;float32;bool
 	Type string `json:"type,omitempty"`
@@ -223,6 +272,64 @@ type SafeguardStatus struct {
 	// RolledBack is the last revision undone, and Why.
 	RolledBack string `json:"rolledBack,omitempty"`
 	Why        string `json:"why,omitempty"`
+}
+
+// Heartbeat tells someone outside the node that it is alive and its own
+// checks work: every period it calls a URL, a dead man's switch that alerts
+// when the calls stop. With a query, it calls only while the query finds
+// what it looks for: a monitoring cluster that stopped collecting is as
+// silent as one that is down.
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name=Healthy,type=boolean,JSONPath=`.status.healthy`
+// +kubebuilder:printcolumn:name=Sent,type=integer,JSONPath=`.status.sent`
+// +kubebuilder:printcolumn:name=Last,type=date,JSONPath=`.status.lastSent`
+// +kubebuilder:printcolumn:name=Error,type=string,JSONPath=`.status.error`
+type Heartbeat struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   HeartbeatSpec   `json:"spec"`
+	Status HeartbeatStatus `json:"status,omitempty"`
+}
+
+type HeartbeatSpec struct {
+	// URL called with GET at every beat.
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+	// Every is the period of the beats.
+	// +kubebuilder:default="1m"
+	Every metav1.Duration `json:"every,omitempty"`
+	// Query, when set, must return at least one series for a beat to go.
+	// +optional
+	Query *HeartbeatQuery `json:"query,omitempty"`
+}
+
+// HeartbeatQuery is a PromQL query to a Prometheus-compatible API.
+type HeartbeatQuery struct {
+	// URL of the API, as http://vmsingle.monitoring:8428.
+	// +kubebuilder:validation:Pattern=`^https?://`
+	URL string `json:"url"`
+	// Expr: a beat goes while it returns a series, as
+	// max(time() - timestamp(up)) < 120.
+	Expr string `json:"expr"`
+}
+
+type HeartbeatStatus struct {
+	Status `json:",inline"`
+	// Healthy: the last beat went.
+	Healthy  bool         `json:"healthy,omitempty"`
+	Sent     int64        `json:"sent,omitempty"`
+	LastSent *metav1.Time `json:"lastSent,omitempty"`
+	Error    string       `json:"error,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+type HeartbeatList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Heartbeat `json:"items"`
 }
 
 // +kubebuilder:object:root=true

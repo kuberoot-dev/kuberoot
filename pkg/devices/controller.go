@@ -29,7 +29,7 @@ import (
 	"github.com/tym83/kuberoot/pkg/safeguard"
 )
 
-var kinds = []struct{ Kind, Plural string }{{"Device", "devices"}, {"Route", "routes"}, {"Safeguard", "safeguards"}}
+var kinds = []struct{ Kind, Plural string }{{"Device", "devices"}, {"Route", "routes"}, {"Safeguard", "safeguards"}, {"Heartbeat", "heartbeats"}}
 
 // Config is what the node runs: its devices and their routes.
 type Config struct {
@@ -127,6 +127,7 @@ type Controller struct {
 	mu         sync.Mutex
 	devices    map[string]*device
 	routes     map[string]*route
+	beats      map[string]*heartbeat
 	appliedRev string
 	listers    map[string]cache.GenericLister
 	lastStatus time.Time
@@ -135,7 +136,7 @@ type Controller struct {
 // device is a device the node polls.
 type device struct {
 	spec   v1.DeviceSpec
-	conn   *modbusDevice
+	conn   reader
 	cancel context.CancelFunc
 
 	mu        sync.Mutex
@@ -165,7 +166,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	if err := os.MkdirAll(c.StateDir, 0o755); err != nil {
 		return err
 	}
-	c.devices, c.routes = map[string]*device{}, map[string]*route{}
+	c.devices, c.routes, c.beats = map[string]*device{}, map[string]*route{}, map[string]*heartbeat{}
 	c.trial.Load(c.confirmedFile())
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(c.Client, 10*time.Minute)
 	poke := make(chan struct{}, 1)
@@ -205,14 +206,15 @@ type listed struct {
 	obj  *unstructured.Unstructured
 }
 
-func (c *Controller) list() (Config, []listed, *v1.Safeguard, error) {
+func (c *Controller) list() (Config, []listed, *v1.Safeguard, []v1.Heartbeat, error) {
 	var cfg Config
 	var all []listed
 	var guard *v1.Safeguard
+	var beats []v1.Heartbeat
 	for _, k := range kinds {
 		objs, err := c.listers[k.Kind].List(labels.Everything())
 		if err != nil {
-			return cfg, nil, nil, err
+			return cfg, nil, nil, nil, err
 		}
 		for _, o := range objs {
 			u := o.(*unstructured.Unstructured)
@@ -234,18 +236,26 @@ func (c *Controller) list() (Config, []listed, *v1.Safeguard, error) {
 				if err := conv.FromUnstructured(u.Object, &s); err == nil && s.Name == "default" {
 					guard = &s
 				}
+			case "Heartbeat":
+				var h v1.Heartbeat
+				if err := conv.FromUnstructured(u.Object, &h); err == nil {
+					beats = append(beats, h)
+				}
 			}
 		}
 	}
-	return cfg, all, guard, nil
+	return cfg, all, guard, beats, nil
 }
 
 func (c *Controller) reconcile(ctx context.Context) {
-	cfg, all, sg, err := c.list()
+	cfg, all, sg, beats, err := c.list()
 	if err != nil {
 		klog.Errorf("list: %v", err)
 		return
 	}
+	// Heartbeats take effect at once: one that stops beating is what they
+	// are there to tell, not a change to undo.
+	c.applyHeartbeats(beats)
 	candidate, problems := Check(cfg)
 	rev := Revision(candidate)
 	var guard *safeguard.Guard
@@ -339,7 +349,7 @@ func (c *Controller) apply(cfg Config) {
 			continue
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		d := &device{spec: spec, conn: newModbusDevice(spec), cancel: cancel}
+		d := &device{spec: spec, conn: newReader(spec, SecretCredentials(c.Client, spec.Credentials)), cancel: cancel}
 		c.devices[name] = d
 		go c.poll(ctx, name, d)
 	}
@@ -367,12 +377,60 @@ func (c *Controller) apply(cfg Config) {
 	c.brokers.Keep(brokers)
 }
 
+// shown are the points a device's status lists: those it declares, or, for
+// a BMC or a probe that declares none, every value it reported, by name.
+func shown(points []v1.Point, r Reading) []v1.Point {
+	if len(points) > 0 {
+		return points
+	}
+	names := make([]string, 0, len(r))
+	for k := range r {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	out := make([]v1.Point, len(names))
+	for i, n := range names {
+		out[i] = v1.Point{Name: n}
+	}
+	return out
+}
+
 func (c *Controller) stopAll() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, d := range c.devices {
 		d.cancel()
 		d.conn.Close()
+	}
+	for _, h := range c.beats {
+		h.cancel()
+	}
+}
+
+// applyHeartbeats runs the heartbeats as they are; one whose spec changed
+// starts anew.
+func (c *Controller) applyHeartbeats(beats []v1.Heartbeat) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	want := map[string]v1.HeartbeatSpec{}
+	for _, h := range beats {
+		want[h.Name] = h.Spec
+	}
+	for name, h := range c.beats {
+		if spec, ok := want[name]; !ok || !reflect.DeepEqual(spec, h.spec) {
+			h.cancel()
+			delete(c.beats, name)
+		}
+	}
+	for name, spec := range want {
+		if _, ok := c.beats[name]; ok {
+			continue
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		h := newHeartbeat(spec)
+		h.cancel = cancel
+		c.beats[name] = h
+		go h.run(ctx)
 	}
 }
 
@@ -394,6 +452,10 @@ func (c *Controller) poll(ctx context.Context, name string, d *device) {
 			// A read missed now and then is not a device lost.
 			if d.failures >= 3 {
 				d.connected = false
+			}
+			// A probe of a service down measured that: up is 0.
+			if r != nil {
+				d.reading = r
 			}
 		} else {
 			d.reading, d.lastOK, d.err, d.failures, d.connected = r, now, "", 0, true
@@ -449,7 +511,7 @@ func (c *Controller) report(ctx context.Context, l listed, problem string, undon
 	case l.kind == "Safeguard":
 	case problem != "":
 		cond.Status, cond.Reason, cond.Message = metav1.ConditionFalse, "Invalid", problem
-	case undone:
+	case undone && l.kind != "Heartbeat":
 		cond.Status, cond.Reason = metav1.ConditionFalse, "RolledBack"
 		cond.Message = fmt.Sprintf("revision %s was rolled back (%s); the node runs %s", rev, c.trial.Why, runningRev)
 	}
@@ -471,7 +533,7 @@ func (c *Controller) report(ctx context.Context, l listed, problem string, undon
 			}
 			var values []any
 			var summary []string
-			for _, p := range d.spec.Points {
+			for _, p := range shown(d.spec.Points, d.reading) {
 				if v, ok := d.reading[p.Name]; ok {
 					s := Format(p, v)
 					v := map[string]any{"name": p.Name, "value": s}
@@ -502,6 +564,21 @@ func (c *Controller) report(ctx context.Context, l listed, problem string, undon
 			}
 			status["connected"] = rt.spec.To.MQTT != nil && c.brokers.Connected(rt.spec.To.MQTT.Broker)
 			rt.mu.Unlock()
+		}
+	case "Heartbeat":
+		c.mu.Lock()
+		h := c.beats[name]
+		c.mu.Unlock()
+		if h != nil {
+			h.mu.Lock()
+			status["healthy"], status["sent"] = h.healthy, h.sent
+			if !h.lastSent.IsZero() {
+				status["lastSent"] = h.lastSent.UTC().Format(time.RFC3339)
+			}
+			if h.err != "" {
+				status["error"] = h.err
+			}
+			h.mu.Unlock()
 		}
 	case "Safeguard":
 		status["running"], status["confirmed"] = c.trial.ConfirmedRev, c.trial.ConfirmedRev

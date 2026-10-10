@@ -512,6 +512,9 @@ type MachineSpec struct {
 	// SendTo sends the running machine, alive, to a node receiving it at
 	// this URL; the machine then runs there, and stops here.
 	SendTo string `json:"sendTo,omitempty"`
+	// SystemSerial is the machine's DMI system serial number: cloud-init in
+	// the guest reads its data source from it (ds=nocloud;s=<url>).
+	SystemSerial string `json:"systemSerial,omitempty"`
 }
 
 type MachineStatus struct {

@@ -1,0 +1,6 @@
+# The workspaces' Secrets: each workspace's token and its owner's password,
+# and the cloud-init user data its machine reads.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workstation

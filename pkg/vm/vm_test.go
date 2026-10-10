@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -86,5 +87,28 @@ func TestStatusReceiveFailed(t *testing.T) {
 	s.Receive = ""
 	if st := m.Status("demo", s); st.Phase != "Starting" {
 		t.Fatalf("an ordinary start reported %+v", st)
+	}
+}
+
+func TestVolumeLeavesTheNodeRoom(t *testing.T) {
+	StateDir, RunDir = t.TempDir(), t.TempDir()
+	v := &Volumes{Node: "n", Address: "10.0.0.1"}
+	err := v.Apply(context.Background(), "huge", node.VolumeSpec{SizeBytes: 1 << 60, Minor: 100, Port: 7800})
+	if err == nil || !strings.Contains(err.Error(), "no room for the volume") {
+		t.Fatalf("a volume larger than the disk was made: %v", err)
+	}
+	if _, err := os.Stat(v.imageFile("huge")); err == nil {
+		t.Fatal("its file was left")
+	}
+}
+
+func TestArgsSystemSerial(t *testing.T) {
+	m := &Machines{}
+	args := strings.Join(m.Args("desk", node.MachineSpec{CPUs: 1, MemoryMiB: 512, SystemSerial: "ds=nocloud;s=http://g/desk/"}, nil), " ")
+	if !strings.Contains(args, "--platform system_serial_number=ds=nocloud;s=http://g/desk/") {
+		t.Fatalf("args: %s", args)
+	}
+	if strings.Contains(strings.Join(m.Args("plain", node.MachineSpec{CPUs: 1, MemoryMiB: 512}, nil), " "), "--platform") {
+		t.Fatal("a platform serial for a machine with none")
 	}
 }

@@ -29,7 +29,7 @@ func servicesOf(t *testing.T, distro, role string, f facts) map[string]string {
 
 func TestControlPlaneRunsTheStoreItWasCreatedWith(t *testing.T) {
 	etcdstore.InitFile = filepath.Join(t.TempDir(), "etcd-init")
-	for _, distro := range []string{"edge", "ai", "rt"} {
+	for _, distro := range []string{"edge", "ai", "rt", "observability"} {
 		kine := servicesOf(t, distro, roleControlPlane, edgeFacts(false))
 		if _, ok := kine["etcd"]; ok {
 			t.Errorf("%s: a kine control plane runs etcd", distro)

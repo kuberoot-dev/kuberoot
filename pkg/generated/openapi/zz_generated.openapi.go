@@ -1618,6 +1618,13 @@ func schema_pkg_apis_node_v1alpha1_MachineSpec(ref common.ReferenceCallback) com
 							Format:      "",
 						},
 					},
+					"systemSerial": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SystemSerial is the machine's DMI system serial number: cloud-init in the guest reads its data source from it (ds=nocloud;s=<url>).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"cpus", "memoryMiB", "volumes", "running"},
 			},

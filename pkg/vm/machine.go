@@ -97,6 +97,9 @@ func (m *Machines) Args(name string, s node.MachineSpec, disks []string) []strin
 	if s.MAC != "" {
 		args = append(args, "--net", fmt.Sprintf("tap=%s,mac=%s", TapName(name), s.MAC))
 	}
+	if s.SystemSerial != "" {
+		args = append(args, "--platform", "system_serial_number="+s.SystemSerial)
+	}
 	return args
 }
 
@@ -187,7 +190,7 @@ func (m *Machines) send(ctx context.Context, name string, pid int, url string) e
 
 // configKey is what a running machine was started with.
 func configKey(s node.MachineSpec) string {
-	return fmt.Sprintf("%d/%d/%s/%s", s.CPUs, s.MemoryMiB, strings.Join(s.Volumes, ","), s.MAC)
+	return fmt.Sprintf("%d/%d/%s/%s/%s", s.CPUs, s.MemoryMiB, strings.Join(s.Volumes, ","), s.MAC, s.SystemSerial)
 }
 
 func (m *Machines) startedWith(name string) string {

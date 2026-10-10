@@ -1,0 +1,17 @@
+# Platform values: kubepkg layers them under the values of every package
+# component (operator flag --values-secret). They describe what kuberoot
+# nodes are like, for packages that need to know.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kuberoot-platform-values
+  namespace: kube-system
+stringData:
+  values.yaml: |
+    # LINSTOR/Piraeus: DRBD 9 is loaded at boot (and module loading then
+    # disabled), there is no systemd, udev or D-Bus, and DRBD connects with
+    # the node's addresses.
+    linstorNode:
+      drbdLoaded: true
+      systemd: false
+      hostNetwork: true

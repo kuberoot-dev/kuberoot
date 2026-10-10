@@ -59,6 +59,9 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 	c.dhcp = &router.Daemon{Name: "dnsmasq", Args: []string{"/usr/sbin/dnsmasq", "--conf-file=" + filepath.Join(c.StateDir, "dnsmasq.conf")}}
 	defer c.dhcp.Stop()
+	if c.Network.IsValid() {
+		go c.serveSeeds(ctx, c.Network.Masked().Addr().Next().String())
+	}
 	for {
 		if err := c.gateway(); err != nil {
 			klog.Errorf("gateway: %v", err)
@@ -464,14 +467,27 @@ func (c *Controller) leaseFile() string { return filepath.Join(c.StateDir, "dnsm
 
 // leases maps the machines' MACs to the addresses they took.
 func (c *Controller) leases() map[string]string {
-	out := map[string]string{}
 	f, err := os.Open(c.leaseFile())
 	if err != nil {
-		return out
+		return map[string]string{}
 	}
 	defer f.Close()
-	for _, l := range router.ParseLeases(f) {
-		out[strings.ToLower(l.MAC)] = l.Address
+	return newestLeases(router.ParseLeases(f))
+}
+
+// newestLeases maps each MAC to the address of its newest lease. A machine
+// reinstalled under the same MAC asks with another client identifier and
+// gets another address while its old lease lasts; the newest is the one in
+// use.
+func newestLeases(leases []routerv1.Lease) map[string]string {
+	out := map[string]string{}
+	newest := map[string]time.Time{}
+	for _, l := range leases {
+		mac := strings.ToLower(l.MAC)
+		if t, ok := newest[mac]; ok && !l.Expires.Time.After(t) {
+			continue
+		}
+		newest[mac], out[mac] = l.Expires.Time, l.Address
 	}
 	return out
 }
@@ -547,7 +563,8 @@ func machineSpec(m *v1.VirtualMachine, p Plan, running bool) nodev1.MachineSpec 
 	if cpus == 0 {
 		cpus = 1
 	}
-	return nodev1.MachineSpec{CPUs: cpus, MemoryMiB: mem, Volumes: []string{m.Name}, MAC: p.MAC, Running: running}
+	return nodev1.MachineSpec{CPUs: cpus, MemoryMiB: mem, Volumes: []string{m.Name}, MAC: p.MAC, Running: running,
+		SystemSerial: systemSerial(m)}
 }
 
 // bothPrimary: the disk is still writable on two nodes, after a live move or
