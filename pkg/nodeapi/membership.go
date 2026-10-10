@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/yaml"
 
 	"github.com/tym83/kuberoot/pkg/apis/node"
@@ -161,14 +162,16 @@ func leaveStore(ctx context.Context, nodeName string) error {
 		defer c.Close()
 		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
-		list, err := c.MemberList(ctx)
-		if err != nil {
-			return fmt.Errorf("cluster store: %w", err)
-		}
-		for _, m := range list.Members {
-			if m.Name == nodeName {
-				if _, err := c.MemberRemove(ctx, m.ID); err != nil {
-					return fmt.Errorf("leave the store: %w", err)
+		// A member removed already, or cut off from the others, cannot ask
+		// the store anything: there is nothing left to leave, only data.
+		if list, err := c.MemberList(ctx); err != nil {
+			klog.Warningf("leaving a cluster store that does not answer (%v): dropping this member's data", err)
+		} else {
+			for _, m := range list.Members {
+				if m.Name == nodeName {
+					if _, err := c.MemberRemove(ctx, m.ID); err != nil {
+						return fmt.Errorf("leave the store: %w", err)
+					}
 				}
 			}
 		}
