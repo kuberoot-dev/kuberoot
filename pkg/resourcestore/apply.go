@@ -1,6 +1,7 @@
 package resourcestore
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 
@@ -30,6 +31,51 @@ type applyResult struct {
 	Revision int64
 	Members  []Member
 	Err      error
+	// Duplicate: the request was applied before, from an earlier proposal.
+	Duplicate bool
+}
+
+// Requests are remembered for this many entries after they apply: far
+// longer than a proposal waits.
+const (
+	requestsKept       = 50000
+	requestsPruneEvery = 10000
+)
+
+func requestKey(r *request) []byte {
+	return binary.BigEndian.AppendUint64(idKey(r.From), r.ID)
+}
+
+// seenRequest reports whether a request was applied before, and remembers
+// it otherwise.
+func seenRequest(tx *bolt.Tx, r *request, index uint64) (bool, error) {
+	b := tx.Bucket(requestsBucket)
+	k := requestKey(r)
+	if b.Get(k) != nil {
+		return true, nil
+	}
+	return false, b.Put(k, idKey(index))
+}
+
+// pruneRequests forgets requests applied long before index.
+func pruneRequests(tx *bolt.Tx, index uint64) error {
+	if index < requestsKept {
+		return nil
+	}
+	b := tx.Bucket(requestsBucket)
+	var old [][]byte
+	_ = b.ForEach(func(k, v []byte) error {
+		if len(v) == 8 && binary.BigEndian.Uint64(v) < index-requestsKept {
+			old = append(old, append([]byte(nil), k...))
+		}
+		return nil
+	})
+	for _, k := range old {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // logEntry is a committed log entry, decoded.
@@ -60,21 +106,38 @@ func (s *Store) Apply(entries []logEntry) ([]applyResult, error) {
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		m := tx.Bucket(metaBucket)
 		applied := uint64(getInt(m, appliedKey))
+		before := applied
 		for i, e := range entries {
 			if e.Index <= applied {
 				// Applied before: by an earlier run, or in the snapshot this
 				// state came from.
+				results[i].Duplicate = true
 				if e.Conf != nil {
 					results[i].Members = membersTx(tx)
 				}
 				continue
+			}
+			applied = e.Index
+			if e.Req != nil && e.Req.ID != 0 {
+				seen, err := seenRequest(tx, e.Req, e.Index)
+				if err != nil {
+					return err
+				}
+				if seen {
+					results[i].Duplicate = true
+					continue
+				}
 			}
 			r, err := applyOne(tx, e, &pub)
 			if err != nil {
 				return err
 			}
 			results[i] = r
-			applied = e.Index
+		}
+		if before/requestsPruneEvery != applied/requestsPruneEvery {
+			if err := pruneRequests(tx, applied); err != nil {
+				return err
+			}
 		}
 		pub.rev = getInt(m, currentKey)
 		return putInt(m, appliedKey, int64(applied))

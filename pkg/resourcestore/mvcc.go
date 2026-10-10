@@ -33,6 +33,9 @@ var (
 	// members: member ID -> member; removed: IDs that may not come back.
 	membersBucket = []byte("members")
 	removedBucket = []byte("removed")
+	// requests: proposer ++ request ID -> the index it was applied at, so
+	// that a request proposed again after a change of leader applies once.
+	requestsBucket = []byte("requests")
 
 	currentKey = []byte("current")
 	compactKey = []byte("compacted")
@@ -112,8 +115,13 @@ func openDB(path string) (*bolt.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The state is not synced on every apply: the Raft log is, and it holds
+	// every entry after the last snapshot, which syncs the state first
+	// (Sync). A member that crashes applies the rest again, as etcd does
+	// with its backend. One sync per round of Raft instead of two.
+	db.NoSync = true
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{versionsBucket, latestBucket, metaBucket, leasesBucket, leaseKeysBucket, membersBucket, removedBucket} {
+		for _, b := range [][]byte{versionsBucket, latestBucket, metaBucket, leasesBucket, leaseKeysBucket, membersBucket, removedBucket, requestsBucket} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -135,7 +143,18 @@ func openDB(path string) (*bolt.DB, error) {
 func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.db.Sync(); err != nil {
+		s.db.Close()
+		return err
+	}
 	return s.db.Close()
+}
+
+// Sync writes the state to disk: the log before it may then go.
+func (s *Store) Sync() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.db.Sync()
 }
 
 func (s *Store) view(fn func(tx *bolt.Tx) error) error {

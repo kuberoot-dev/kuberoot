@@ -397,6 +397,15 @@ func (n *Node) run() {
 }
 
 func (n *Node) ready(rd raft.Ready) error {
+	start := time.Now()
+	defer func() {
+		// A round slower than a heartbeat delays the heartbeats; slower than
+		// an election timeout, it costs the leadership.
+		if d := time.Since(start); d > time.Duration(n.cfg.TickMs*n.cfg.ElectionTicks/2)*time.Millisecond {
+			klog.Warningf("member %x: a round of Raft took %v (%d entries, %d committed, %d messages)",
+				n.id, d, len(rd.Entries), len(rd.CommittedEntries), len(rd.Messages))
+		}
+	}()
 	if rd.SoftState != nil {
 		n.setLeader(rd.SoftState.Lead, rd.SoftState.RaftState == raft.StateLeader)
 	}
@@ -488,7 +497,7 @@ func (n *Node) apply(ents []*raftpb.Entry) error {
 			return err
 		}
 		for i, e := range batch {
-			if e.Req != nil && e.Req.From == n.id {
+			if e.Req != nil && e.Req.From == n.id && !results[i].Duplicate {
 				n.answer(e.Req.ID, results[i])
 			}
 		}
@@ -615,6 +624,9 @@ func (n *Node) maybeSnapshot() error {
 // a member added later is sent the newest snapshot, and Raft refuses one
 // whose members do not include it.
 func (n *Node) snapshot(index uint64, compact bool) error {
+	if err := n.store.Sync(); err != nil {
+		return err
+	}
 	snap, err := n.storage.CreateSnapshot(index, n.confState, nil)
 	if err == raft.ErrSnapOutOfDate {
 		return nil
@@ -683,34 +695,43 @@ func (n *Node) propose(ctx context.Context, r *request) (applyResult, error) {
 	ch := n.register(r.ID)
 	defer n.forget(r.ID)
 	for {
-		err = n.raft.Propose(ctx, data)
-		if !errors.Is(err, raft.ErrProposalDropped) {
-			break
+		n.appliedMu.Lock()
+		changed := n.leaderSig
+		n.appliedMu.Unlock()
+		for {
+			err = n.raft.Propose(ctx, data)
+			if !errors.Is(err, raft.ErrProposalDropped) {
+				break
+			}
+			// Dropped, not appended: no leader for the moment, or a leader
+			// handing over.
+			select {
+			case <-time.After(50 * time.Millisecond):
+			case <-ctx.Done():
+				return applyResult{}, errTimeout
+			}
+			if err := n.waitLeader(ctx); err != nil {
+				return applyResult{}, err
+			}
 		}
-		// Dropped, not appended: no leader for the moment, or a leader
-		// handing over. Proposing again cannot apply it twice.
-		select {
-		case <-time.After(50 * time.Millisecond):
-		case <-ctx.Done():
-			return applyResult{}, errTimeout
-		}
-		if err := n.waitLeader(ctx); err != nil {
+		if err != nil {
+			if ctx.Err() != nil {
+				return applyResult{}, errTimeout
+			}
 			return applyResult{}, err
 		}
-	}
-	if err != nil {
-		if ctx.Err() != nil {
+		select {
+		case res := <-ch:
+			return res, res.Err
+		case <-changed:
+			// A new leader: the entry may have gone with the old one. It is
+			// proposed again; the state applies a request once, whichever
+			// copy commits first.
+		case <-ctx.Done():
 			return applyResult{}, errTimeout
+		case <-n.stopc:
+			return applyResult{}, errStopped
 		}
-		return applyResult{}, err
-	}
-	select {
-	case res := <-ch:
-		return res, res.Err
-	case <-ctx.Done():
-		return applyResult{}, errTimeout
-	case <-n.stopc:
-		return applyResult{}, errStopped
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"k8s.io/klog/v2"
 
 	"github.com/kuberoot-dev/kuberoot/pkg/resourcestore"
@@ -220,11 +221,15 @@ func run(f flags) error {
 	}
 	// -v=4 logs every call and how it ended, for finding what a client
 	// asked that the store does not answer as etcd would.
-	g := grpc.NewServer(grpc.MaxRecvMsgSize(16<<20), grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
-		resp, err := h(ctx, req)
-		klog.V(4).Infof("%s %v -> err=%v", info.FullMethod, req, err)
-		return resp, err
-	}))
+	// Clients ping idle connections, as the API server's etcd client does
+	// every 30 seconds; etcd allows pings every 5 seconds.
+	g := grpc.NewServer(grpc.MaxRecvMsgSize(16<<20),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: 5 * time.Second, PermitWithoutStream: true}),
+		grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+			resp, err := h(ctx, req)
+			klog.V(4).Infof("%s %v -> err=%v", info.FullMethod, req, err)
+			return resp, err
+		}))
 	(&resourcestore.Server{Node: n}).Register(g)
 	for _, u := range clientURLs {
 		l, err := listen(u, clientTLS, "h2")
