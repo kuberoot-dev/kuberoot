@@ -147,7 +147,10 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 				}
 			}
 			if failure(rn.State) {
-				msg := rn.Name + " " + strings.ToLower(rn.State)
+				msg := rn.Name + " failed"
+				if rn.State == v1.UpdateRolledBack {
+					msg = rn.Name + " rolled back"
+				}
 				if n.Update != nil && n.Update.Message != "" {
 					msg += ": " + n.Update.Message
 				}

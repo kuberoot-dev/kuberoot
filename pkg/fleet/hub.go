@@ -260,6 +260,17 @@ func (h *Hub) watch(name string, nc *nodeConn) {
 	}
 }
 
+// Names lists the connected nodes.
+func (h *Hub) Names() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]string, 0, len(h.conns))
+	for name := range h.conns {
+		out = append(out, name)
+	}
+	return out
+}
+
 // Drop closes a node's connection, as when the node is removed.
 func (h *Hub) Drop(name string) {
 	h.mu.Lock()

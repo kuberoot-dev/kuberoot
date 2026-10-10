@@ -107,6 +107,17 @@ func (c *Center) pass(ctx context.Context) {
 		klog.Errorf("fleet: list nodes: %v", err)
 		return
 	}
+	// A node whose FleetNode is gone is out of the fleet, connected or not.
+	known := map[string]bool{}
+	for _, n := range nodes {
+		known[n.Name] = true
+	}
+	for _, name := range c.Hub.Names() {
+		if !known[name] {
+			klog.Infof("fleet: %s is no longer in the fleet: closing its connection", name)
+			c.Hub.Drop(name)
+		}
+	}
 	var wg sync.WaitGroup
 	for i := range nodes {
 		n := &nodes[i]
