@@ -97,6 +97,16 @@ type Options struct {
 
 	// RoutesKubeconfig reads the nodes to route pod subnets between them.
 	RoutesKubeconfig string
+
+	// Etcd: this control plane runs a member of the cluster store, which
+	// other control planes join (etcdmembers, ControlPlane join tickets).
+	Etcd bool
+	// APIServers are the cluster's API servers, for a worker of several
+	// control planes: the node balances between them on APIBalancer,
+	// following them with APIKubeconfig.
+	APIServers    []string
+	APIBalancer   string
+	APIKubeconfig string
 }
 
 var (
@@ -200,6 +210,12 @@ func Run(ctx context.Context, o Options) error {
 			return fmt.Errorf("join tickets: %w", err)
 		}
 		resources["jointickets"] = tickets
+		if o.Etcd {
+			// The store's members are the cluster's, the same seen from any
+			// control plane: served as they are, not node by node.
+			resources["etcdmembers"] = etcdMemberStorage{}
+			go promoteLearners(ctx)
+		}
 		var reserved []*net.IPNet
 		for _, c := range []string{o.PodCIDR, o.ServiceCIDR} {
 			if _, r, err := net.ParseCIDR(c); err == nil {
@@ -226,6 +242,17 @@ func Run(ctx context.Context, o Options) error {
 	}
 	if models != nil {
 		go models.run(ctx)
+	}
+	if len(o.APIServers) > 0 && o.APIBalancer != "" {
+		b := newAPIBalancer(o.APIServers)
+		go func() {
+			if err := b.serve(ctx, o.APIBalancer); err != nil {
+				klog.Errorf("API balancer: %v", err)
+			}
+		}()
+		if o.APIKubeconfig != "" {
+			go b.follow(ctx, o.APIKubeconfig)
+		}
 	}
 	if o.GPUs {
 		go setupGPUs(ctx)
