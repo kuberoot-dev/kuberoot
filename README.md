@@ -283,6 +283,56 @@ Workers that join a cluster of several control planes reach the API through a ba
 
 `etcdmembers`, on a control plane, lists the store's members; deleting one removes it, as replacing a lost control plane needs: remove its member, then join the new node. A control plane that leaves its cluster (deleting its `Membership`) takes itself out of the store first. Install control planes before they join: an installation carries the store of a single member, not of one member among others. Moving an existing cluster from kine to etcd is not automatic: create the new cluster on etcd and move workloads over (Velero, or the packages and their data).
 
+## A fleet of edge nodes
+
+Shops, towers and plants each run a node of their own, a cluster of one, often behind NAT and on a poor link. A fleet manages them from one central cluster, the center, without inbound ports on the nodes: every node calls the center and keeps the connection open, and the center reaches the node API through it, HTTP/2 inside the connection the node dialed. The center is `kuberoot-fleet`, which the edge control plane runs when booted with `kuberoot.fleet-center` (or `kuberoot.fleet-center=<host:port>,...` to name the address nodes reach it at through NAT); it applies its own resources, so any cluster can run it with a kubeconfig. The node side is part of the node API, nothing to install, no containers.
+
+A node joins with a one-time token. Creating a `FleetNode` in the center issues it: a Secret in `kube-system` holds a ready `FleetEnrollment`, which an operator on site, or the boot media, applies to the node:
+
+```yaml
+apiVersion: fleet.kuberoot.dev/v1alpha1
+kind: FleetNode
+metadata: {name: shop-12, labels: {region: north, site: shop-12}}
+---
+# from Secret kube-system/fleet-enroll-shop-12, applied to the node itself
+apiVersion: node.kuberoot.dev/v1alpha1
+kind: FleetEnrollment
+metadata: {name: center}
+spec:
+  name: shop-12
+  servers: [fleet.example.org:7443]
+  caHash: sha256:4769fc58...   # the center's authority, pinned
+  token: ...                   # works once
+```
+
+Both ends are pinned. The node talks only to a center whose authority hashes to `caHash`. When the token is spent, the center pins the node's own authority, the one every kuberoot node has for its node API, and from then on opens the node's connection only for a client certificate that authority issued for the node's name. Deleting the FleetNode, or the node's FleetEnrollment, ends the membership.
+
+The `FleetNode` is the inventory: whether the node is connected and since when, the release and slot it booted and their state, its services, health and when it was last seen, with labels for site, region or hardware (`fleet.kuberoot.dev/arch` and `/distro` are kept from what the node reports). `spec.release` is the release the node should run: whenever the node is connected the center stages it with the node's own `Upgrade` and reads the outcome back from its boot entries, so a node that ran out of boot attempts and went back to its previous slot is `RolledBack`, seen as such after any reboot or restart of the center, and not given that release again.
+
+A `FleetRollout` sets the release node by node, in waves:
+
+```yaml
+apiVersion: fleet.kuberoot.dev/v1alpha1
+kind: FleetRollout
+metadata: {name: release-0.9.0}
+spec:
+  release:
+    version: 0.9.0
+    url: https://releases.example.org/kuberoot-0.9.0-amd64.tar
+    sha256: f5fa3786...
+  selector: {matchLabels: {region: north}}
+  waves: ["1", "10%", "100%"]   # how many nodes have it once each wave is through
+  maxFailures: 0
+  offline: Wait                 # or Skip
+  soak: 30m                     # optional: how long a wave runs before the next
+```
+
+The nodes are fixed when the rollout starts and taken in order of name. A wave starts once every node of the waves before it is updated (and has soaked, if asked). A node that rolls the release back or cannot stage it is a failure, and more than `maxFailures` stop the rollout: the nodes it has not reached keep what they run, and a stopped rollout starts again only when its spec changes. `paused: true` holds the next wave. A node that is offline when its wave comes holds the wave (`Wait`) or is left behind (`Skip`); either way its release is set and it takes it when it connects again. A node keeps running without the center; the center only acts when it hears from the node. A node belongs to the newest rollout that gave it a release.
+
+The center also serves a connected node's API to its users, at `https://<center>:7443/nodes/<name>/`: `kubectl` with the center's client certificate and the center's authority (ConfigMap `kube-system/kuberoot-fleet-ca`, server name `kuberoot-fleet`) reaches the node's `nodeservices`, `bootentries` and the rest, for whoever the center's RBAC allows `get` on `fleetnodes/proxy`.
+
+What it does not do yet: the center is one process, not highly available; the center acts on a node as a node admin, so whoever holds the center holds the fleet; tokens do not expire on their own (delete the FleetNode to revoke one); nodes added after a rollout started are not in it; the node's own cluster API (pods, `devices`) is not reached through the center, only its node API; and it was tried on four nodes, not thousands.
+
 ## Node API
 
 | Resource | What it does |
@@ -299,6 +349,7 @@ Workers that join a cluster of several control planes reach the API through a ba
 | `volumes`, `machines` | virtual machines' disks and machines (hypervisor) |
 | `modelservers` | the language models the node serves (ai) |
 | `latencytests` | the real-time latency the node delivers (rt) |
+| `fleetenrollments` | makes the node a node of a fleet: it calls the center and keeps the connection open |
 
 ## Installing and upgrading
 
@@ -357,6 +408,7 @@ The node comes back as the same node, with the same name, certificates and clust
 | `cmd/kuberoot-aictl` | the models controller and endpoint |
 | `cmd/kuberoot-devices` | the devices controller of the iot distribution |
 | `cmd/kuberoot-wsctl` | the workspaces controller and their gateway |
+| `cmd/kuberoot-fleet` | the center of a fleet of nodes |
 | `cmd/mkimage`, `cmd/kuberoot-release` | boot media and signed releases |
 | `pkg/` | the libraries behind them |
 | `distros/` | the distributions: services, modules, add-ons, packages |
