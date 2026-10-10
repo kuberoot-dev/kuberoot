@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -23,10 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/yaml"
 
 	"github.com/tym83/kuberoot/pkg/apis/node"
 	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
+	"github.com/tym83/kuberoot/pkg/etcdstore"
 	"github.com/tym83/kuberoot/pkg/membership"
 	"github.com/tym83/kuberoot/pkg/pki"
 	"github.com/tym83/kuberoot/pkg/supervisor"
@@ -116,14 +119,21 @@ func (s *membershipStorage) Update(ctx context.Context, name string, objInfo res
 }
 
 func (s *membershipStorage) apply(ctx context.Context, m *node.Membership) (runtime.Object, error) {
-	if m.Spec.Role != membership.RoleWorker {
-		return nil, apierrors.NewBadRequest("spec.role must be Worker")
+	switch m.Spec.Role {
+	case membership.RoleWorker, membership.RoleControlPlane:
+	default:
+		return nil, apierrors.NewBadRequest("spec.role must be Worker or ControlPlane")
 	}
 	if m.Spec.Server == "" || m.Spec.ClusterCA == "" || m.Spec.BootstrapToken == "" || m.Spec.NodeAPICert == "" || m.Spec.NodeAPIKey == "" {
 		return nil, apierrors.NewBadRequest("server, clusterCA, bootstrapToken, nodeAPICert and nodeAPIKey are required; apply the membership a JoinTicket produced")
 	}
 	if err := certFor(m.Spec.NodeAPICert, MemberServerName(s.nodeName)); err != nil {
 		return nil, apierrors.NewBadRequest("this membership was issued for another node: " + err.Error())
+	}
+	if m.Spec.Role == membership.RoleControlPlane && m.Spec.ControlPlane == nil {
+		if existing, _ := s.current(); existing == nil || existing.Spec.Role != membership.RoleControlPlane {
+			return nil, apierrors.NewBadRequest("a control plane membership carries the cluster's keys: apply the membership a ControlPlane JoinTicket produced")
+		}
 	}
 	v1 := &nodev1.Membership{}
 	if err := scheme.Convert(m, v1, nil); err != nil {
@@ -136,14 +146,53 @@ func (s *membershipStorage) apply(ctx context.Context, m *node.Membership) (runt
 		return nil, apierrors.NewInternalError(err)
 	}
 	out, _ := s.current()
-	out.Status = node.MembershipStatus{Phase: "Joining", Message: "switching to the worker role"}
+	out.Status = node.MembershipStatus{Phase: "Joining", Message: "switching to the " + strings.ToLower(m.Spec.Role) + " role"}
 	return out, nil
+}
+
+// leaveStore takes a control plane that leaves its cluster out of the
+// store first, so the others keep their majority, then drops its data: the
+// node runs a cluster of its own next, created anew.
+func leaveStore(ctx context.Context, nodeName string) error {
+	if etcdstore.Running() {
+		c, err := etcdstore.Client()
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		// A member removed already, or cut off from the others, cannot ask
+		// the store anything: there is nothing left to leave, only data.
+		if list, err := c.MemberList(ctx); err != nil {
+			klog.Warningf("leaving a cluster store that does not answer (%v): dropping this member's data", err)
+		} else {
+			for _, m := range list.Members {
+				if m.Name == nodeName {
+					if _, err := c.MemberRemove(ctx, m.ID); err != nil {
+						return fmt.Errorf("leave the store: %w", err)
+					}
+				}
+			}
+		}
+	}
+	for _, p := range []string{etcdstore.DataDir, etcdstore.InitFile, etcdstore.KindFile} {
+		if err := os.RemoveAll(p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *membershipStorage) Delete(ctx context.Context, name string, _ rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	current, err := s.Get(ctx, name, nil)
 	if err != nil {
 		return nil, false, err
+	}
+	if current.(*node.Membership).Spec.Role == membership.RoleControlPlane {
+		if err := leaveStore(ctx, s.nodeName); err != nil {
+			return nil, false, apierrors.NewInternalError(err)
+		}
 	}
 	if err := membership.Remove(); err != nil {
 		return nil, false, apierrors.NewInternalError(err)
@@ -181,8 +230,82 @@ type joinTicketStorage struct {
 	podCIDR     string
 	serviceCIDR string
 	podNetwork  string
-	mu          sync.Mutex
-	items       map[string]*node.JoinTicket
+	// etcd: the cluster stores its state in etcd, which other control
+	// planes join; pkiDir holds the keys they receive.
+	etcd   bool
+	pkiDir string
+	mu     sync.Mutex
+	items  map[string]*node.JoinTicket
+}
+
+// servers are the API servers of every control plane, for a worker to
+// balance between; none with a single control plane on kine.
+func (s *joinTicketStorage) servers(ctx context.Context) []string {
+	if !s.etcd {
+		return nil
+	}
+	out := []string{"https://" + net.JoinHostPort(s.advertise, "6443")}
+	slices, err := s.cluster.DiscoveryV1().EndpointSlices("default").List(ctx,
+		metav1.ListOptions{LabelSelector: "kubernetes.io/service-name=kubernetes"})
+	if err != nil {
+		return out
+	}
+	for _, sl := range slices.Items {
+		for _, e := range sl.Endpoints {
+			for _, a := range e.Addresses {
+				if u := "https://" + net.JoinHostPort(a, "6443"); a != s.advertise {
+					out = append(out, u)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// addMember adds the joining control plane to the store as a learner, which
+// gets its vote once it has caught up, and returns what it needs to join.
+func (s *joinTicketStorage) addMember(ctx context.Context, name, addr string) (*nodev1.ControlPlaneShare, error) {
+	share, err := controlPlaneShare(s.pkiDir)
+	if err != nil {
+		return nil, apierrors.NewInternalError(fmt.Errorf("control plane keys: %w", err))
+	}
+	c, err := etcdstore.Client()
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	peer := etcdstore.PeerURL(addr)
+	list, err := c.MemberList(ctx)
+	if err != nil {
+		return nil, apierrors.NewServiceUnavailable("cluster store: " + err.Error())
+	}
+	// A ticket issued again for the same node: the member added then, not
+	// started yet, is the one it joins as.
+	for _, m := range list.Members {
+		for _, u := range m.PeerURLs {
+			if u != peer {
+				continue
+			}
+			if m.Name != "" && m.Name != name {
+				return nil, apierrors.NewConflict(node.Resource("jointickets"), name,
+					fmt.Errorf("member %s of the store has the address %s; remove it first (etcdmembers)", m.Name, addr))
+			}
+			if m.Name == name {
+				return nil, apierrors.NewConflict(node.Resource("jointickets"), name,
+					fmt.Errorf("%s is a member of the store already; remove it first (etcdmembers) to join it again", name))
+			}
+			share.EtcdInitialCluster = etcdstore.InitialCluster(list.Members, m.ID, name)
+			return share, nil
+		}
+	}
+	resp, err := c.MemberAddAsLearner(ctx, []string{peer})
+	if err != nil {
+		return nil, apierrors.NewInternalError(fmt.Errorf("add %s to the store: %w", name, err))
+	}
+	share.EtcdInitialCluster = etcdstore.InitialCluster(resp.Members, resp.Member.ID, name)
+	return share, nil
 }
 
 func (s *joinTicketStorage) New() runtime.Object     { return &node.JoinTicket{} }
@@ -206,6 +329,26 @@ func (s *joinTicketStorage) Create(ctx context.Context, obj runtime.Object, _ re
 	if ttl < time.Minute || ttl > 24*time.Hour {
 		return nil, apierrors.NewBadRequest("spec.ttl must be between 1m and 24h")
 	}
+	role := t.Spec.Role
+	if role == "" {
+		role = membership.RoleWorker
+	}
+	if role != membership.RoleWorker && role != membership.RoleControlPlane {
+		return nil, apierrors.NewBadRequest("spec.role must be Worker or ControlPlane")
+	}
+	var share *nodev1.ControlPlaneShare
+	if role == membership.RoleControlPlane {
+		if !s.etcd {
+			return nil, apierrors.NewBadRequest(etcdstore.ErrNotEtcd.Error())
+		}
+		if net.ParseIP(t.Spec.Address) == nil {
+			return nil, apierrors.NewBadRequest("spec.address: the joining control plane's address, where the other members of the store reach it")
+		}
+		var err error
+		if share, err = s.addMember(ctx, t.Spec.NodeName, t.Spec.Address); err != nil {
+			return nil, err
+		}
+	}
 	token, err := s.bootstrapToken(ctx, ttl, t.Name)
 	if err != nil {
 		return nil, apierrors.NewInternalError(fmt.Errorf("bootstrap token: %w", err))
@@ -224,8 +367,10 @@ func (s *joinTicketStorage) Create(ctx context.Context, obj runtime.Object, _ re
 		TypeMeta:   metav1.TypeMeta{APIVersion: nodev1.SchemeGroupVersion.String(), Kind: "Membership"},
 		ObjectMeta: metav1.ObjectMeta{Name: membershipName},
 		Spec: nodev1.MembershipSpec{
-			Role:           membership.RoleWorker,
+			Role:           role,
 			Server:         "https://" + net.JoinHostPort(s.advertise, "6443"),
+			Servers:        s.servers(ctx),
+			ControlPlane:   share,
 			ClusterCA:      s.caPEM,
 			BootstrapToken: token,
 			FrontProxyCA:   s.frontPEM,
@@ -368,5 +513,6 @@ func newJoinTickets(cluster kubernetes.Interface, o Options) (*joinTicketStorage
 	}
 	frontPEM, _ := readPEM(o.RequestHeaderCA)
 	return &joinTicketStorage{cluster: cluster, ca: ca, caPEM: caPEM, frontPEM: frontPEM, advertise: o.Advertise,
-		podCIDR: o.PodCIDR, serviceCIDR: o.ServiceCIDR, podNetwork: o.PodNetwork}, nil
+		podCIDR: o.PodCIDR, serviceCIDR: o.ServiceCIDR, podNetwork: o.PodNetwork,
+		etcd: o.Etcd, pkiDir: filepath.Dir(o.ClusterCAKeyFile)}, nil
 }

@@ -36,10 +36,14 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec":       schema_pkg_apis_node_v1alpha1_BootEntrySpec(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus":     schema_pkg_apis_node_v1alpha1_BootEntryStatus(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.CPULatency":          schema_pkg_apis_node_v1alpha1_CPULatency(ref),
+		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare":   schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Disk":                schema_pkg_apis_node_v1alpha1_Disk(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskList":            schema_pkg_apis_node_v1alpha1_DiskList(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskPartition":       schema_pkg_apis_node_v1alpha1_DiskPartition(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskStatus":          schema_pkg_apis_node_v1alpha1_DiskStatus(ref),
+		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMember":          schema_pkg_apis_node_v1alpha1_EtcdMember(ref),
+		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberList":      schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref),
+		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus":    schema_pkg_apis_node_v1alpha1_EtcdMemberStatus(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Installation":        schema_pkg_apis_node_v1alpha1_Installation(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationList":    schema_pkg_apis_node_v1alpha1_InstallationList(ref),
 		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore": schema_pkg_apis_node_v1alpha1_InstallationRestore(ref),
@@ -370,6 +374,79 @@ func schema_pkg_apis_node_v1alpha1_CPULatency(ref common.ReferenceCallback) comm
 	}
 }
 
+func schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ControlPlaneShare is the keys every control plane of a cluster holds the same, and the cluster store the new one joins. The node keeps the keys with its own and drops them from the membership.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"clusterCAKey": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"frontProxyCAKey": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"serviceAccountKey": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"serviceAccountPub": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"encryptionKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EncryptionKey encrypts Secrets at rest; every API server needs the same.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"etcdCA": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EtcdCA and EtcdCAKey: the store's own authority, apart from the cluster's, which also signs kubelets' certificates.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"etcdCAKey": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"etcdInitialCluster": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EtcdInitialCluster names the store's members, this node among them, as etcd's --initial-cluster does.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"clusterCAKey", "frontProxyCAKey", "serviceAccountKey", "serviceAccountPub", "encryptionKey", "etcdCA", "etcdCAKey", "etcdInitialCluster"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_node_v1alpha1_Disk(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -543,6 +620,166 @@ func schema_pkg_apis_node_v1alpha1_DiskStatus(ref common.ReferenceCallback) comm
 		},
 		Dependencies: []string{
 			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskPartition"},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdMember(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EtcdMember is a member of the cluster store, as a control plane node sees it; deleting one removes the member, as replacing a control plane needs.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMember"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMember", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdMemberStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"id": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ID of the member, in hexadecimal as etcdctl shows it.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"peerURLs": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PeerURLs, where the other members reach it, and ClientURLs, where API servers do.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"clientURLs": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"learner": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Learner: it receives the store but has no vote until it has caught up.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"leader": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Leader: it leads the store now.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"id"},
+			},
+		},
 	}
 }
 
@@ -860,6 +1097,20 @@ func schema_pkg_apis_node_v1alpha1_JoinTicketSpec(ref common.ReferenceCallback) 
 						SchemaProps: spec.SchemaProps{
 							Description: "NodeName is the node that will use the ticket; its node API certificate is issued for this name only.",
 							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"role": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Role the node joins as: Worker, the default, or ControlPlane.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"address": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Address of a joining control plane, where the other members of the cluster store reach it.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -1521,7 +1772,7 @@ func schema_pkg_apis_node_v1alpha1_MembershipSpec(ref common.ReferenceCallback) 
 				Properties: map[string]spec.Schema{
 					"role": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Role of this node in the cluster; only Worker for now.",
+							Description: "Role of this node in the cluster: Worker, or ControlPlane, which runs a member of the cluster store and an API server of its own.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -1533,6 +1784,31 @@ func schema_pkg_apis_node_v1alpha1_MembershipSpec(ref common.ReferenceCallback) 
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+					"servers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Servers are the API server URLs of every control plane; a worker given them reaches whichever answers, through a balancer on the node.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"controlPlane": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ControlPlane is what a joining control plane shares with the others: set for the ControlPlane role only.",
+							Ref:         ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare"),
 						},
 					},
 					"clusterCA": {
@@ -1597,6 +1873,8 @@ func schema_pkg_apis_node_v1alpha1_MembershipSpec(ref common.ReferenceCallback) 
 				Required: []string{"role", "server", "clusterCA", "bootstrapToken", "nodeAPICert", "nodeAPIKey"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare"},
 	}
 }
 

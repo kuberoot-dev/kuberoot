@@ -9,6 +9,7 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/tym83/kuberoot/pkg/distro"
+	"github.com/tym83/kuberoot/pkg/etcdstore"
 	"github.com/tym83/kuberoot/pkg/membership"
 )
 
@@ -29,11 +30,30 @@ func configure(node nodeInfo, cfg bootConfig) ([]service, bool, error) {
 	}
 	r := roleContext{node: node, controlPlane: true}
 	roleName := roleControlPlane
-	if m == nil {
+	switch {
+	case m == nil:
 		if r.net, err = parseClusterNet(cfg.podCIDR, cfg.serviceCIDR); err != nil {
 			return nil, false, err
 		}
-	} else {
+		if r.store, err = storeKind(cfg); err != nil {
+			return nil, false, err
+		}
+	case m.Role == membership.RoleControlPlane:
+		// Another control plane of the cluster: the same role as the node
+		// that created it, with the cluster's ranges and keys.
+		log.Printf("joining %s as a control plane", m.Server)
+		if r.net, err = parseClusterNet(m.PodCIDR, m.ServiceCIDR); err != nil {
+			return nil, false, err
+		}
+		if m.PodNetwork != "" {
+			cfg.podNetwork = m.PodNetwork
+		}
+		podNetworkMode = cfg.podNetwork
+		if err := joinControlPlane(m); err != nil {
+			return nil, false, fmt.Errorf("join as a control plane: %w", err)
+		}
+		r.store = etcdstore.Etcd
+	default:
 		log.Printf("joining %s as %s", m.Server, strings.ToLower(m.Role))
 		// A member takes the cluster's address ranges and pod network, whatever
 		// its own boot arguments say: a node with a pod network of its own

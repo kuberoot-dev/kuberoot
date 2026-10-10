@@ -33,6 +33,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&Volume{}, &VolumeList{},
 		&Machine{}, &MachineList{},
 		&ModelServer{}, &ModelServerList{},
+		&EtcdMember{}, &EtcdMemberList{},
 		&LatencyTest{}, &LatencyTestList{},
 	)
 	return nil

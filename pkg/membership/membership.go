@@ -15,7 +15,11 @@ import (
 // Path is on the state partition, so membership survives reboots.
 const Path = "/var/lib/kuberoot/membership.json"
 
-const RoleWorker = "Worker"
+// Roles a node joins a cluster in.
+const (
+	RoleWorker       = "Worker"
+	RoleControlPlane = "ControlPlane"
+)
 
 // Load returns the membership, or nil for a standalone node.
 func Load() (*nodev1.MembershipSpec, error) {

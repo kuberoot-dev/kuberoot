@@ -261,6 +261,28 @@ The machine's cloud-init data comes from the machines' gateway, not from a seed 
 
 A Windows desktop fits the same way: a Windows image with RDP enabled and its own unattended setup in place of cloud-init, and RemoteApp to open single applications rather than a whole desktop. It needs licences, which is why the demonstration uses Linux.
 
+## Several control planes
+
+A single control plane keeps the cluster's state in kine on SQLite: no peers, nothing to tune. A cluster that should survive the loss of a control plane keeps it in etcd instead, chosen when the cluster is created: boot the first node with `kuberoot.datastore=etcd` (on the boot media, `mkimage -args kuberoot.datastore=etcd`). The choice stays with the cluster; a cluster created on kine stays on kine.
+
+On etcd, the first control plane runs a member of the store, with an authority of its own for the store's peers and clients, apart from the cluster's, which also signs kubelets' certificates. More control planes join through the node API, like workers, with the role and the address the other members reach them at:
+
+```yaml
+apiVersion: node.kuberoot.dev/v1alpha1
+kind: JoinTicket
+metadata: {name: cp-2}
+spec:
+  nodeName: kuberoot-dcaf7a
+  role: ControlPlane
+  address: 10.0.0.12
+```
+
+The ticket adds the node to the store as a learner, which gets its vote once it has caught up with the others, and hands it what every control plane holds the same: the cluster's authorities, the service account key and the key Secrets are encrypted with. Applied as the node's `Membership`, it runs an API server, a controller manager and a scheduler of its own; controllers and the package manager elect a leader among control planes. Three control planes keep the cluster working when one is lost; five, when two are.
+
+Workers that join a cluster of several control planes reach the API through a balancer on the node, in the node API: it forwards each connection to a control plane that answers and follows the control planes in the cluster's `kubernetes` Service as they come and go. No virtual address and no load balancer outside the cluster are needed, so it works on any network.
+
+`etcdmembers`, on a control plane, lists the store's members; deleting one removes it, as replacing a lost control plane needs: remove its member, then join the new node. A control plane that leaves its cluster (deleting its `Membership`) takes itself out of the store first. Install control planes before they join: an installation carries the store of a single member, not of one member among others. Moving an existing cluster from kine to etcd is not automatic: create the new cluster on etcd and move workloads over (Velero, or the packages and their data).
+
 ## Node API
 
 | Resource | What it does |
@@ -271,7 +293,8 @@ A Windows desktop fits the same way: a Windows image with RDP enabled and its ow
 | `installations` | writes the system onto a disk, from boot media |
 | `bootentries` | the two root slots and which one boots |
 | `upgrades` | stages a signed release into the inactive slot |
-| `memberships`, `jointickets` | joins nodes to a cluster |
+| `memberships`, `jointickets` | joins nodes to a cluster, as workers or control planes |
+| `etcdmembers` | the members of the cluster store, on a control plane that runs etcd |
 | `statebackups` | the control plane's state archives |
 | `volumes`, `machines` | virtual machines' disks and machines (hypervisor) |
 | `modelservers` | the language models the node serves (ai) |
@@ -319,7 +342,7 @@ spec:
     identity: AGE-SECRET-KEY-1...
 ```
 
-The node comes back as the same node, with the same name, certificates and cluster.
+The node comes back as the same node, with the same name, certificates and cluster. On etcd, the archive holds a snapshot of the store, and the restored node starts the store from it as its only member; the other control planes join it again.
 
 ## Layout
 

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"net"
 	"strings"
 	"testing"
+
+	"github.com/tym83/kuberoot/pkg/etcdstore"
 )
 
 func edgeFacts(plainHTTP bool) facts {
@@ -11,6 +14,7 @@ func edgeFacts(plainHTTP bool) facts {
 	f.Net.Pod, f.Net.Service, f.Net.DNS = "10.200.0.0/16", "10.201.0.0/16", "10.201.0.10"
 	f.Net.PodNetwork = "vxlan"
 	f.Boot.Distro, f.Boot.RepoPlainHTTP = "edge", plainHTTP
+	f.Store, f.Etcd = newStoreFacts(etcdstore.Kine, nodeInfo{name: f.Node.Name, ip: net.ParseIP(f.Node.IP)})
 	return f
 }
 

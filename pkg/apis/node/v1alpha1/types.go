@@ -281,10 +281,18 @@ type Membership struct {
 }
 
 type MembershipSpec struct {
-	// Role of this node in the cluster; only Worker for now.
+	// Role of this node in the cluster: Worker, or ControlPlane, which runs
+	// a member of the cluster store and an API server of its own.
 	Role string `json:"role"`
 	// Server is the cluster API server URL.
 	Server string `json:"server"`
+	// Servers are the API server URLs of every control plane; a worker given
+	// them reaches whichever answers, through a balancer on the node.
+	// +listType=atomic
+	Servers []string `json:"servers,omitempty"`
+	// ControlPlane is what a joining control plane shares with the others:
+	// set for the ControlPlane role only.
+	ControlPlane *ControlPlaneShare `json:"controlPlane,omitempty"`
 	// ClusterCA is the PEM bundle of the cluster CA.
 	ClusterCA string `json:"clusterCA"`
 	// BootstrapToken lets the kubelet request its client certificate.
@@ -302,6 +310,25 @@ type MembershipSpec struct {
 	// cluster must use the same.
 	PodNetwork  string `json:"podNetwork,omitempty"`
 	ServiceCIDR string `json:"serviceCIDR,omitempty"`
+}
+
+// ControlPlaneShare is the keys every control plane of a cluster holds the
+// same, and the cluster store the new one joins. The node keeps the keys
+// with its own and drops them from the membership.
+type ControlPlaneShare struct {
+	ClusterCAKey      string `json:"clusterCAKey"`
+	FrontProxyCAKey   string `json:"frontProxyCAKey"`
+	ServiceAccountKey string `json:"serviceAccountKey"`
+	ServiceAccountPub string `json:"serviceAccountPub"`
+	// EncryptionKey encrypts Secrets at rest; every API server needs the same.
+	EncryptionKey string `json:"encryptionKey"`
+	// EtcdCA and EtcdCAKey: the store's own authority, apart from the
+	// cluster's, which also signs kubelets' certificates.
+	EtcdCA    string `json:"etcdCA"`
+	EtcdCAKey string `json:"etcdCAKey"`
+	// EtcdInitialCluster names the store's members, this node among them,
+	// as etcd's --initial-cluster does.
+	EtcdInitialCluster string `json:"etcdInitialCluster"`
 }
 
 type MembershipStatus struct {
@@ -333,6 +360,11 @@ type JoinTicketSpec struct {
 	// NodeName is the node that will use the ticket; its node API certificate
 	// is issued for this name only.
 	NodeName string `json:"nodeName"`
+	// Role the node joins as: Worker, the default, or ControlPlane.
+	Role string `json:"role,omitempty"`
+	// Address of a joining control plane, where the other members of the
+	// cluster store reach it.
+	Address string `json:"address,omitempty"`
 	// TTL of the ticket and its bootstrap token: one hour by default, one day at most.
 	TTL *metav1.Duration `json:"ttl,omitempty"`
 }
@@ -621,4 +653,38 @@ type LatencyTestList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []LatencyTest `json:"items"`
+}
+
+// EtcdMember is a member of the cluster store, as a control plane node sees
+// it; deleting one removes the member, as replacing a control plane needs.
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient:nonNamespaced
+type EtcdMember struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Status EtcdMemberStatus `json:"status,omitempty"`
+}
+
+type EtcdMemberStatus struct {
+	// ID of the member, in hexadecimal as etcdctl shows it.
+	ID string `json:"id"`
+	// PeerURLs, where the other members reach it, and ClientURLs, where API
+	// servers do.
+	// +listType=atomic
+	PeerURLs []string `json:"peerURLs,omitempty"`
+	// +listType=atomic
+	ClientURLs []string `json:"clientURLs,omitempty"`
+	// Learner: it receives the store but has no vote until it has caught up.
+	Learner bool `json:"learner,omitempty"`
+	// Leader: it leads the store now.
+	Leader bool `json:"leader,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type EtcdMemberList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []EtcdMember `json:"items"`
 }

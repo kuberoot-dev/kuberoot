@@ -15,6 +15,8 @@ require (
 	github.com/prometheus/client_golang v1.24.0
 	github.com/simonvetter/modbus v1.6.4
 	github.com/vishvananda/netlink v1.3.1
+	go.etcd.io/etcd/api/v3 v3.7.0
+	go.etcd.io/etcd/client/v3 v3.7.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.48.0
 	k8s.io/api v0.37.1
@@ -110,9 +112,7 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	go.etcd.io/etcd/api/v3 v3.7.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.7.0 // indirect
-	go.etcd.io/etcd/client/v3 v3.7.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.68.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect

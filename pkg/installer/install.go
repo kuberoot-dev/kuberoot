@@ -19,6 +19,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/tym83/kuberoot/pkg/bootdisk"
+	"github.com/tym83/kuberoot/pkg/etcdstore"
 )
 
 // MediaDir is where the running live system finds its boot media.
@@ -129,10 +130,35 @@ func carryIdentity(mnt string) error {
 			return fmt.Errorf("copy %s: %w", rel, err)
 		}
 	}
+	if etcdRunning() {
+		return carryEtcd(filepath.Join(mnt, etcdRestore))
+	}
 	if err := snapshotStore(filepath.Join("/var", kineStore), filepath.Join(mnt, kineStore)); err != nil {
 		return fmt.Errorf("carry the cluster store: %w", err)
 	}
 	return nil
+}
+
+// carryEtcd carries the store of a control plane that is its only member as
+// a snapshot the installed system starts from. A member among others is not
+// carried: install control planes before they join, or join this one again
+// after its installation.
+func carryEtcd(dst string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	c, err := etcdstore.Client()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	list, err := c.MemberList(ctx)
+	if err != nil {
+		return fmt.Errorf("cluster store: %w", err)
+	}
+	if len(list.Members) > 1 {
+		return fmt.Errorf("this control plane is one of %d members of the cluster store, which an installation does not carry: install control planes before they join, or remove this one (etcdmembers) and join it again once installed", len(list.Members))
+	}
+	return etcdSnapshot(ctx, dst)
 }
 
 // snapshotStore writes a consistent copy of a live SQLite database: VACUUM

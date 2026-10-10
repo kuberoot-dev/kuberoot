@@ -72,10 +72,20 @@ type facts struct {
 		Distro        string
 		RepoPlainHTTP bool
 	}
+	// Store is the cluster store of a control plane, Etcd its member.
+	Store storeFacts
+	Etcd  etcdFacts
+	// Member: Servers are the cluster's API servers, comma-separated, for a
+	// worker that balances between several control planes.
+	Member struct{ Servers string }
 }
 
 func roleFacts(r roleContext, cfg bootConfig) facts {
 	var f facts
+	f.Store, f.Etcd = newStoreFacts(r.store, r.node)
+	if r.member != nil {
+		f.Member.Servers = strings.Join(r.member.Servers, ",")
+	}
 	f.Node.Name, f.Node.IP = r.node.name, r.node.ip.String()
 	f.Net.Pod, f.Net.Service = r.net.pod.String(), r.net.service.String()
 	f.Net.DNS = r.net.dnsIP().String()
@@ -113,6 +123,15 @@ func renderRole(spec roleSpec, r roleContext, cfg bootConfig) ([]service, error)
 func renderServices(spec roleSpec, f facts) ([]service, error) {
 	var services []service
 	for _, s := range spec.Services {
+		if s.When != "" {
+			on, err := render(s.When, f)
+			if err != nil {
+				return nil, fmt.Errorf("service %s, when: %w", s.Name, err)
+			}
+			if on != "true" {
+				continue
+			}
+		}
 		svc := service{name: s.Name, env: s.Env}
 		if s.After != "" {
 			cond, ok := afterConditions[s.After]

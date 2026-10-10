@@ -333,7 +333,9 @@ func healthy(ctx context.Context, kinit *supervisor.Client, nodeName string) (bo
 			return false, restarts
 		}
 	}
-	if m, _ := membership.Load(); m != nil {
+	// A control plane that joined runs its own API server: it is healthy as
+	// any cluster is, not as a worker with only the kubelet's credentials.
+	if m, _ := membership.Load(); m != nil && m.Role != membership.RoleControlPlane {
 		return memberReady(ctx, nodeName), restarts
 	}
 	return clusterReady(), restarts

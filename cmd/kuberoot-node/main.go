@@ -42,6 +42,17 @@ func main() {
 	flag.StringVar(&o.VMNetworkKubeconfig, "vm-network-kubeconfig", "", "credentials to read nodes and join the machines' network to them")
 	flag.BoolVar(&o.ModelServers, "model-servers", false, "serve language models: the modelservers resource")
 	flag.BoolVar(&o.GPUs, "gpus", false, "make NVIDIA GPUs usable: device files and their CDI description")
+	flag.BoolVar(&o.Etcd, "etcd", false, "this control plane runs a member of the cluster store: other control planes can join")
+	flag.Func("api-servers", "the cluster's API servers, comma-separated: balance between them on --api-balancer", func(v string) error {
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				o.APIServers = append(o.APIServers, s)
+			}
+		}
+		return nil
+	})
+	flag.StringVar(&o.APIBalancer, "api-balancer", "127.0.0.1:6444", "where a worker of several control planes reaches the cluster API")
+	flag.StringVar(&o.APIKubeconfig, "api-kubeconfig", "", "credentials to follow the control planes as the cluster lists them")
 	flag.Int64Var(&o.ModelReserveMiB, "model-reserve-mib", 1024, "memory, in MiB, the model servers leave to the node")
 	flag.BoolVar(&o.LatencyTests, "latency-tests", false, "measure real-time latency: the latencytests resource")
 	flag.StringVar(&o.PodCIDR, "pod-cidr", "", "pod address range of the cluster (control plane node)")
