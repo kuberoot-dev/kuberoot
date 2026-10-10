@@ -18,8 +18,8 @@ import (
 	"golang.org/x/sys/unix"
 	_ "modernc.org/sqlite"
 
-	"github.com/tym83/kuberoot/pkg/bootdisk"
-	"github.com/tym83/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 )
 
 // MediaDir is where the running live system finds its boot media.

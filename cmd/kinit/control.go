@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/tym83/kuberoot/pkg/supervisor"
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 	"golang.org/x/sys/unix"
 )
 

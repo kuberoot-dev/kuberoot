@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/ai/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/ai/v1alpha1"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"strings"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
 
 // Table is the router's nftables table; nothing else is touched.

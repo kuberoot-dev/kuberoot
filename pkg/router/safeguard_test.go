@@ -7,7 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
 
 func withRoute(dst string) Config {

@@ -8,8 +8,8 @@ import (
 
 	"github.com/diskfs/go-diskfs/filesystem"
 
-	"github.com/tym83/kuberoot/pkg/bootdisk"
-	"github.com/tym83/kuberoot/pkg/pki"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/pki"
 )
 
 // trust is what --trust keeps in its directory: a serving CA, whose key goes

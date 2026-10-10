@@ -30,11 +30,11 @@ import (
 	basecompatibility "k8s.io/component-base/compatibility"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/apis/node/install"
-	"github.com/tym83/kuberoot/pkg/generated/openapi"
-	"github.com/tym83/kuberoot/pkg/gpu"
-	"github.com/tym83/kuberoot/pkg/supervisor"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node/install"
+	"github.com/kuberoot-dev/kuberoot/pkg/generated/openapi"
+	"github.com/kuberoot-dev/kuberoot/pkg/gpu"
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 )
 
 // AdminGroup is the client certificate organization that may manage the node.

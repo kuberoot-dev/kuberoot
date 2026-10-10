@@ -20,9 +20,9 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
-	"github.com/tym83/kuberoot/pkg/rt"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/rt"
 )
 
 // latencyTests are the node's latency tests, kept on disk with their

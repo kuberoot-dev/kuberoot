@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/tym83/kuberoot/pkg/distro"
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
 )
 
 // loadModulesAndLock loads the profile's modules, which the kernel accepts

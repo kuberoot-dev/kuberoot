@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
-	"github.com/tym83/kuberoot/pkg/safeguard"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/safeguard"
 )
 
 // Revision names a configuration by what it asks of the node: the specs of

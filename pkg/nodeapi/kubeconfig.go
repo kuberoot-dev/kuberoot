@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/registry/rest"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
 
 // kubeconfigStorage hands out credentials for the cluster API server, so the

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // heartbeat calls a URL outside the node on its period, while its query,

@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/tym83/kuberoot/pkg/upgrade"
+	"github.com/kuberoot-dev/kuberoot/pkg/upgrade"
 )
 
 // probationDeadline is how long a slot on probation may take to be declared

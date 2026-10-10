@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tym83/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
 )
 
 const (

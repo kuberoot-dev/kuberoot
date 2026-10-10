@@ -11,7 +11,7 @@ go run k8s.io/code-generator/cmd/deepcopy-gen@v0.37.1 --go-header-file $HEADER \
 go run k8s.io/code-generator/cmd/conversion-gen@v0.37.1 --go-header-file $HEADER \
   --output-file zz_generated.conversion.go ./pkg/apis/node/v1alpha1
 go run $OPENAPI --go-header-file $HEADER \
-  --output-dir pkg/generated/openapi --output-pkg github.com/tym83/kuberoot/pkg/generated/openapi \
+  --output-dir pkg/generated/openapi --output-pkg github.com/kuberoot-dev/kuberoot/pkg/generated/openapi \
   --output-file zz_generated.openapi.go \
   k8s.io/apimachinery/pkg/apis/meta/v1 k8s.io/apimachinery/pkg/runtime k8s.io/apimachinery/pkg/version \
   ./pkg/apis/node/v1alpha1

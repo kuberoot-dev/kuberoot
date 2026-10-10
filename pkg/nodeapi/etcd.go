@@ -16,9 +16,9 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
-	"github.com/tym83/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 )
 
 // etcdMemberStorage serves the members of the cluster store on a control

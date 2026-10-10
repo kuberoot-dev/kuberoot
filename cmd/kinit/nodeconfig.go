@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
 	"os"
 	"path/filepath"
 	"strings"

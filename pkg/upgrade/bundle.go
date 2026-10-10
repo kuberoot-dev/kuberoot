@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tym83/kuberoot/pkg/bootdisk"
-	"github.com/tym83/kuberoot/pkg/installer"
-	"github.com/tym83/kuberoot/pkg/release"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/installer"
+	"github.com/kuberoot-dev/kuberoot/pkg/release"
 )
 
 const downloadDir = "/var/lib/kuberoot/upgrade"

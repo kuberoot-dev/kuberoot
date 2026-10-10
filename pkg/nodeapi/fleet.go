@@ -31,8 +31,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
 )
 
 // viaClusterGroup marks requests the cluster API server forwarded: they get the

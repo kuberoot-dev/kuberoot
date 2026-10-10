@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
 
 // With ROUTER_FIXTURES set, the rendered configurations of a full router

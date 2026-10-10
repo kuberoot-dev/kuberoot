@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/router"
+	"github.com/kuberoot-dev/kuberoot/pkg/router"
 )
 
 func main() {

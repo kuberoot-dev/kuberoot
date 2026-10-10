@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // Condition is a route's when, compiled against its device's points: bits

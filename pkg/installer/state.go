@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tym83/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 )
 
 // etcdRestore is where a snapshot of etcd waits, below /var, for kinit to

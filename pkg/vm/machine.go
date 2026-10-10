@@ -19,7 +19,7 @@ import (
 	"github.com/vishvananda/netlink"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
 
 // ErrWaiting is a machine waiting for something to be ready, not failing.

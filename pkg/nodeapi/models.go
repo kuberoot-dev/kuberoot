@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/registry/rest"
 
-	"github.com/tym83/kuberoot/pkg/ai"
-	"github.com/tym83/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/ai"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
 
 // modelHost is the node's model servers, kept on disk and made to match

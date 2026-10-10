@@ -18,8 +18,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	vmv1 "github.com/tym83/kuberoot/pkg/apis/vm/v1alpha1"
-	v1 "github.com/tym83/kuberoot/pkg/apis/workstation/v1alpha1"
+	vmv1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/workstation/v1alpha1"
 )
 
 const (

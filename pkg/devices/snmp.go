@@ -10,7 +10,7 @@ import (
 
 	"github.com/gosnmp/gosnmp"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // snmpDevice reads an SNMP agent: switches, PDUs, UPSes. Each poll gets all

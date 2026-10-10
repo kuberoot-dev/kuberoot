@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
 
 // report is cyclictest 2.11's JSON, as write_stats prints it.

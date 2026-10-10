@@ -10,8 +10,8 @@ mkdir -p "$OUT/kubepkg-crds"
 
 cd "$ROOT/build/kubepkg"
 for cmd in kubepkg kubepkg-operator; do
-  GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/$cmd" "github.com/tym83/kubepkg/cmd/$cmd"
+  GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/$cmd" "github.com/kuberoot-dev/kubepkg/cmd/$cmd"
 done
-src=$(go list -m -f '{{.Dir}}' github.com/tym83/kubepkg)
+src=$(go list -m -f '{{.Dir}}' github.com/kuberoot-dev/kubepkg)
 install -m 0644 "$src"/config/crd/kubepkg.dev_*.yaml "$OUT/kubepkg-crds/"
-echo "kubepkg: $(go list -m -f '{{.Version}}' github.com/tym83/kubepkg) -> out/$ARCH/{kubepkg,kubepkg-operator,kubepkg-crds}"
+echo "kubepkg: $(go list -m -f '{{.Version}}' github.com/kuberoot-dev/kubepkg) -> out/$ARCH/{kubepkg,kubepkg-operator,kubepkg-crds}"

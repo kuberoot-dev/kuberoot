@@ -23,11 +23,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
-	routerv1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
-	v1 "github.com/tym83/kuberoot/pkg/apis/vm/v1alpha1"
-	"github.com/tym83/kuberoot/pkg/router"
-	"github.com/tym83/kuberoot/pkg/vm"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
+	routerv1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/router"
+	"github.com/kuberoot-dev/kuberoot/pkg/vm"
 )
 
 const finalizer = "vm.kuberoot.dev/cleanup"

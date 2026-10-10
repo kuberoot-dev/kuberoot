@@ -91,7 +91,7 @@ func parseCmdline(cmdline string) bootConfig {
 		cfg.podNetwork = "vxlan"
 	}
 	if cfg.repo == "" {
-		cfg.repo = "https://tym83.github.io/kubepkg-recipes/index.yaml"
+		cfg.repo = "https://kuberoot-dev.github.io/kubepkg-recipes/index.yaml"
 	}
 	return cfg
 }

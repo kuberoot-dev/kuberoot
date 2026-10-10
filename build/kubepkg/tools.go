@@ -4,6 +4,6 @@
 package tools
 
 import (
-	_ "github.com/tym83/kubepkg/pkg/cli"
-	_ "github.com/tym83/kubepkg/pkg/operator"
+	_ "github.com/kuberoot-dev/kubepkg/pkg/cli"
+	_ "github.com/kuberoot-dev/kubepkg/pkg/operator"
 )

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
 
 func TestResConfig(t *testing.T) {

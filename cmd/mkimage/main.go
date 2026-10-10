@@ -13,7 +13,7 @@ import (
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 
-	"github.com/tym83/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
 )
 
 func main() {
