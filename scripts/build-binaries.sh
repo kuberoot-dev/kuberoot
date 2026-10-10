@@ -14,6 +14,12 @@ mkdir -p "$OUT"
 for cmd in kinit kuberoot-node kuberoot-installer kuberoot-intents kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl; do
   (cd "$ROOT" && GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/$cmd" "./cmd/$cmd")
 done
+# The resource store lab (docs/resource-store.md), only when asked for: it
+# can run in etcd's place (kuberoot.datastore=kuberoot-store), never by default.
+rm -f "$OUT/kuberoot-store"
+if [ "${KUBEROOT_STORE_LAB:-}" = 1 ]; then
+  (cd "$ROOT" && GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/kuberoot-store" ./cmd/kuberoot-store)
+fi
 "$ROOT/scripts/build-kubepkg.sh" "$ARCH"
 
 # The upstream kubelet is linked against glibc: carry just its runtime.

@@ -9,7 +9,6 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/kuberoot-dev/kuberoot/pkg/distro"
-	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 	"github.com/kuberoot-dev/kuberoot/pkg/membership"
 )
 
@@ -49,10 +48,9 @@ func configure(node nodeInfo, cfg bootConfig) ([]service, bool, error) {
 			cfg.podNetwork = m.PodNetwork
 		}
 		podNetworkMode = cfg.podNetwork
-		if err := joinControlPlane(m); err != nil {
+		if r.store, err = joinControlPlane(m); err != nil {
 			return nil, false, fmt.Errorf("join as a control plane: %w", err)
 		}
-		r.store = etcdstore.Etcd
 	default:
 		log.Printf("joining %s as %s", m.Server, strings.ToLower(m.Role))
 		// A member takes the cluster's address ranges and pod network, whatever

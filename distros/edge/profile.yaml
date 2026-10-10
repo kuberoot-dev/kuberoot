@@ -69,7 +69,8 @@ spec:
       - name: etcd
         when: '{{eq .Store.Kind "etcd"}}'
         args:
-        - /usr/bin/etcd
+        # etcd, or the resource store lab in its place (kuberoot.datastore=kuberoot-store).
+        - '{{.Etcd.Binary}}'
         - --name={{.Etcd.Name}}
         - --data-dir=/var/lib/etcd
         - --listen-client-urls={{.Etcd.ClientURLs}}

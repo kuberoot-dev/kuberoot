@@ -27,6 +27,10 @@ const inClusterNamespace = "/var/run/secrets/kubernetes.io/serviceaccount/namesp
 // The API servers' certificates name 127.0.0.1.
 const apiBalancer = "https://127.0.0.1:6444"
 
+// labStoreBinary is where an image built with the resource store lab
+// carries it.
+var labStoreBinary = etcdstore.Binary(etcdstore.KuberootStore)
+
 // storeKind is the store of the cluster this control plane runs, decided
 // when the cluster is created and kept: a cluster that has data in kine
 // stays on kine, a new one takes what the boot asked for, kine by default.
@@ -35,8 +39,14 @@ func storeKind(cfg bootConfig) (string, error) {
 		return k, nil
 	}
 	kind := etcdstore.Kine
-	if _, err := os.Stat(kineStoreFile); err != nil && cfg.datastore == etcdstore.Etcd {
-		kind = etcdstore.Etcd
+	if _, err := os.Stat(kineStoreFile); err != nil && etcdstore.EtcdAPI(cfg.datastore) {
+		kind = cfg.datastore
+	}
+	if kind == etcdstore.KuberootStore {
+		if _, err := os.Stat(labStoreBinary); err != nil {
+			log.Printf("kuberoot.datastore=kuberoot-store, but this image has no %s (built without KUBEROOT_STORE_LAB=1): kine", labStoreBinary)
+			kind = etcdstore.Kine
+		}
 	}
 	return kind, etcdstore.SetKind(kind)
 }
@@ -44,13 +54,25 @@ func storeKind(cfg bootConfig) (string, error) {
 // joinControlPlane takes what a joining control plane shares with the
 // others: the cluster's authorities and keys, and the store it joins. They
 // are kept with the node's own credentials and dropped from the membership.
-func joinControlPlane(m *nodev1.MembershipSpec) error {
+// It returns the kind of store the node runs a member of.
+func joinControlPlane(m *nodev1.MembershipSpec) (string, error) {
 	share := m.ControlPlane
 	if share == nil {
-		return nil // taken on an earlier boot
+		// Taken on an earlier boot.
+		if k := etcdstore.Kind(); k != "" {
+			return k, nil
+		}
+		return etcdstore.Etcd, nil
+	}
+	kind := share.Store
+	if kind == "" {
+		kind = etcdstore.Etcd
+	}
+	if !etcdstore.EtcdAPI(kind) {
+		return "", fmt.Errorf("the cluster's store is %s, which control planes cannot join", kind)
 	}
 	if err := os.MkdirAll(pkiDir, 0o700); err != nil {
-		return err
+		return "", err
 	}
 	for name, content := range map[string]string{
 		"ca.crt": m.ClusterCA, "ca.key": share.ClusterCAKey,
@@ -60,30 +82,31 @@ func joinControlPlane(m *nodev1.MembershipSpec) error {
 		etcdstore.CA + ".crt": share.EtcdCA, etcdstore.CA + ".key": share.EtcdCAKey,
 	} {
 		if content == "" {
-			return fmt.Errorf("the membership lacks %s", name)
+			return "", fmt.Errorf("the membership lacks %s", name)
 		}
 		if err := os.WriteFile(pkiPath(name), []byte(content), 0o600); err != nil {
-			return err
+			return "", err
 		}
 	}
 	// A member left from an earlier time in another store would not start.
 	if err := os.RemoveAll(etcdstore.DataDir); err != nil {
-		return err
+		return "", err
 	}
 	if err := etcdstore.WriteInit(etcdstore.Joining(share.EtcdInitialCluster)); err != nil {
-		return err
+		return "", err
 	}
-	if err := etcdstore.SetKind(etcdstore.Etcd); err != nil {
-		return err
+	if err := etcdstore.SetKind(kind); err != nil {
+		return "", err
 	}
 	kept := *m
 	kept.ControlPlane = nil
-	return membership.Save(kept)
+	return kind, membership.Save(kept)
 }
 
 // storeFacts are what the profile's services know of the cluster store.
 type storeFacts struct {
-	// Kind is kine or etcd.
+	// Kind is kine or etcd: how the store is run and reached. The resource
+	// store lab is run and reached as etcd is, and is etcd here.
 	Kind string
 	// Servers is the API server's --etcd-servers.
 	Servers string
@@ -92,19 +115,22 @@ type storeFacts struct {
 }
 
 type etcdFacts struct {
+	// Binary runs the member: etcd, or the resource store lab.
+	Binary                                        string
 	Name, PeerURL, ClientURLs, AdvertiseClientURL string
 	InitialCluster, State                         string
 }
 
 func newStoreFacts(kind string, node nodeInfo) (storeFacts, etcdFacts) {
-	if kind != etcdstore.Etcd {
+	if !etcdstore.EtcdAPI(kind) {
 		return storeFacts{Kind: etcdstore.Kine, Servers: "unix:///run/kine/kine.sock", LeaderElect: "false"}, etcdFacts{}
 	}
 	ip := node.ip.String()
 	init := etcdstore.ReadInit(node.name, ip)
 	return storeFacts{Kind: etcdstore.Etcd, Servers: etcdstore.Endpoint, LeaderElect: "true"},
 		etcdFacts{
-			Name: node.name, PeerURL: etcdstore.PeerURL(ip),
+			Binary: etcdstore.Binary(kind),
+			Name:   node.name, PeerURL: etcdstore.PeerURL(ip),
 			ClientURLs:         etcdstore.ClientURL(ip) + "," + etcdstore.Endpoint,
 			AdvertiseClientURL: etcdstore.ClientURL(ip),
 			InitialCluster:     init.InitialCluster, State: init.State,
@@ -114,7 +140,7 @@ func newStoreFacts(kind string, node nodeInfo) (storeFacts, etcdFacts) {
 // etcdGenerator issues the store's credentials from its own authority and
 // prepares its data: a member of a highly available control plane only.
 func etcdGenerator(r roleContext) error {
-	if etcdstore.Kind() != etcdstore.Etcd {
+	if !etcdstore.EtcdAPI(etcdstore.Kind()) {
 		return nil
 	}
 	ca, err := loadOrCreateAuthority(etcdstore.CA, "kuberoot-etcd-ca")
@@ -149,6 +175,9 @@ func etcdGenerator(r roleContext) error {
 func restoreStore(node nodeInfo) error {
 	if _, err := os.Stat(etcdstore.RestoreFile); err != nil {
 		return nil
+	}
+	if etcdstore.Kind() == etcdstore.KuberootStore {
+		return fmt.Errorf("restore the cluster store: the resource store lab cannot restore etcd snapshots")
 	}
 	if _, err := os.Stat(filepath.Join(etcdstore.DataDir, "member")); err == nil {
 		log.Printf("cluster store: a snapshot to restore, and a store already: keeping the store")

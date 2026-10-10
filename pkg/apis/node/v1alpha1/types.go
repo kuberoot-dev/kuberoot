@@ -329,6 +329,9 @@ type ControlPlaneShare struct {
 	// EtcdInitialCluster names the store's members, this node among them,
 	// as etcd's --initial-cluster does.
 	EtcdInitialCluster string `json:"etcdInitialCluster"`
+	// Store is the kind of store the node runs a member of: etcd when
+	// empty, or kuberoot-store, the resource store lab in etcd's place.
+	Store string `json:"store,omitempty"`
 }
 
 type MembershipStatus struct {

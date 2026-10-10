@@ -50,6 +50,7 @@ tar -xzf "$CACHE/etcd-$ETCD_VERSION-$ARCH.tgz" -C $r/usr/bin --strip-components=
   "etcd-$ETCD_VERSION-linux-$ARCH/etcd" "etcd-$ETCD_VERSION-linux-$ARCH/etcdutl"
 
 install -m 0755 "$OUT/kinit" $r/usr/sbin/kinit
+if [ "${KUBEROOT_STORE_LAB:-}" = 1 ]; then install -m 0755 "$OUT/kuberoot-store" $r/usr/bin/; fi
 install -m 0755 "$OUT/kuberoot-node" "$OUT/kuberoot-installer" "$OUT/kuberoot-intents" "$OUT/kuberoot-router" "$OUT/kuberoot-vmctl" "$OUT/kuberoot-aictl" "$OUT/kuberoot-agent" "$OUT/kuberoot-devices" "$OUT/kuberoot-wsctl" "$OUT/kubepkg" "$OUT/kubepkg-operator" $r/usr/bin/
 mkdir -p $r/usr/share/kuberoot/kubepkg/crds
 cp "$OUT"/kubepkg-crds/*.yaml $r/usr/share/kuberoot/kubepkg/crds/

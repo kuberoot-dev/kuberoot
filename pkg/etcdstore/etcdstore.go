@@ -26,7 +26,24 @@ import (
 const (
 	Kine = "kine"
 	Etcd = "etcd"
+	// KuberootStore is the resource store lab (cmd/kuberoot-store, see
+	// docs/resource-store.md) run in etcd's place: it speaks etcd's API and
+	// takes etcd's flags. Only images built with KUBEROOT_STORE_LAB=1
+	// carry it.
+	KuberootStore = "kuberoot-store"
 )
+
+// EtcdAPI reports whether a kind of store has a member on each control
+// plane, reached on the etcd API: etcd, or the lab store in its place.
+func EtcdAPI(kind string) bool { return kind == Etcd || kind == KuberootStore }
+
+// Binary is the program that runs a member of a kind of store.
+func Binary(kind string) string {
+	if kind == KuberootStore {
+		return "/usr/bin/kuberoot-store"
+	}
+	return "/usr/bin/etcd"
+}
 
 var (
 	// PKIDir holds the store's credentials with the node's others.
@@ -164,7 +181,7 @@ func tlsConfig(identity string) (*tls.Config, error) {
 // Running reports whether this node runs a member of the store.
 func Running() bool {
 	_, err := os.Stat(path(Admin + ".crt"))
-	return err == nil && Kind() == Etcd
+	return err == nil && EtcdAPI(Kind())
 }
 
 // Snapshot writes a consistent snapshot of the store to dst.
