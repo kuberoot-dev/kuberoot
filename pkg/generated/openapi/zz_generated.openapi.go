@@ -409,9 +409,9 @@ func schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref common.ReferenceCallbac
 							Format:  "",
 						},
 					},
-					"encryptionConfig": {
+					"encryptionKey": {
 						SchemaProps: spec.SchemaProps{
-							Description: "EncryptionConfig encrypts Secrets at rest; every API server needs the same.",
+							Description: "EncryptionKey encrypts Secrets at rest; every API server needs the same.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -441,7 +441,7 @@ func schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref common.ReferenceCallbac
 						},
 					},
 				},
-				Required: []string{"clusterCAKey", "frontProxyCAKey", "serviceAccountKey", "serviceAccountPub", "encryptionConfig", "etcdCA", "etcdCAKey", "etcdInitialCluster"},
+				Required: []string{"clusterCAKey", "frontProxyCAKey", "serviceAccountKey", "serviceAccountPub", "encryptionKey", "etcdCA", "etcdCAKey", "etcdInitialCluster"},
 			},
 		},
 	}

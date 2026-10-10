@@ -56,7 +56,7 @@ func joinControlPlane(m *nodev1.MembershipSpec) error {
 		"ca.crt": m.ClusterCA, "ca.key": share.ClusterCAKey,
 		"front-proxy-ca.crt": m.FrontProxyCA, "front-proxy-ca.key": share.FrontProxyCAKey,
 		"sa.key": share.ServiceAccountKey, "sa.pub": share.ServiceAccountPub,
-		"encryption.yaml":     share.EncryptionConfig,
+		"encryption.key":      share.EncryptionKey,
 		etcdstore.CA + ".crt": share.EtcdCA, etcdstore.CA + ".key": share.EtcdCAKey,
 	} {
 		if content == "" {

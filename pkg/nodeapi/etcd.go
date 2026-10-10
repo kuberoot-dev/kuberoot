@@ -170,8 +170,8 @@ func controlPlaneShare(pkiDir string) (*nodev1.ControlPlaneShare, error) {
 	for dst, name := range map[*string]string{
 		&share.ClusterCAKey: "ca.key", &share.FrontProxyCAKey: "front-proxy-ca.key",
 		&share.ServiceAccountKey: "sa.key", &share.ServiceAccountPub: "sa.pub",
-		&share.EncryptionConfig: "encryption.yaml",
-		&share.EtcdCA:           etcdstore.CA + ".crt", &share.EtcdCAKey: etcdstore.CA + ".key",
+		&share.EncryptionKey: "encryption.key",
+		&share.EtcdCA:        etcdstore.CA + ".crt", &share.EtcdCAKey: etcdstore.CA + ".key",
 	} {
 		v, err := read(name)
 		if err != nil {

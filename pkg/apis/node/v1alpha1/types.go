@@ -320,8 +320,8 @@ type ControlPlaneShare struct {
 	FrontProxyCAKey   string `json:"frontProxyCAKey"`
 	ServiceAccountKey string `json:"serviceAccountKey"`
 	ServiceAccountPub string `json:"serviceAccountPub"`
-	// EncryptionConfig encrypts Secrets at rest; every API server needs the same.
-	EncryptionConfig string `json:"encryptionConfig"`
+	// EncryptionKey encrypts Secrets at rest; every API server needs the same.
+	EncryptionKey string `json:"encryptionKey"`
 	// EtcdCA and EtcdCAKey: the store's own authority, apart from the
 	// cluster's, which also signs kubelets' certificates.
 	EtcdCA    string `json:"etcdCA"`
