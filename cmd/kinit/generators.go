@@ -67,6 +67,10 @@ var generators = map[string]func(roleContext) error{
 		files[filepath.Join(kubeDir, "admission.yaml")] = admissionConfig
 		files[filepath.Join(kubeDir, "audit-policy.yaml")] = auditPolicy
 		files[pkiPath("encryption.yaml")] = fmt.Sprintf(encryptionConfig, key)
+		// Controllers that elect a leader among control planes keep their
+		// lease in the namespace they run in; the package manager, a process
+		// of the node, finds it where a pod would.
+		files[inClusterNamespace] = "kube-system"
 		activeNet = r.net
 		if err := writeFiles(files, "/var/lib/kine"); err != nil {
 			return err

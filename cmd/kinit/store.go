@@ -18,6 +18,10 @@ import (
 // kineStoreFile is a single control plane's store.
 const kineStoreFile = "/var/lib/kine/state.db"
 
+// inClusterNamespace is where controller-runtime reads the namespace of its
+// leader election lease when it is not told one.
+const inClusterNamespace = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
 // apiBalancer is where a worker of several control planes reaches the
 // cluster API: the node API forwards to whichever control plane answers.
 // The API servers' certificates name 127.0.0.1.
