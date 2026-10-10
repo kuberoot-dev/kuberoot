@@ -5,8 +5,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
 )
 
 func Install(scheme *runtime.Scheme) {

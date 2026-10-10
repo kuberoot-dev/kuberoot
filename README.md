@@ -2,7 +2,7 @@
 
 [Русская версия](README.ru.md)
 
-kuberoot builds Kubernetes distributions that boot straight on hardware. Each one is a single image with its own Linux kernel, a small init that brings up Kubernetes, and a node that is managed through the Kubernetes API itself: there is no SSH, no shell and no separate node tool, `kubectl` reaches the node. Everything above the base is a [kubepkg](https://github.com/tym83/kubepkg) package, so a distribution is a base plus a meta package, the way a Linux distribution is a kernel plus packages.
+kuberoot builds Kubernetes distributions that boot straight on hardware. Each one is a single image with its own Linux kernel, a small init that brings up Kubernetes, and a node that is managed through the Kubernetes API itself: there is no SSH, no shell and no separate node tool, `kubectl` reaches the node. Everything above the base is a [kubepkg](https://github.com/kuberoot-dev/kubepkg) package, so a distribution is a base plus a meta package, the way a Linux distribution is a kernel plus packages.
 
 The repository builds eight distributions: `edge`, a general-purpose cluster for one to a few nodes; `router`, Kubernetes without containers that runs a network router; `hypervisor`, virtual machines on KVM with their disks replicated between nodes, moved off a node that fails; `ai`, language models served as processes of the nodes behind one OpenAI-compatible endpoint, with new versions rolled out and back by the cluster; `rt`, a real-time controller whose pods get whole CPUs with no timer tick on a fully preemptible kernel; `iot`, a gateway with no containers that reads devices over Modbus and sends on what they say, its changes undone by themselves when they cut a device off; `observability`, a monitoring cluster outside what it watches, which reads servers' BMCs, switches, PDUs and probes of services natively and tells the outside world, by its heartbeats, that it still works; and `workstation`, people's desktops as virtual machines of the cluster, opened from a browser or an RDP client.
 
@@ -14,7 +14,7 @@ The repository builds eight distributions: `edge`, a general-purpose cluster for
 - **kinit**: PID 1. It mounts the read-only root and the state partition, brings up the network, issues the node's certificates and runs the services of the node's role: containerd, kubelet and kube-proxy everywhere, plus kine (the cluster store on SQLite), the API server, the controller manager and the scheduler on the control plane.
 - **Node API**: every node serves `node.kuberoot.dev`, aggregated into the cluster API, so `kubectl get disks`, `kubectl get bootentries` or `kubectl create upgrade` act on a node. It works before a cluster exists, which is how a node is installed.
 - **Pod network**: VXLAN between nodes, or plain routes on a flat network, or none, for a CNI package such as Cilium.
-- **Packages**: the kubepkg operator runs on the control plane and installs the distribution's packages; the `edge` meta package and the platform packages live in [kubepkg-recipes](https://github.com/tym83/kubepkg-recipes).
+- **Packages**: the kubepkg operator runs on the control plane and installs the distribution's packages; the `edge` meta package and the platform packages live in [kubepkg-recipes](https://github.com/kuberoot-dev/kubepkg-recipes).
 
 ## The router distribution
 

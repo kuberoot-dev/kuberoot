@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/tym83/kuberoot/pkg/release"
+	"github.com/kuberoot-dev/kuberoot/pkg/release"
 )
 
 func main() {

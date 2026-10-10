@@ -24,7 +24,7 @@ package v1alpha1
 import (
 	unsafe "unsafe"
 
-	node "github.com/tym83/kuberoot/pkg/apis/node"
+	node "github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )

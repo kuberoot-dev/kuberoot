@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/insomniacslk/dhcp/dhcpv4/nclient4"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )

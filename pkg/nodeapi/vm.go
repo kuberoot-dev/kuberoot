@@ -15,8 +15,8 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/vm"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/vm"
 )
 
 // vmHost is the node's virtual machines: their volumes and the machines,

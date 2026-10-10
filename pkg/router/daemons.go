@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
 
 // DnsmasqConfig renders dnsmasq's configuration for the DHCP servers: DHCP

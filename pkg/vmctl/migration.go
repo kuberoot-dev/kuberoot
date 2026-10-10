@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
 )
 
 // MigrationTimeout ends a live move that has not finished, leaving the

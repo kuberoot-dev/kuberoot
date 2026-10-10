@@ -10,7 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
 	"math/big"
 	"net"
 	"os"

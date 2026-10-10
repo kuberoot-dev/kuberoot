@@ -27,12 +27,12 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/yaml"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
-	"github.com/tym83/kuberoot/pkg/etcdstore"
-	"github.com/tym83/kuberoot/pkg/membership"
-	"github.com/tym83/kuberoot/pkg/pki"
-	"github.com/tym83/kuberoot/pkg/supervisor"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/membership"
+	"github.com/kuberoot-dev/kuberoot/pkg/pki"
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 )
 
 const membershipName = "cluster"

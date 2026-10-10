@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tym83/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 )
 
 func edgeFacts(plainHTTP bool) facts {

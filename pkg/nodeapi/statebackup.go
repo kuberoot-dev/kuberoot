@@ -28,9 +28,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/installer"
-	"github.com/tym83/kuberoot/pkg/s3put"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/installer"
+	"github.com/kuberoot-dev/kuberoot/pkg/s3put"
 )
 
 // stateBackupConfig is the Secret that schedules state backups and says where

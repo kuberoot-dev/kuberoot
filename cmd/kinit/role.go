@@ -8,9 +8,9 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	"github.com/tym83/kuberoot/pkg/distro"
-	"github.com/tym83/kuberoot/pkg/etcdstore"
-	"github.com/tym83/kuberoot/pkg/membership"
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/membership"
 )
 
 // clusterDir keeps what a worker received from its cluster.

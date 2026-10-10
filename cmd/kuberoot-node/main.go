@@ -12,8 +12,8 @@ import (
 	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/distro"
-	"github.com/tym83/kuberoot/pkg/nodeapi"
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
+	"github.com/kuberoot-dev/kuberoot/pkg/nodeapi"
 )
 
 func main() {

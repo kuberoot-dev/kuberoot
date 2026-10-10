@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tym83/kuberoot/pkg/etcdstore"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 )
 
 func servicesOf(t *testing.T, distro, role string, f facts) map[string]string {

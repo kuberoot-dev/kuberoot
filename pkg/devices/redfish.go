@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // redfishDevice reads a server's BMC over Redfish: its health, temperatures,

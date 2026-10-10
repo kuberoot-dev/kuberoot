@@ -25,8 +25,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
-	"github.com/tym83/kuberoot/pkg/safeguard"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/safeguard"
 )
 
 var kinds = []struct{ Kind, Plural string }{{"Device", "devices"}, {"Route", "routes"}, {"Safeguard", "safeguards"}, {"Heartbeat", "heartbeats"}}

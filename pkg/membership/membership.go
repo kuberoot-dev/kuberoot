@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
 )
 
 // Path is on the state partition, so membership survives reboots.

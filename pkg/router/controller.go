@@ -25,7 +25,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/router/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
 
 // kinds are the router's resources, by kind and plural.

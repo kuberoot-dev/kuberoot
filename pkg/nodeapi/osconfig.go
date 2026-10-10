@@ -22,10 +22,10 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
-	"github.com/tym83/kuberoot/pkg/gpu"
-	"github.com/tym83/kuberoot/pkg/supervisor"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/gpu"
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 )
 
 const osConfigState = "/var/lib/kuberoot/osconfig.json"

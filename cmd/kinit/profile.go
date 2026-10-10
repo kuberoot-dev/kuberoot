@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/tym83/kuberoot/pkg/distro"
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
 )
 
 // profilePath is the distribution profile built into the image: what this

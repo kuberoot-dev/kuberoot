@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/agent"
+	"github.com/kuberoot-dev/kuberoot/pkg/agent"
 )
 
 func main() {

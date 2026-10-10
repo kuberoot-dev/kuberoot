@@ -6,7 +6,7 @@ import (
 
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/vm"
+	"github.com/kuberoot-dev/kuberoot/pkg/vm"
 )
 
 // objects are things a node keeps on disk and makes match their specs every

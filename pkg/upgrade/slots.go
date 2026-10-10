@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/tym83/kuberoot/pkg/atomicfile"
-	"github.com/tym83/kuberoot/pkg/bootdisk"
-	"github.com/tym83/kuberoot/pkg/installer"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/installer"
 )
 
 const (

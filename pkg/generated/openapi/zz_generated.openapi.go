@@ -31,121 +31,121 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntry":           schema_pkg_apis_node_v1alpha1_BootEntry(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntryList":       schema_pkg_apis_node_v1alpha1_BootEntryList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec":       schema_pkg_apis_node_v1alpha1_BootEntrySpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus":     schema_pkg_apis_node_v1alpha1_BootEntryStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.CPULatency":          schema_pkg_apis_node_v1alpha1_CPULatency(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare":   schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Disk":                schema_pkg_apis_node_v1alpha1_Disk(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskList":            schema_pkg_apis_node_v1alpha1_DiskList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskPartition":       schema_pkg_apis_node_v1alpha1_DiskPartition(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskStatus":          schema_pkg_apis_node_v1alpha1_DiskStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMember":          schema_pkg_apis_node_v1alpha1_EtcdMember(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberList":      schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus":    schema_pkg_apis_node_v1alpha1_EtcdMemberStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Installation":        schema_pkg_apis_node_v1alpha1_Installation(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationList":    schema_pkg_apis_node_v1alpha1_InstallationList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore": schema_pkg_apis_node_v1alpha1_InstallationRestore(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationSpec":    schema_pkg_apis_node_v1alpha1_InstallationSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationStatus":  schema_pkg_apis_node_v1alpha1_InstallationStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicket":          schema_pkg_apis_node_v1alpha1_JoinTicket(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketList":      schema_pkg_apis_node_v1alpha1_JoinTicketList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketSpec":      schema_pkg_apis_node_v1alpha1_JoinTicketSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketStatus":    schema_pkg_apis_node_v1alpha1_JoinTicketStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Kubeconfig":          schema_pkg_apis_node_v1alpha1_Kubeconfig(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.KubeconfigList":      schema_pkg_apis_node_v1alpha1_KubeconfigList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTest":         schema_pkg_apis_node_v1alpha1_LatencyTest(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestList":     schema_pkg_apis_node_v1alpha1_LatencyTestList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestSpec":     schema_pkg_apis_node_v1alpha1_LatencyTestSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestStatus":   schema_pkg_apis_node_v1alpha1_LatencyTestStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Machine":             schema_pkg_apis_node_v1alpha1_Machine(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineList":         schema_pkg_apis_node_v1alpha1_MachineList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineSpec":         schema_pkg_apis_node_v1alpha1_MachineSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineStatus":       schema_pkg_apis_node_v1alpha1_MachineStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Membership":          schema_pkg_apis_node_v1alpha1_Membership(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipList":      schema_pkg_apis_node_v1alpha1_MembershipList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipSpec":      schema_pkg_apis_node_v1alpha1_MembershipSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipStatus":    schema_pkg_apis_node_v1alpha1_MembershipStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServer":         schema_pkg_apis_node_v1alpha1_ModelServer(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerList":     schema_pkg_apis_node_v1alpha1_ModelServerList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerSpec":     schema_pkg_apis_node_v1alpha1_ModelServerSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerStatus":   schema_pkg_apis_node_v1alpha1_ModelServerStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeGPU":             schema_pkg_apis_node_v1alpha1_NodeGPU(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeService":         schema_pkg_apis_node_v1alpha1_NodeService(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceList":     schema_pkg_apis_node_v1alpha1_NodeServiceList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceSpec":     schema_pkg_apis_node_v1alpha1_NodeServiceSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceStatus":   schema_pkg_apis_node_v1alpha1_NodeServiceStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfig":            schema_pkg_apis_node_v1alpha1_OSConfig(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigList":        schema_pkg_apis_node_v1alpha1_OSConfigList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigSpec":        schema_pkg_apis_node_v1alpha1_OSConfigSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigStatus":      schema_pkg_apis_node_v1alpha1_OSConfigStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackup":         schema_pkg_apis_node_v1alpha1_StateBackup(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackupList":     schema_pkg_apis_node_v1alpha1_StateBackupList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus":   schema_pkg_apis_node_v1alpha1_StateBackupStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Upgrade":             schema_pkg_apis_node_v1alpha1_Upgrade(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeList":         schema_pkg_apis_node_v1alpha1_UpgradeList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec":         schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus":       schema_pkg_apis_node_v1alpha1_UpgradeStatus(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Volume":              schema_pkg_apis_node_v1alpha1_Volume(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeList":          schema_pkg_apis_node_v1alpha1_VolumeList(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumePeer":          schema_pkg_apis_node_v1alpha1_VolumePeer(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeSpec":          schema_pkg_apis_node_v1alpha1_VolumeSpec(ref),
-		"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeStatus":        schema_pkg_apis_node_v1alpha1_VolumeStatus(ref),
-		v1.APIGroup{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_APIGroup(ref),
-		v1.APIGroupList{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_APIGroupList(ref),
-		v1.APIResource{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_APIResource(ref),
-		v1.APIResourceList{}.OpenAPIModelName():                                schema_pkg_apis_meta_v1_APIResourceList(ref),
-		v1.APIVersions{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_APIVersions(ref),
-		v1.ApplyOptions{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_ApplyOptions(ref),
-		v1.Condition{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_Condition(ref),
-		v1.CreateOptions{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_CreateOptions(ref),
-		v1.DeleteOptions{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_DeleteOptions(ref),
-		v1.Duration{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_Duration(ref),
-		v1.FieldSelectorRequirement{}.OpenAPIModelName():                       schema_pkg_apis_meta_v1_FieldSelectorRequirement(ref),
-		v1.FieldsV1{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_FieldsV1(ref),
-		v1.GetOptions{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_GetOptions(ref),
-		v1.GroupKind{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_GroupKind(ref),
-		v1.GroupResource{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_GroupResource(ref),
-		v1.GroupVersion{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_GroupVersion(ref),
-		v1.GroupVersionForDiscovery{}.OpenAPIModelName():                       schema_pkg_apis_meta_v1_GroupVersionForDiscovery(ref),
-		v1.GroupVersionKind{}.OpenAPIModelName():                               schema_pkg_apis_meta_v1_GroupVersionKind(ref),
-		v1.GroupVersionResource{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_GroupVersionResource(ref),
-		v1.InternalEvent{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_InternalEvent(ref),
-		v1.LabelSelector{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_LabelSelector(ref),
-		v1.LabelSelectorRequirement{}.OpenAPIModelName():                       schema_pkg_apis_meta_v1_LabelSelectorRequirement(ref),
-		v1.List{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_List(ref),
-		v1.ListMeta{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_ListMeta(ref),
-		v1.ListOptions{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_ListOptions(ref),
-		v1.ManagedFieldsEntry{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_ManagedFieldsEntry(ref),
-		v1.MicroTime{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_MicroTime(ref),
-		v1.ObjectMeta{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_ObjectMeta(ref),
-		v1.OwnerReference{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_OwnerReference(ref),
-		v1.PartialObjectMetadata{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_PartialObjectMetadata(ref),
-		v1.PartialObjectMetadataList{}.OpenAPIModelName():                      schema_pkg_apis_meta_v1_PartialObjectMetadataList(ref),
-		v1.Patch{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_Patch(ref),
-		v1.PatchOptions{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_PatchOptions(ref),
-		v1.Preconditions{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_Preconditions(ref),
-		v1.RootPaths{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_RootPaths(ref),
-		v1.ServerAddressByClientCIDR{}.OpenAPIModelName():                      schema_pkg_apis_meta_v1_ServerAddressByClientCIDR(ref),
-		v1.ShardInfo{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_ShardInfo(ref),
-		v1.Status{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_Status(ref),
-		v1.StatusCause{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_StatusCause(ref),
-		v1.StatusDetails{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_StatusDetails(ref),
-		v1.Table{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_Table(ref),
-		v1.TableColumnDefinition{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_TableColumnDefinition(ref),
-		v1.TableOptions{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_TableOptions(ref),
-		v1.TableRow{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_TableRow(ref),
-		v1.TableRowCondition{}.OpenAPIModelName():                              schema_pkg_apis_meta_v1_TableRowCondition(ref),
-		v1.Time{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_Time(ref),
-		v1.Timestamp{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_Timestamp(ref),
-		v1.TypeMeta{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_TypeMeta(ref),
-		v1.UpdateOptions{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_UpdateOptions(ref),
-		v1.WatchEvent{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_WatchEvent(ref),
-		runtime.RawExtension{}.OpenAPIModelName():                              schema_k8sio_apimachinery_pkg_runtime_RawExtension(ref),
-		runtime.TypeMeta{}.OpenAPIModelName():                                  schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
-		runtime.Unknown{}.OpenAPIModelName():                                   schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
-		version.Info{}.OpenAPIModelName():                                      schema_k8sio_apimachinery_pkg_version_Info(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntry":           schema_pkg_apis_node_v1alpha1_BootEntry(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntryList":       schema_pkg_apis_node_v1alpha1_BootEntryList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec":       schema_pkg_apis_node_v1alpha1_BootEntrySpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus":     schema_pkg_apis_node_v1alpha1_BootEntryStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.CPULatency":          schema_pkg_apis_node_v1alpha1_CPULatency(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare":   schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Disk":                schema_pkg_apis_node_v1alpha1_Disk(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskList":            schema_pkg_apis_node_v1alpha1_DiskList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskPartition":       schema_pkg_apis_node_v1alpha1_DiskPartition(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskStatus":          schema_pkg_apis_node_v1alpha1_DiskStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMember":          schema_pkg_apis_node_v1alpha1_EtcdMember(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberList":      schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus":    schema_pkg_apis_node_v1alpha1_EtcdMemberStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Installation":        schema_pkg_apis_node_v1alpha1_Installation(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationList":    schema_pkg_apis_node_v1alpha1_InstallationList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore": schema_pkg_apis_node_v1alpha1_InstallationRestore(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationSpec":    schema_pkg_apis_node_v1alpha1_InstallationSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationStatus":  schema_pkg_apis_node_v1alpha1_InstallationStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicket":          schema_pkg_apis_node_v1alpha1_JoinTicket(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketList":      schema_pkg_apis_node_v1alpha1_JoinTicketList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketSpec":      schema_pkg_apis_node_v1alpha1_JoinTicketSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketStatus":    schema_pkg_apis_node_v1alpha1_JoinTicketStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Kubeconfig":          schema_pkg_apis_node_v1alpha1_Kubeconfig(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.KubeconfigList":      schema_pkg_apis_node_v1alpha1_KubeconfigList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTest":         schema_pkg_apis_node_v1alpha1_LatencyTest(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestList":     schema_pkg_apis_node_v1alpha1_LatencyTestList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestSpec":     schema_pkg_apis_node_v1alpha1_LatencyTestSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestStatus":   schema_pkg_apis_node_v1alpha1_LatencyTestStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Machine":             schema_pkg_apis_node_v1alpha1_Machine(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineList":         schema_pkg_apis_node_v1alpha1_MachineList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineSpec":         schema_pkg_apis_node_v1alpha1_MachineSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineStatus":       schema_pkg_apis_node_v1alpha1_MachineStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Membership":          schema_pkg_apis_node_v1alpha1_Membership(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipList":      schema_pkg_apis_node_v1alpha1_MembershipList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipSpec":      schema_pkg_apis_node_v1alpha1_MembershipSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipStatus":    schema_pkg_apis_node_v1alpha1_MembershipStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServer":         schema_pkg_apis_node_v1alpha1_ModelServer(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerList":     schema_pkg_apis_node_v1alpha1_ModelServerList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerSpec":     schema_pkg_apis_node_v1alpha1_ModelServerSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerStatus":   schema_pkg_apis_node_v1alpha1_ModelServerStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeGPU":             schema_pkg_apis_node_v1alpha1_NodeGPU(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeService":         schema_pkg_apis_node_v1alpha1_NodeService(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceList":     schema_pkg_apis_node_v1alpha1_NodeServiceList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceSpec":     schema_pkg_apis_node_v1alpha1_NodeServiceSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceStatus":   schema_pkg_apis_node_v1alpha1_NodeServiceStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfig":            schema_pkg_apis_node_v1alpha1_OSConfig(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigList":        schema_pkg_apis_node_v1alpha1_OSConfigList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigSpec":        schema_pkg_apis_node_v1alpha1_OSConfigSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigStatus":      schema_pkg_apis_node_v1alpha1_OSConfigStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackup":         schema_pkg_apis_node_v1alpha1_StateBackup(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupList":     schema_pkg_apis_node_v1alpha1_StateBackupList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus":   schema_pkg_apis_node_v1alpha1_StateBackupStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Upgrade":             schema_pkg_apis_node_v1alpha1_Upgrade(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeList":         schema_pkg_apis_node_v1alpha1_UpgradeList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec":         schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus":       schema_pkg_apis_node_v1alpha1_UpgradeStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Volume":              schema_pkg_apis_node_v1alpha1_Volume(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeList":          schema_pkg_apis_node_v1alpha1_VolumeList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumePeer":          schema_pkg_apis_node_v1alpha1_VolumePeer(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeSpec":          schema_pkg_apis_node_v1alpha1_VolumeSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeStatus":        schema_pkg_apis_node_v1alpha1_VolumeStatus(ref),
+		v1.APIGroup{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_APIGroup(ref),
+		v1.APIGroupList{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_APIGroupList(ref),
+		v1.APIResource{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_APIResource(ref),
+		v1.APIResourceList{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_APIResourceList(ref),
+		v1.APIVersions{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_APIVersions(ref),
+		v1.ApplyOptions{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_ApplyOptions(ref),
+		v1.Condition{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_Condition(ref),
+		v1.CreateOptions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_CreateOptions(ref),
+		v1.DeleteOptions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_DeleteOptions(ref),
+		v1.Duration{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_Duration(ref),
+		v1.FieldSelectorRequirement{}.OpenAPIModelName():                              schema_pkg_apis_meta_v1_FieldSelectorRequirement(ref),
+		v1.FieldsV1{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_FieldsV1(ref),
+		v1.GetOptions{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_GetOptions(ref),
+		v1.GroupKind{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_GroupKind(ref),
+		v1.GroupResource{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_GroupResource(ref),
+		v1.GroupVersion{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_GroupVersion(ref),
+		v1.GroupVersionForDiscovery{}.OpenAPIModelName():                              schema_pkg_apis_meta_v1_GroupVersionForDiscovery(ref),
+		v1.GroupVersionKind{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_GroupVersionKind(ref),
+		v1.GroupVersionResource{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_GroupVersionResource(ref),
+		v1.InternalEvent{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_InternalEvent(ref),
+		v1.LabelSelector{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_LabelSelector(ref),
+		v1.LabelSelectorRequirement{}.OpenAPIModelName():                              schema_pkg_apis_meta_v1_LabelSelectorRequirement(ref),
+		v1.List{}.OpenAPIModelName():                                                  schema_pkg_apis_meta_v1_List(ref),
+		v1.ListMeta{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_ListMeta(ref),
+		v1.ListOptions{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_ListOptions(ref),
+		v1.ManagedFieldsEntry{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_ManagedFieldsEntry(ref),
+		v1.MicroTime{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_MicroTime(ref),
+		v1.ObjectMeta{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_ObjectMeta(ref),
+		v1.OwnerReference{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_OwnerReference(ref),
+		v1.PartialObjectMetadata{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_PartialObjectMetadata(ref),
+		v1.PartialObjectMetadataList{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_PartialObjectMetadataList(ref),
+		v1.Patch{}.OpenAPIModelName():                                                 schema_pkg_apis_meta_v1_Patch(ref),
+		v1.PatchOptions{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_PatchOptions(ref),
+		v1.Preconditions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_Preconditions(ref),
+		v1.RootPaths{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_RootPaths(ref),
+		v1.ServerAddressByClientCIDR{}.OpenAPIModelName():                             schema_pkg_apis_meta_v1_ServerAddressByClientCIDR(ref),
+		v1.ShardInfo{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_ShardInfo(ref),
+		v1.Status{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_Status(ref),
+		v1.StatusCause{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_StatusCause(ref),
+		v1.StatusDetails{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_StatusDetails(ref),
+		v1.Table{}.OpenAPIModelName():                                                 schema_pkg_apis_meta_v1_Table(ref),
+		v1.TableColumnDefinition{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_TableColumnDefinition(ref),
+		v1.TableOptions{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_TableOptions(ref),
+		v1.TableRow{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_TableRow(ref),
+		v1.TableRowCondition{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_TableRowCondition(ref),
+		v1.Time{}.OpenAPIModelName():                                                  schema_pkg_apis_meta_v1_Time(ref),
+		v1.Timestamp{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_Timestamp(ref),
+		v1.TypeMeta{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_TypeMeta(ref),
+		v1.UpdateOptions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_UpdateOptions(ref),
+		v1.WatchEvent{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_WatchEvent(ref),
+		runtime.RawExtension{}.OpenAPIModelName():                                     schema_k8sio_apimachinery_pkg_runtime_RawExtension(ref),
+		runtime.TypeMeta{}.OpenAPIModelName():                                         schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
+		runtime.Unknown{}.OpenAPIModelName():                                          schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
+		version.Info{}.OpenAPIModelName():                                             schema_k8sio_apimachinery_pkg_version_Info(ref),
 	}
 }
 
@@ -179,20 +179,20 @@ func schema_pkg_apis_node_v1alpha1_BootEntry(ref common.ReferenceCallback) commo
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntrySpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -228,7 +228,7 @@ func schema_pkg_apis_node_v1alpha1_BootEntryList(ref common.ReferenceCallback) c
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntry"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntry"),
 									},
 								},
 							},
@@ -239,7 +239,7 @@ func schema_pkg_apis_node_v1alpha1_BootEntryList(ref common.ReferenceCallback) c
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.BootEntry", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntry", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -477,14 +477,14 @@ func schema_pkg_apis_node_v1alpha1_Disk(ref common.ReferenceCallback) common.Ope
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -520,7 +520,7 @@ func schema_pkg_apis_node_v1alpha1_DiskList(ref common.ReferenceCallback) common
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Disk"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Disk"),
 									},
 								},
 							},
@@ -531,7 +531,7 @@ func schema_pkg_apis_node_v1alpha1_DiskList(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Disk", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Disk", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -609,7 +609,7 @@ func schema_pkg_apis_node_v1alpha1_DiskStatus(ref common.ReferenceCallback) comm
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskPartition"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskPartition"),
 									},
 								},
 							},
@@ -619,7 +619,7 @@ func schema_pkg_apis_node_v1alpha1_DiskStatus(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.DiskPartition"},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskPartition"},
 	}
 }
 
@@ -653,14 +653,14 @@ func schema_pkg_apis_node_v1alpha1_EtcdMember(ref common.ReferenceCallback) comm
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -696,7 +696,7 @@ func schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref common.ReferenceCallback) 
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMember"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMember"),
 									},
 								},
 							},
@@ -707,7 +707,7 @@ func schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.EtcdMember", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMember", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -813,20 +813,20 @@ func schema_pkg_apis_node_v1alpha1_Installation(ref common.ReferenceCallback) co
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -862,7 +862,7 @@ func schema_pkg_apis_node_v1alpha1_InstallationList(ref common.ReferenceCallback
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Installation"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Installation"),
 									},
 								},
 							},
@@ -873,7 +873,7 @@ func schema_pkg_apis_node_v1alpha1_InstallationList(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Installation", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Installation", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -937,7 +937,7 @@ func schema_pkg_apis_node_v1alpha1_InstallationSpec(ref common.ReferenceCallback
 					"restore": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Restore installs the state of a control plane from one of its state backups instead of this node's own: the node comes back as that control plane, with its identity, certificates and cluster store.",
-							Ref:         ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore"),
+							Ref:         ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore"),
 						},
 					},
 				},
@@ -945,7 +945,7 @@ func schema_pkg_apis_node_v1alpha1_InstallationSpec(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore"},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.InstallationRestore"},
 	}
 }
 
@@ -1023,20 +1023,20 @@ func schema_pkg_apis_node_v1alpha1_JoinTicket(ref common.ReferenceCallback) comm
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicketStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicketStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1072,7 +1072,7 @@ func schema_pkg_apis_node_v1alpha1_JoinTicketList(ref common.ReferenceCallback) 
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicket"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicket"),
 									},
 								},
 							},
@@ -1083,7 +1083,7 @@ func schema_pkg_apis_node_v1alpha1_JoinTicketList(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.JoinTicket", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.JoinTicket", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1237,7 +1237,7 @@ func schema_pkg_apis_node_v1alpha1_KubeconfigList(ref common.ReferenceCallback) 
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Kubeconfig"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Kubeconfig"),
 									},
 								},
 							},
@@ -1248,7 +1248,7 @@ func schema_pkg_apis_node_v1alpha1_KubeconfigList(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Kubeconfig", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Kubeconfig", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1282,20 +1282,20 @@ func schema_pkg_apis_node_v1alpha1_LatencyTest(ref common.ReferenceCallback) com
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTestStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTestStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1331,7 +1331,7 @@ func schema_pkg_apis_node_v1alpha1_LatencyTestList(ref common.ReferenceCallback)
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTest"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTest"),
 									},
 								},
 							},
@@ -1342,7 +1342,7 @@ func schema_pkg_apis_node_v1alpha1_LatencyTestList(ref common.ReferenceCallback)
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.LatencyTest", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.LatencyTest", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1429,7 +1429,7 @@ func schema_pkg_apis_node_v1alpha1_LatencyTestStatus(ref common.ReferenceCallbac
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.CPULatency"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.CPULatency"),
 									},
 								},
 							},
@@ -1457,7 +1457,7 @@ func schema_pkg_apis_node_v1alpha1_LatencyTestStatus(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.CPULatency", v1.Time{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.CPULatency", v1.Time{}.OpenAPIModelName()},
 	}
 }
 
@@ -1491,20 +1491,20 @@ func schema_pkg_apis_node_v1alpha1_Machine(ref common.ReferenceCallback) common.
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MachineStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MachineStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1540,7 +1540,7 @@ func schema_pkg_apis_node_v1alpha1_MachineList(ref common.ReferenceCallback) com
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Machine"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Machine"),
 									},
 								},
 							},
@@ -1551,7 +1551,7 @@ func schema_pkg_apis_node_v1alpha1_MachineList(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Machine", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Machine", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1700,20 +1700,20 @@ func schema_pkg_apis_node_v1alpha1_Membership(ref common.ReferenceCallback) comm
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.MembershipStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.MembershipStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1749,7 +1749,7 @@ func schema_pkg_apis_node_v1alpha1_MembershipList(ref common.ReferenceCallback) 
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Membership"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Membership"),
 									},
 								},
 							},
@@ -1760,7 +1760,7 @@ func schema_pkg_apis_node_v1alpha1_MembershipList(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Membership", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Membership", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1808,7 +1808,7 @@ func schema_pkg_apis_node_v1alpha1_MembershipSpec(ref common.ReferenceCallback) 
 					"controlPlane": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ControlPlane is what a joining control plane shares with the others: set for the ControlPlane role only.",
-							Ref:         ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare"),
+							Ref:         ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare"),
 						},
 					},
 					"clusterCA": {
@@ -1874,7 +1874,7 @@ func schema_pkg_apis_node_v1alpha1_MembershipSpec(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare"},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare"},
 	}
 }
 
@@ -1932,20 +1932,20 @@ func schema_pkg_apis_node_v1alpha1_ModelServer(ref common.ReferenceCallback) com
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServerStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServerStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -1981,7 +1981,7 @@ func schema_pkg_apis_node_v1alpha1_ModelServerList(ref common.ReferenceCallback)
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServer"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServer"),
 									},
 								},
 							},
@@ -1992,7 +1992,7 @@ func schema_pkg_apis_node_v1alpha1_ModelServerList(ref common.ReferenceCallback)
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.ModelServer", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ModelServer", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2228,20 +2228,20 @@ func schema_pkg_apis_node_v1alpha1_NodeService(ref common.ReferenceCallback) com
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeServiceStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeServiceStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2277,7 +2277,7 @@ func schema_pkg_apis_node_v1alpha1_NodeServiceList(ref common.ReferenceCallback)
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeService"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeService"),
 									},
 								},
 							},
@@ -2288,7 +2288,7 @@ func schema_pkg_apis_node_v1alpha1_NodeServiceList(ref common.ReferenceCallback)
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeService", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeService", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2400,20 +2400,20 @@ func schema_pkg_apis_node_v1alpha1_OSConfig(ref common.ReferenceCallback) common
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfigStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfigStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2449,7 +2449,7 @@ func schema_pkg_apis_node_v1alpha1_OSConfigList(ref common.ReferenceCallback) co
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfig"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfig"),
 									},
 								},
 							},
@@ -2460,7 +2460,7 @@ func schema_pkg_apis_node_v1alpha1_OSConfigList(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.OSConfig", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.OSConfig", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2601,7 +2601,7 @@ func schema_pkg_apis_node_v1alpha1_OSConfigStatus(ref common.ReferenceCallback) 
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeGPU"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeGPU"),
 									},
 								},
 							},
@@ -2611,7 +2611,7 @@ func schema_pkg_apis_node_v1alpha1_OSConfigStatus(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.NodeGPU", v1.Time{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeGPU", v1.Time{}.OpenAPIModelName()},
 	}
 }
 
@@ -2645,14 +2645,14 @@ func schema_pkg_apis_node_v1alpha1_StateBackup(ref common.ReferenceCallback) com
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2688,7 +2688,7 @@ func schema_pkg_apis_node_v1alpha1_StateBackupList(ref common.ReferenceCallback)
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackup"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackup"),
 									},
 								},
 							},
@@ -2699,7 +2699,7 @@ func schema_pkg_apis_node_v1alpha1_StateBackupList(ref common.ReferenceCallback)
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.StateBackup", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackup", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2788,20 +2788,20 @@ func schema_pkg_apis_node_v1alpha1_Upgrade(ref common.ReferenceCallback) common.
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2837,7 +2837,7 @@ func schema_pkg_apis_node_v1alpha1_UpgradeList(ref common.ReferenceCallback) com
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Upgrade"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Upgrade"),
 									},
 								},
 							},
@@ -2848,7 +2848,7 @@ func schema_pkg_apis_node_v1alpha1_UpgradeList(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Upgrade", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Upgrade", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -2961,20 +2961,20 @@ func schema_pkg_apis_node_v1alpha1_Volume(ref common.ReferenceCallback) common.O
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeSpec"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeStatus"),
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeSpec", "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumeStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumeStatus", v1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -3010,7 +3010,7 @@ func schema_pkg_apis_node_v1alpha1_VolumeList(ref common.ReferenceCallback) comm
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Volume"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Volume"),
 									},
 								},
 							},
@@ -3021,7 +3021,7 @@ func schema_pkg_apis_node_v1alpha1_VolumeList(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.Volume", v1.ListMeta{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Volume", v1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 
@@ -3102,7 +3102,7 @@ func schema_pkg_apis_node_v1alpha1_VolumeSpec(ref common.ReferenceCallback) comm
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumePeer"),
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumePeer"),
 									},
 								},
 							},
@@ -3134,7 +3134,7 @@ func schema_pkg_apis_node_v1alpha1_VolumeSpec(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"github.com/tym83/kuberoot/pkg/apis/node/v1alpha1.VolumePeer"},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.VolumePeer"},
 	}
 }
 

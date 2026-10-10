@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 func TestDecode(t *testing.T) {

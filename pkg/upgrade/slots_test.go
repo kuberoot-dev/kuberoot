@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tym83/kuberoot/pkg/bootdisk"
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
 )
 
 func writeEntry(t *testing.T, dir, file, release, version string) {

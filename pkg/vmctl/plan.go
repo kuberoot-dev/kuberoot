@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
 )
 
 // FailoverAfter is how long a node is down before its machines start on

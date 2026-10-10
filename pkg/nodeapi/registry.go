@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/apiserver/pkg/registry/rest"
 
-	"github.com/tym83/kuberoot/pkg/supervisor"
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 )
 
 // resourceDeps is what a node resource is built from.

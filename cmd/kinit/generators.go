@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tym83/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
 	"github.com/vishvananda/netlink"
 
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
 )
 
 // roleContext is what generators and service templates know about the node

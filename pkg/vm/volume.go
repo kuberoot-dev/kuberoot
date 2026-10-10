@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
 
 // Paths where a node keeps its volumes and machines. The state survives

@@ -22,10 +22,10 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/membership"
-	"github.com/tym83/kuberoot/pkg/supervisor"
-	"github.com/tym83/kuberoot/pkg/upgrade"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/membership"
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
+	"github.com/kuberoot-dev/kuberoot/pkg/upgrade"
 )
 
 // bootEntryStorage shows the A/B slots; setting spec.preferred rolls back or forward.

@@ -1,4 +1,4 @@
-module github.com/tym83/kuberoot
+module github.com/kuberoot-dev/kuberoot
 
 go 1.26.5
 

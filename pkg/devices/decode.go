@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // Registers a point takes in its table: two for 32-bit types.

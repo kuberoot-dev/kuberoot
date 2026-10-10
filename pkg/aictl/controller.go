@@ -23,8 +23,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/ai/v1alpha1"
-	nodev1 "github.com/tym83/kuberoot/pkg/apis/node/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/ai/v1alpha1"
+	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
 )
 
 const finalizer = "ai.kuberoot.dev/cleanup"

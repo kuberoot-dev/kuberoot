@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/ai/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/ai/v1alpha1"
 )
 
 // Choices are the actions open for a finding: what can be done to its

@@ -25,9 +25,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/tym83/kuberoot/pkg/apis/node"
-	"github.com/tym83/kuberoot/pkg/atomicfile"
-	"github.com/tym83/kuberoot/pkg/gpu"
+	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
+	"github.com/kuberoot-dev/kuberoot/pkg/gpu"
 )
 
 var (

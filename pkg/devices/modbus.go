@@ -8,7 +8,7 @@ import (
 
 	"github.com/simonvetter/modbus"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // Reading is a device read once: each point's value, by name.

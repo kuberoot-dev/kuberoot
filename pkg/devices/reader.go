@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	v1 "github.com/tym83/kuberoot/pkg/apis/devices/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/devices/v1alpha1"
 )
 
 // reader reads a device once per poll. A probe that finds its service
