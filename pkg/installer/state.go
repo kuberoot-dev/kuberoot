@@ -3,6 +3,7 @@ package installer
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,19 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/tym83/kuberoot/pkg/etcdstore"
+)
+
+// etcdRestore is where a snapshot of etcd waits, below /var, for kinit to
+// start the store from it: carried by an installation, or restored.
+const etcdRestore = "lib/kuberoot/etcd-restore.db"
+
+// etcdRunning and etcdSnapshot: variables for tests.
+var (
+	etcdRunning  = etcdstore.Running
+	etcdSnapshot = etcdstore.Snapshot
 )
 
 // BackupsDir keeps the control plane's state archives. It is not carried by
@@ -24,9 +38,17 @@ const BackupsDir = "/var/lib/kuberoot/backups"
 func WriteStateArchive(w io.Writer, tmpDir string) error { return writeStateArchive(w, "/var", tmpDir) }
 
 func writeStateArchive(w io.Writer, root, tmpDir string) error {
-	store := filepath.Join(tmpDir, "state.db")
+	store, storeName := filepath.Join(tmpDir, "state.db"), kineStore
 	_ = os.Remove(store)
-	if err := snapshotStore(filepath.Join(root, kineStore), store); err != nil {
+	if etcdRunning() {
+		// A member of etcd: a snapshot the restored node starts its store from.
+		store, storeName = filepath.Join(tmpDir, "etcd.db"), etcdRestore
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := etcdSnapshot(ctx, store); err != nil {
+			return fmt.Errorf("snapshot the cluster store: %w", err)
+		}
+	} else if err := snapshotStore(filepath.Join(root, kineStore), store); err != nil {
 		return fmt.Errorf("snapshot the cluster store: %w", err)
 	}
 	defer os.Remove(store)
@@ -40,7 +62,7 @@ func writeStateArchive(w io.Writer, root, tmpDir string) error {
 			return err
 		}
 	}
-	if err := addFile(tw, store, kineStore); err != nil {
+	if err := addFile(tw, store, storeName); err != nil {
 		return err
 	}
 	if err := tw.Close(); err != nil {
@@ -177,7 +199,7 @@ func extractState(archive, mnt string) error {
 			if err != nil {
 				return err
 			}
-			hasStore = hasStore || name == kineStore
+			hasStore = hasStore || name == kineStore || name == etcdRestore
 		default:
 			return fmt.Errorf("state archive: unexpected entry type of %q", hdr.Name)
 		}
