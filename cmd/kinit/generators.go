@@ -24,6 +24,8 @@ type roleContext struct {
 	net          clusterNet
 	controlPlane bool
 	member       *nodev1.MembershipSpec // set for a member of another node's cluster
+	// store is the cluster store a control plane runs: kine or etcd.
+	store string
 }
 
 // generators write what a role needs on disk; a distribution profile picks
@@ -73,6 +75,9 @@ var generators = map[string]func(roleContext) error{
 		// host-network pod could talk to.
 		return os.MkdirAll("/run/kine", 0o700)
 	},
+	// etcd: the store's credentials and data, on a control plane whose
+	// cluster stores its state in etcd.
+	"etcd": etcdGenerator,
 	// member: what a member receives from its cluster, and its bootstrap credentials.
 	"member": func(r roleContext) error {
 		if r.member == nil {
@@ -92,10 +97,16 @@ var generators = map[string]func(roleContext) error{
 		}
 		ca := base64.StdEncoding.EncodeToString([]byte(m.ClusterCA))
 		kubeletPKI := "/var/lib/kubelet/pki/kubelet-client-current.pem"
+		server := m.Server
+		if len(m.Servers) > 0 {
+			// Several control planes: the node API balances between them on
+			// the node, so the kubelet and kube-proxy reach whichever answers.
+			server = apiBalancer
+		}
 		return writeFiles(map[string]string{
-			filepath.Join(kubeDir, "bootstrap.kubeconfig"): fmt.Sprintf(tokenKubeconfig, m.Server, ca, m.BootstrapToken),
+			filepath.Join(kubeDir, "bootstrap.kubeconfig"): fmt.Sprintf(tokenKubeconfig, server, ca, m.BootstrapToken),
 			// kube-proxy acts with the node's own identity, which the cluster binds to the proxier role.
-			filepath.Join(kubeDir, "kube-proxy.kubeconfig"): fmt.Sprintf(fileKubeconfig, m.Server, ca, kubeletPKI, kubeletPKI),
+			filepath.Join(kubeDir, "kube-proxy.kubeconfig"): fmt.Sprintf(fileKubeconfig, server, ca, kubeletPKI, kubeletPKI),
 		})
 	},
 	// containers: containerd and the bridge CNI template, filled with the pod

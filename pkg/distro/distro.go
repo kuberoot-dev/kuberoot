@@ -59,8 +59,11 @@ type Role struct {
 type Service struct {
 	Name string `json:"name"`
 	// After names what must be ready before the first start: apiserver or kubelet-cert.
-	After string   `json:"after,omitempty"`
-	Env   []string `json:"env,omitempty"`
+	After string `json:"after,omitempty"`
+	// When is a template over the role's facts: the service runs only when
+	// it renders true. It picks, for one, the cluster store a node runs.
+	When string   `json:"when,omitempty"`
+	Env  []string `json:"env,omitempty"`
 	// Args are templates over the role's facts; arguments that render empty are dropped.
 	Args []string `json:"args"`
 }

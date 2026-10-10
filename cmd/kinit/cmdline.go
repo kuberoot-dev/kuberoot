@@ -32,6 +32,10 @@ type bootConfig struct {
 	// static is an interface with a fixed address, "eth1:192.168.100.11/24";
 	// that address becomes the node address in the cluster.
 	static string
+	// datastore is the store of a cluster this node creates: kine, the
+	// default, for one control plane, or etcd, which other control planes
+	// can join. It is read once, when the cluster is created.
+	datastore string
 }
 
 func loadCmdline() bootConfig {
@@ -75,6 +79,9 @@ func parseCmdline(cmdline string) bootConfig {
 			}
 			if v, ok := strings.CutPrefix(f, "kuberoot.pod-network="); ok {
 				cfg.podNetwork = v
+			}
+			if v, ok := strings.CutPrefix(f, "kuberoot.datastore="); ok {
+				cfg.datastore = v
 			}
 		}
 	}
