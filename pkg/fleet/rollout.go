@@ -22,6 +22,8 @@ const (
 	stateOffline = "Offline" // given the release, not connected
 	stateSkipped = "Skipped" // offline when its wave came, and the rollout skips such nodes
 	stateRemoved = "Removed" // its FleetNode is gone
+	// stateSuperseded: a newer rollout gave the node its release.
+	stateSuperseded = "Superseded"
 )
 
 // defaultWaves: one node first, then a tenth of them, then the rest.
@@ -61,6 +63,11 @@ type nodeView struct {
 	Connected bool
 	Release   *v1.Release
 	Update    *v1.UpdateStatus
+	// Rollout last gave the node its release, and Newer says whether that
+	// rollout is newer than the one planning: the newest rollout of a node
+	// has it, the older ones leave it alone.
+	Rollout string
+	Newer   bool
 }
 
 func sameRelease(a *v1.Release, b v1.Release) bool {
@@ -72,8 +79,16 @@ func sameRelease(a *v1.Release, b v1.Release) bool {
 // stopped rollout leaves what it started to finish.
 func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.FleetRolloutStatus, []string, error) {
 	st := *r.Status.DeepCopy()
-	st.ObservedGeneration = r.Generation
 	version := r.Spec.Release.Version
+	if st.Release == version {
+		// Complete is final: nodes it updated may move on to newer releases.
+		// Stopped is final until the spec changes, maxFailures say: a newer
+		// rollout taking a failed node over does not restart this one.
+		if st.Phase == v1.RolloutComplete || (st.Phase == v1.RolloutStopped && st.ObservedGeneration == r.Generation) {
+			return st, nil, nil
+		}
+	}
+	st.ObservedGeneration = r.Generation
 	if st.Phase == "" || st.Release != version {
 		// A new rollout, or a new release: the nodes it covers are fixed now.
 		sel := labels.Everything()
@@ -115,6 +130,8 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		switch {
 		case !ok:
 			rn.State = stateRemoved
+		case n.Rollout != "" && n.Rollout != r.Name && n.Newer:
+			rn.State = stateSuperseded
 		case !sameRelease(n.Release, r.Spec.Release):
 			rn.State = statePending
 		default:
@@ -147,7 +164,7 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 	}
 	for _, rn := range st.Nodes {
 		switch rn.State {
-		case v1.UpdateUpdated, v1.UpdateRolledBack, v1.UpdateFailed, stateSkipped, stateRemoved:
+		case v1.UpdateUpdated, v1.UpdateRolledBack, v1.UpdateFailed, stateSkipped, stateRemoved, stateSuperseded:
 		default:
 			done[int(rn.Wave)] = false
 		}
@@ -178,9 +195,10 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		st.Message = fmt.Sprintf("wave %d of %d", current, waves)
 		return st, assign, nil
 	}
+	// The next wave with nodes to give the release to.
 	next := 0
 	for _, rn := range st.Nodes {
-		if int(rn.Wave) > current && (next == 0 || int(rn.Wave) < next) {
+		if int(rn.Wave) > current && rn.State == statePending && (next == 0 || int(rn.Wave) < next) {
 			next = int(rn.Wave)
 		}
 	}
@@ -204,7 +222,7 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		return st, nil, nil
 	}
 	for _, rn := range st.Nodes {
-		if int(rn.Wave) == next {
+		if int(rn.Wave) == next && rn.State == statePending {
 			assign = append(assign, rn.Name)
 		}
 	}

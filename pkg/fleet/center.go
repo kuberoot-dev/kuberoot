@@ -43,6 +43,8 @@ var (
 const (
 	LabelArch   = "fleet.kuberoot.dev/arch"
 	LabelDistro = "fleet.kuberoot.dev/distro"
+	// AnnotationRollout names the rollout that gave a node its release.
+	AnnotationRollout = "fleet.kuberoot.dev/rollout"
 )
 
 // Center keeps the fleet's FleetNodes and FleetRollouts: it issues
@@ -340,7 +342,8 @@ func (c *Center) reconcileNode(ctx context.Context, n *v1.FleetNode) error {
 	}
 	conn, ok := c.Hub.Connected(n.Name)
 	if !ok {
-		st.Phase, st.Address, st.ConnectedSince = v1.PhaseOffline, "", nil
+		// What it ran when last seen stays; how it is now is not known.
+		st.Phase, st.Address, st.ConnectedSince, st.Health = v1.PhaseOffline, "", nil, "Unknown"
 		return c.updateNode(ctx, n, st)
 	}
 	since := metav1.NewTime(conn.Since.Truncate(time.Second))
@@ -458,13 +461,25 @@ func (c *Center) reconcileRollouts(ctx context.Context) error {
 	views := map[string]nodeView{}
 	for _, n := range nodes {
 		_, connected := c.Hub.Connected(n.Name)
-		views[n.Name] = nodeView{Labels: n.Labels, Connected: connected, Release: n.Spec.Release, Update: n.Status.Update}
+		views[n.Name] = nodeView{Labels: n.Labels, Connected: connected, Release: n.Spec.Release, Update: n.Status.Update,
+			Rollout: n.Annotations[AnnotationRollout]}
+	}
+	created := map[string]metav1.Time{}
+	for _, u := range list.Items {
+		created[u.GetName()] = u.GetCreationTimestamp()
 	}
 	for _, u := range list.Items {
 		var r v1.FleetRollout
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &r); err != nil {
 			klog.Errorf("fleet: rollout %s: %v", u.GetName(), err)
 			continue
+		}
+		for name, v := range views {
+			v.Newer = false
+			if t, ok := created[v.Rollout]; ok && v.Rollout != r.Name {
+				v.Newer = r.CreationTimestamp.Before(&t) || (t.Equal(&r.CreationTimestamp) && v.Rollout > r.Name)
+			}
+			views[name] = v
 		}
 		st, assign, err := plan(&r, views, time.Now())
 		if err != nil {
@@ -494,7 +509,7 @@ func (c *Center) reconcileRollouts(ctx context.Context) error {
 // assign sets a node's release to a rollout's.
 func (c *Center) assign(ctx context.Context, node string, r v1.FleetRollout) error {
 	raw, _ := json.Marshal(map[string]any{
-		"metadata": map[string]any{"annotations": map[string]string{"fleet.kuberoot.dev/rollout": r.Name}},
+		"metadata": map[string]any{"annotations": map[string]string{AnnotationRollout: r.Name}},
 		"spec":     map[string]any{"release": r.Spec.Release},
 	})
 	_, err := c.Dyn.Resource(nodesGVR).Patch(ctx, node, types.MergePatchType, raw, metav1.PatchOptions{})

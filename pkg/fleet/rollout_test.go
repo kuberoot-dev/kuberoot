@@ -110,8 +110,11 @@ func TestRolloutStopsOnRollback(t *testing.T) {
 	if nodes["f2"].Release != nil {
 		t.Error("f2 got the release of a stopped rollout")
 	}
-	// A failure allowed for goes on.
-	r.Spec.MaxFailures = 1
+	// Stopped stays stopped, until the spec allows for the failure.
+	if got := advance(t, r, nodes, time.Now()); got != nil || r.Status.Phase != v1.RolloutStopped {
+		t.Fatalf("stopped rollout moved on: %v, %+v", got, r.Status)
+	}
+	r.Spec.MaxFailures, r.Generation = 1, r.Generation+1
 	if got := advance(t, r, nodes, time.Now()); len(got) != 2 || r.Status.Phase != v1.RolloutProgressing {
 		t.Errorf("with maxFailures 1: %v, %+v", got, r.Status)
 	}
@@ -148,6 +151,44 @@ func TestRolloutOffline(t *testing.T) {
 		}
 	}
 }
+
+// An older rollout leaves alone the nodes a newer one took over, and does
+// not start again when they move on.
+func TestRolloutSuperseded(t *testing.T) {
+	nodes := fleetOf("f1", "f2", "f3")
+	older := rollout(v1.FleetRolloutSpec{Release: v2, Waves: []intstr.IntOrString{intstr.FromInt32(1), intstr.FromString("100%")}})
+	advance(t, older, nodes, time.Now())
+	setPhase(nodes, "f1", v1.UpdateUpdated)
+
+	// A newer release takes f1 over while the older rollout is under way.
+	v3 := v1.Release{Version: "0.3.0", URL: "http://releases/0.3.0.tar", Sha256: v2.Sha256}
+	v := nodes["f1"]
+	v.Release, v.Update, v.Rollout, v.Newer = &v3, nil, "newer", true
+	nodes["f1"] = v
+	got := advance(t, older, nodes, time.Now())
+	if slices.Contains(got, "f1") || r1State(older) != stateSuperseded {
+		t.Fatalf("the older rollout took f1 back: %v, %+v", got, older.Status.Nodes)
+	}
+	if !reflect.DeepEqual(got, []string{"f2", "f3"}) {
+		t.Errorf("the older rollout should go on with the others: %v", got)
+	}
+	for _, n := range []string{"f2", "f3"} {
+		setPhase(nodes, n, v1.UpdateUpdated)
+	}
+	advance(t, older, nodes, time.Now())
+	if older.Status.Phase != v1.RolloutComplete {
+		t.Fatalf("status %+v", older.Status)
+	}
+	// Complete is final: f2 moving on is no reason to give it the release again.
+	v = nodes["f2"]
+	v.Release, v.Rollout, v.Newer = &v3, "newer", true
+	nodes["f2"] = v
+	if got := advance(t, older, nodes, time.Now()); got != nil || older.Status.Phase != v1.RolloutComplete {
+		t.Errorf("a complete rollout acted: %v, %+v", got, older.Status)
+	}
+}
+
+func r1State(r *v1.FleetRollout) string { return r.Status.Nodes[0].State }
 
 func TestRolloutPauseSoakSelector(t *testing.T) {
 	nodes := fleetOf("f1", "f2", "lab")
