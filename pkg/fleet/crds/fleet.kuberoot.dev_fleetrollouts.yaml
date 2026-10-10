@@ -1,0 +1,235 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: fleetrollouts.fleet.kuberoot.dev
+spec:
+  group: fleet.kuberoot.dev
+  names:
+    kind: FleetRollout
+    listKind: FleetRolloutList
+    plural: fleetrollouts
+    shortNames:
+    - fro
+    singular: fleetrollout
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.release.version
+      name: Version
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.wave
+      name: Wave
+      type: string
+    - jsonPath: .status.updated
+      name: Updated
+      type: string
+    - jsonPath: .status.failed
+      name: Failed
+      type: integer
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          FleetRollout moves a release across the nodes its selector picks, in
+          waves: each wave upgrades more nodes, and only once every node of the
+          waves before is updated. A node that rolls the release back, or fails to
+          stage it, is a failure; more than maxFailures stop the rollout.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              maxFailures:
+                description: MaxFailures the rollout carries on through; one more
+                  stops it.
+                format: int32
+                minimum: 0
+                type: integer
+              offline:
+                default: Wait
+                description: |-
+                  Offline is what a wave does about a node that is not connected: Wait
+                  for it, or Skip it, which lets the wave go on while the node takes the
+                  release when it comes back.
+                enum:
+                - Wait
+                - Skip
+                type: string
+              paused:
+                description: Paused holds the next wave back; nodes already given
+                  the release go on.
+                type: boolean
+              release:
+                description: Release is a signed kuberoot release bundle, as an Upgrade
+                  installs it.
+                properties:
+                  sha256:
+                    description: Sha256 of the bundle.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  url:
+                    description: URL of the bundle; its signature is at URL + ".sig".
+                    minLength: 1
+                    type: string
+                  version:
+                    description: Version the bundle carries, as the node's boot entries
+                      name it.
+                    minLength: 1
+                    type: string
+                required:
+                - sha256
+                - url
+                - version
+                type: object
+              selector:
+                description: Selector picks the nodes; all nodes when empty.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              soak:
+                description: Soak is how long a wave's nodes run the release before
+                  the next wave.
+                type: string
+              waves:
+                default:
+                - "1"
+                - 10%
+                - 100%
+                description: |-
+                  Waves are how many of the nodes have the release once each wave is
+                  through: a number of nodes or a percentage, rounded up, growing wave
+                  by wave. The last wave takes every node that is left.
+                items:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  x-kubernetes-int-or-string: true
+                minItems: 1
+                type: array
+            required:
+            - release
+            type: object
+          status:
+            properties:
+              failed:
+                format: int32
+                type: integer
+              message:
+                type: string
+              nodes:
+                description: |-
+                  Nodes the rollout covers, fixed when it starts, in the order waves
+                  take them, with the wave of each.
+                items:
+                  description: RolloutNode is a node of a rollout and where it is.
+                  properties:
+                    name:
+                      type: string
+                    state:
+                      description: |-
+                        State: Pending until its wave, then the node's update phase, Offline
+                        or Skipped.
+                      type: string
+                    wave:
+                      format: int32
+                      type: integer
+                  required:
+                  - name
+                  - wave
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: 'Phase: Progressing, Paused, Stopped by failures, or
+                  Complete.'
+                type: string
+              release:
+                description: |-
+                  Release is the version the nodes below were picked for; a new
+                  version in spec starts the rollout over.
+                type: string
+              updated:
+                description: Updated is "<updated>/<nodes>"; Failed counts failures.
+                type: string
+              wave:
+                description: Wave in progress, as "<n>/<waves>".
+                type: string
+              waveDone:
+                description: WaveDone is when the current wave's last node was updated.
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

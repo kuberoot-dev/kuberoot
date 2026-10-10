@@ -35,6 +35,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ModelServer{}, &ModelServerList{},
 		&EtcdMember{}, &EtcdMemberList{},
 		&LatencyTest{}, &LatencyTestList{},
+		&FleetEnrollment{}, &FleetEnrollmentList{},
 	)
 	return nil
 }

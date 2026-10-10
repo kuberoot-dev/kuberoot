@@ -691,3 +691,48 @@ type EtcdMemberList struct {
 
 	Items []EtcdMember `json:"items"`
 }
+
+// FleetEnrollment makes the node a node of a fleet: it calls the fleet's
+// center and keeps the connection open, and the center reaches this node's
+// API through it, so the node needs no inbound port. There is one, named
+// center; the center issues it with the FleetNode, and its token works once.
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient:nonNamespaced
+type FleetEnrollment struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   FleetEnrollmentSpec   `json:"spec,omitempty"`
+	Status FleetEnrollmentStatus `json:"status,omitempty"`
+}
+
+type FleetEnrollmentSpec struct {
+	// Name of the node in the fleet: its FleetNode.
+	Name string `json:"name"`
+	// Servers are the center's addresses, host:port, tried in turn.
+	// +listType=atomic
+	Servers []string `json:"servers"`
+	// CAHash pins the center: sha256 of its certificate authority, as
+	// sha256:<hex>. The node talks to no center that authority did not vouch for.
+	CAHash string `json:"caHash"`
+	// Token enrolls the node once; it is never handed back out.
+	Token string `json:"token,omitempty"`
+}
+
+type FleetEnrollmentStatus struct {
+	// Phase: Enrolling until the center accepted the node, then Connected
+	// or Disconnected.
+	Phase   string `json:"phase,omitempty"`
+	Message string `json:"message,omitempty"`
+	// Server the node is connected to, and since when.
+	Server         string       `json:"server,omitempty"`
+	ConnectedSince *metav1.Time `json:"connectedSince,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type FleetEnrollmentList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []FleetEnrollment `json:"items"`
+}

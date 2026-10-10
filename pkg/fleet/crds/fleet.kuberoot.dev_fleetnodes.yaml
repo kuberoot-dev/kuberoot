@@ -1,0 +1,173 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: fleetnodes.fleet.kuberoot.dev
+spec:
+  group: fleet.kuberoot.dev
+  names:
+    kind: FleetNode
+    listKind: FleetNodeList
+    plural: fleetnodes
+    shortNames:
+    - fn
+    singular: fleetnode
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.release
+      name: Release
+      type: string
+    - jsonPath: .status.slot
+      name: Slot
+      type: string
+    - jsonPath: .status.health
+      name: Health
+      type: string
+    - jsonPath: .status.update.phase
+      name: Update
+      type: string
+    - jsonPath: .status.lastSeen
+      name: Last Seen
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          FleetNode is one node of the fleet: a single kuberoot node, usually its own
+          cluster, somewhere behind NAT. Creating one issues its enrollment token;
+          labels group nodes by site, hardware or anything else.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              release:
+                description: |-
+                  Release the node should run. The center upgrades the node to it
+                  whenever the node is connected, and not again once the node rolled it
+                  back. A FleetRollout sets it; it can be set by hand.
+                properties:
+                  sha256:
+                    description: Sha256 of the bundle.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  url:
+                    description: URL of the bundle; its signature is at URL + ".sig".
+                    minLength: 1
+                    type: string
+                  version:
+                    description: Version the bundle carries, as the node's boot entries
+                      name it.
+                    minLength: 1
+                    type: string
+                required:
+                - sha256
+                - url
+                - version
+                type: object
+            type: object
+          status:
+            properties:
+              address:
+                description: Address the node's connection comes from, as the center
+                  sees it.
+                type: string
+              arch:
+                type: string
+              connectedSince:
+                description: ConnectedSince is when the open connection was made.
+                format: date-time
+                type: string
+              distro:
+                description: Distro, Release, Arch, Kernel describe what the node
+                  runs.
+                type: string
+              enrollment:
+                description: |-
+                  Enrollment names the Secret holding the node's one-time enrollment
+                  while the node has not used it.
+                type: string
+              health:
+                description: |-
+                  Health: Healthy when every service of the node runs, Degraded
+                  otherwise, with the services that do not in Message.
+                type: string
+              identity:
+                description: |-
+                  Identity is the node's own certificate authority, pinned when it
+                  enrolled: sha256 of the CA certificate. Only a client certificate this
+                  CA issued, for this node's name, opens the node's connection.
+                type: string
+              kernel:
+                type: string
+              lastSeen:
+                description: LastSeen is the last time the node answered.
+                format: date-time
+                type: string
+              memoryBytes:
+                description: MemoryBytes of the node.
+                format: int64
+                type: integer
+              message:
+                type: string
+              phase:
+                description: 'Phase: Pending until the node enrolls, then Connected
+                  or Offline.'
+                type: string
+              release:
+                type: string
+              services:
+                description: Services the node runs, and how many of them run.
+                type: string
+              slot:
+                description: |-
+                  Slot is the root slot the node booted, SlotState its boot state:
+                  Good, or Trying while on probation.
+                type: string
+              slotState:
+                type: string
+              update:
+                description: Update is how the node gets to spec.release.
+                properties:
+                  message:
+                    type: string
+                  phase:
+                    description: |-
+                      Phase: Downloading, Rebooting, Verifying, Updated, or the failures
+                      RolledBack and Failed, which are final for this release.
+                    type: string
+                  since:
+                    description: Since is when the phase began.
+                    format: date-time
+                    type: string
+                  version:
+                    description: Version being installed.
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

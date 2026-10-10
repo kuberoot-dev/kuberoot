@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -71,6 +72,9 @@ type facts struct {
 	Boot struct {
 		Distro        string
 		RepoPlainHTTP bool
+		// FleetCenter: where the nodes of the fleet this control plane is
+		// the center of reach it; empty when it is none.
+		FleetCenter string
 	}
 	// Store is the cluster store of a control plane, Etcd its member.
 	Store storeFacts
@@ -91,6 +95,10 @@ func roleFacts(r roleContext, cfg bootConfig) facts {
 	f.Net.DNS = r.net.dnsIP().String()
 	f.Net.PodNetwork = cfg.podNetwork
 	f.Boot.Distro, f.Boot.RepoPlainHTTP = distroName(cfg), cfg.repoPlainHTTP
+	f.Boot.FleetCenter = cfg.fleetCenter
+	if f.Boot.FleetCenter == fleetCenterSelf {
+		f.Boot.FleetCenter = net.JoinHostPort(f.Node.IP, "7443")
+	}
 	return f
 }
 

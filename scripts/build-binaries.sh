@@ -11,7 +11,7 @@ WORK=${WORK:-/work}
 OUT=${KUBEROOT_OUT:-$ROOT/out}/$ARCH
 mkdir -p "$OUT"
 
-for cmd in kinit kuberoot-node kuberoot-installer kuberoot-intents kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl; do
+for cmd in kinit kuberoot-node kuberoot-installer kuberoot-intents kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl kuberoot-fleet; do
   (cd "$ROOT" && GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/$cmd" "./cmd/$cmd")
 done
 # The resource store lab (docs/resource-store.md), only when asked for: it
