@@ -170,6 +170,17 @@ spec:
         - --proxy-mode=nftables
         - --cluster-cidr={{.Net.Pod}}
         - --hostname-override={{.Node.Name}}
+      # The center of a fleet, booted with kuberoot.fleet-center: nodes
+      # behind NAT call it on 7443, it keeps FleetNodes and FleetRollouts.
+      - name: kuberoot-fleet
+        after: apiserver
+        when: '{{ne .Boot.FleetCenter ""}}'
+        args:
+        - /usr/bin/kuberoot-fleet
+        - --kubeconfig={{kube "admin.kubeconfig"}}
+        - --listen=:7443
+        - --servers={{.Boot.FleetCenter}}
+        - --user-client-ca-file={{pki "ca.crt"}}
       # Intents: lowers Apps to primitives and runs Overrides.
       - name: kuberoot-intents
         after: apiserver

@@ -36,7 +36,14 @@ type bootConfig struct {
 	// default, for one control plane, or etcd, which other control planes
 	// can join. It is read once, when the cluster is created.
 	datastore string
+	// fleetCenter makes the control plane the center of a fleet: it runs
+	// kuberoot-fleet, which nodes behind NAT call. Its value is where the
+	// nodes reach it, host:port, comma separated; bare, the node's address.
+	fleetCenter string
 }
+
+// fleetCenterSelf: the fleet center is reached at the node's own address.
+const fleetCenterSelf = "self"
 
 func loadCmdline() bootConfig {
 	raw, _ := os.ReadFile("/proc/cmdline")
@@ -55,6 +62,8 @@ func parseCmdline(cmdline string) bootConfig {
 			cfg.install = true
 		case "kuberoot.repo-plain-http":
 			cfg.repoPlainHTTP = true
+		case "kuberoot.fleet-center":
+			cfg.fleetCenter = fleetCenterSelf
 		default:
 			if v, ok := strings.CutPrefix(f, "kuberoot.nameserver="); ok {
 				cfg.nameservers = append(cfg.nameservers, strings.Split(v, ",")...)
@@ -82,6 +91,9 @@ func parseCmdline(cmdline string) bootConfig {
 			}
 			if v, ok := strings.CutPrefix(f, "kuberoot.datastore="); ok {
 				cfg.datastore = v
+			}
+			if v, ok := strings.CutPrefix(f, "kuberoot.fleet-center="); ok && v != "" {
+				cfg.fleetCenter = v
 			}
 		}
 	}

@@ -25,6 +25,7 @@ func main() {
 	flag.StringVar(&o.CertFile, "tls-cert-file", "", "serving certificate")
 	flag.StringVar(&o.KeyFile, "tls-private-key-file", "", "serving key")
 	flag.StringVar(&o.ClientCA, "client-ca-file", "", "CA that signs node admin certificates")
+	flag.StringVar(&o.PKIDir, "pki-dir", "/var/lib/kuberoot/pki", "the node's own authority (node-ca) and serving CA, for the fleet agent")
 	flag.StringVar(&kubeconfigs, "kubeconfigs", "", "name=path pairs of cluster credentials to serve, comma separated")
 	flag.StringVar(&o.RequestHeaderCA, "requestheader-client-ca-file", "", "front proxy CA of the cluster API server")
 	flag.StringVar(&o.ClusterCertFile, "cluster-tls-cert-file", "", "serving certificate signed by the cluster CA")
