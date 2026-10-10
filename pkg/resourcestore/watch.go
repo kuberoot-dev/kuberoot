@@ -4,7 +4,7 @@ import (
 	"sync"
 )
 
-// watchers hands committed changes to the watches that follow them.
+// watchers hands applied changes to the watches that follow them.
 type watchers struct {
 	mu   sync.Mutex
 	next int64
@@ -16,7 +16,9 @@ type sub struct {
 	ch       chan batch
 }
 
-// batch is the changes of one revision that a watch asked for.
+// batch is the changes up to a revision that a watch asked for; it may
+// have none, and then only tells the watch how far the store has got, so
+// that its progress notifications never run ahead of its events.
 type batch struct {
 	rev    int64
 	events []Event
@@ -30,7 +32,7 @@ func (w *watchers) subscribe(key, end []byte) (int64, <-chan batch) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.next++
-	s := &sub{key: key, end: end, ch: make(chan batch, 1024)}
+	s := &sub{key: key, end: end, ch: make(chan batch, 4096)}
 	w.subs[w.next] = s
 	return w.next, s.ch
 }
@@ -39,6 +41,16 @@ func (w *watchers) cancel(id int64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if s, ok := w.subs[id]; ok {
+		close(s.ch)
+		delete(w.subs, id)
+	}
+}
+
+// cancelAll ends every watch: the state they followed was replaced.
+func (w *watchers) cancelAll() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for id, s := range w.subs {
 		close(s.ch)
 		delete(w.subs, id)
 	}
@@ -53,9 +65,6 @@ func (w *watchers) publish(rev int64, events []Event) {
 			if inRange(e.KV.Key, s.key, s.end) {
 				mine = append(mine, e)
 			}
-		}
-		if len(mine) == 0 {
-			continue
 		}
 		select {
 		case s.ch <- batch{rev: rev, events: mine}:

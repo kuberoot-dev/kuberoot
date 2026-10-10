@@ -4,37 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"google.golang.org/grpc"
 )
 
-// serve starts the store on a local port and returns an etcd client of it.
+// serve starts a store of one member and returns an etcd client of it.
 func serve(t *testing.T) *clientv3.Client {
 	t.Helper()
-	st, err := Open(filepath.Join(t.TempDir(), "store.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	g := grpc.NewServer()
-	(&Server{Store: st, ClusterID: 1, MemberID: 1}).Register(g)
-	go func() { _ = g.Serve(l) }()
-	t.Cleanup(func() { g.Stop(); st.Close() })
-	c, err := clientv3.New(clientv3.Config{Endpoints: []string{l.Addr().String()}, DialTimeout: 3 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { c.Close() })
-	return c
+	ms := newCluster(t, 1, nil)
+	return ms[0].client
 }
 
 func TestCreateUpdateDeleteAsTheAPIServerDoes(t *testing.T) {
