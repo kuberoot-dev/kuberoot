@@ -283,6 +283,8 @@ Workers that join a cluster of several control planes reach the API through a ba
 
 `etcdmembers`, on a control plane, lists the store's members; deleting one removes it, as replacing a lost control plane needs: remove its member, then join the new node. A control plane that leaves its cluster (deleting its `Membership`) takes itself out of the store first. Install control planes before they join: an installation carries the store of a single member, not of one member among others. Moving an existing cluster from kine to etcd is not automatic: create the new cluster on etcd and move workloads over (Velero, or the packages and their data).
 
+A lab, not for clusters that matter: [a store in the model of Kubernetes resources](docs/resource-store.md), replicated by etcd's Raft library and speaking etcd's API, runs in etcd's place on an image built with `KUBEROOT_STORE_LAB=1` and booted with `kuberoot.datastore=kuberoot-store`. No image carries it otherwise.
+
 ## Node API
 
 | Resource | What it does |

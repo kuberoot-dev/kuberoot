@@ -1,6 +1,8 @@
 # A store in the model of Kubernetes resources
 
-Status: design and prototype. Nothing here is meant for production.
+Status: a lab. The core is built and replicated; the resource and protocol
+layers are designs. Nothing here is meant for production, and nothing uses it
+by default.
 
 ## Why
 
@@ -76,7 +78,7 @@ commits. A watch from a compacted revision gets an error, as with etcd.
 ### Storage engine
 
 An embedded ordered key-value engine holds the versions on disk: bbolt (as
-etcd) or Pebble (as CockroachDB). The prototype uses bbolt: it is etcd's, well
+etcd) or Pebble (as CockroachDB). The store uses bbolt: it is etcd's, well
 understood, and a single file that a snapshot copies. Keys encode `(key,
 revision)` so that a range over a key prefix yields versions in order; a
 separate index from key to its latest revision makes the current read a point
@@ -85,8 +87,8 @@ lookup.
 ### Replication
 
 Writes go through Raft: a write is a log entry; once committed it is applied
-to the engine in log order on every member, and the revision is the log
-position's index in the applied sequence. Reads that must be linearisable (the
+to the engine in log order on every member, which advances the revision
+itself, so that it is the same on every member. Reads that must be linearisable (the
 API server's quorum reads) wait for the read index, as etcd does.
 
 Two Raft libraries were weighed:
@@ -145,29 +147,183 @@ core's transactions and watch:
   through Raft; for keys that can lose their last writes, an asynchronous mode
   acknowledges before replication.
 
-## Prototype
+## The core as built
 
-`cmd/kuberoot-store` (`pkg/resourcestore`) is a single-member store: the etcd
-v3 KV (including `RangeStream`), Watch, Lease and Maintenance services over
-bbolt with the version model above, no Raft yet. Leases live in memory.
+`cmd/kuberoot-store` (`pkg/resourcestore`) is a member of the store: the etcd
+v3 KV (including `RangeStream`), Watch, Lease, Cluster and Maintenance
+services, replicated by `go.etcd.io/raft` v3.7. It takes etcd's flags
+(`--name`, `--data-dir`, `--initial-cluster`, `--initial-cluster-state`,
+client and peer URLs and certificates, `--snapshot-count`), so it runs where
+an etcd member runs.
 
-kube-apiserver v1.37.1 boots on it and serves: it seeds its own objects (five
-namespaces, 73 cluster roles), and creating, patching, watching and deleting a
-ConfigMap, a Secret and a namespace work, with no errors in the API server's
-log. Unit tests drive it through etcd's own client: the API server's
-create-if-absent and update-if-unchanged transactions, paged lists at a fixed
-revision, compaction and expired continuations, watches from a past revision
-with previous values, lease expiry, and `RangeStream` against `Range`.
+### Replication
 
-Two things the API server needs that the etcd API does not spell out:
+Every write (`Put`, `DeleteRange`, `Txn` with a write, `Compact`, lease
+grants and revocations) is a request in one log entry. Each member applies
+committed entries in log order to its state, a bbolt file with the version
+model above, in one write per batch of entries; a revision is the state's own
+counter, so revisions are the same on every member. A follower forwards its
+proposals to the leader, as Raft does, and waits until its own state has
+applied the entry before it answers.
+
+When the leader changes, a member proposes its writes that are still waiting
+once more: an entry forwarded to a leader that died may be lost with it, or
+may have committed. The state remembers, for a while, which requests it
+applied (by the proposing member and a request ID), so the copy that commits
+second does nothing. etcd does not do this: a write caught in a change of
+leader there fails with "request timed out" or "leader changed", and the API
+server returns the error.
+
+Reads are linearizable unless the client asks for a serializable read: a
+member asks the leader for its read index (one request for all reads waiting
+at the moment) and reads once it has applied up to that index. Learners
+serve reads and writes too, which etcd refuses.
+
+The Raft log, its hard state and the last snapshot's metadata live in
+another bbolt file, synced on every round of Raft. The state file is not
+synced on every apply: before a snapshot lets the log before it go, the state
+is synced, so a member that crashes applies the entries after the last
+snapshot again. Rounds slower than half an election timeout are logged:
+they delay heartbeats, and a slow disk costs the leadership as it does with
+etcd.
+
+### Snapshots and log compaction
+
+Every `--snapshot-count` applied entries (10 000 by default), a member records
+a snapshot at its applied index and drops the log before it, keeping
+`--snapshot-catchup-entries` (5 000) for members a little behind. A snapshot
+is also recorded at every membership change, without dropping the log:
+Raft sends a member the newest snapshot, and refuses one whose members do not
+include it, which is what a learner added after the last snapshot got.
+
+A member too far behind for the log gets the snapshot's message and, in the
+same request, a copy of the leader's state file as it is when sent. That
+state holds at least what the snapshot does; the member takes it in place of
+its own and skips the entries it already holds. Its watches end, and their
+clients watch again.
+
+### Leases
+
+Leases and the keys attached to them are replicated state, unlike in the
+prototype. Their clock is not: as in etcd, the leader keeps it, keep-alives
+on a follower go to the leader, and a member that becomes leader gives every
+lease its full time to live again, so a change of leader never expires a
+lease. The leader revokes an expired lease through the log; the revocation
+deletes its keys at one revision on every member.
+
+### Membership
+
+The Cluster API is etcd's: `MemberAdd` (as a learner or a voter),
+`MemberPromote`, `MemberRemove`, `MemberUpdate`, `MemberList`. A learner is
+promoted once its log is within a tenth of the leader's, as etcd checks;
+only the leader knows that, so another member asks the leader over the peer
+connection. A new member started with `--initial-cluster-state existing`
+finds its ID by its peer URL in the member list of the others. Member IDs of
+a new store come from the peer URLs and the cluster token, so every member
+computes the same. A removed member learns it from the log or from its peers'
+refusal, and stops; its ID cannot come back.
+
+Peers talk over HTTP or HTTPS with mutual certificates: Raft's messages in
+batches, one ordered queue per peer, and snapshots apart.
+
+`Maintenance.Snapshot` streams a copy of the state file, and
+`kuberoot-store snapshot restore FILE --data-dir DIR` makes a store of one
+member from it (keys, revisions and leases; not members, log or remembered
+requests), as `etcdutl snapshot restore` does for etcd. The format is the
+store's own: etcd and etcdutl cannot read it.
+
+### What the API server needs that the etcd API does not spell out
 
 - **A new store is at revision 1, not 0.** The API server reads revision 0 as
   "no revision" and refuses to start.
 - **`RangeStream`.** The API server of 1.37 lists through etcd 3.7's
   streaming range when the store's reported version is 3.7, and only falls
   back to paged ranges when the call is unimplemented.
+- **Progress notifications.** A watch stream's progress notification claims
+  every event up to its revision was sent. The store hands every watch each
+  applied batch, with or without events for it, and answers a progress
+  request with the lowest revision its watches have sent.
+- **Keep-alive pings.** The API server's etcd client pings idle connections;
+  the store allows pings every 5 seconds, as etcd does, instead of closing
+  the connection with "too many pings".
 
-Raft and the resource layer come next, in that order.
+### Running it in etcd's place
+
+An image built with `KUBEROOT_STORE_LAB=1` carries `/usr/bin/kuberoot-store`;
+others do not. Booted with `kuberoot.datastore=kuberoot-store`, a node that
+creates a cluster runs the store where it would run etcd: the same
+certificates, ports and data directory, the same `JoinTicket` for other
+control planes (a learner, promoted once caught up), `etcdmembers` to list and
+remove members, the same carrying of the store to disk at installation, and
+backups restored with the store's own restore. A node asked for the lab store
+on an image without it creates its cluster on kine. The choice stays with the
+cluster, as with etcd.
+
+## Measurements
+
+### Unit tests
+
+`go test ./pkg/resourcestore/` drives members in one process through etcd's
+own client (`clientv3`), over real HTTP between members: the API server's
+transactions, paged lists, compaction, watches from the past, leases, and
+`RangeStream`, on one member; on three, writes on a follower read at once on
+every member, the loss of the leader and its return from its log, a learner
+added after the log was cut that catches up from a snapshot and is promoted
+through a follower, a removed member that stops and whose ID cannot be
+removed again, a restart that keeps state and revisions, replicated leases
+that survive the loss of the leader and expire under the new one, and a
+restore from a `Maintenance.Snapshot`. Store tests apply requests directly: a
+request committed twice applies once, entries the state holds are skipped,
+a failed transaction writes nothing, a revoked lease deletes its keys. The
+tests pass with the race detector.
+
+### kube-apiserver on three members
+
+In the builder pod: three members on one machine, each with its own data
+directory on the builder's volume, and kube-apiserver v1.37.1 with all three
+in `--etcd-servers`. It starts, seeds its objects and serves. The load is a
+round of API requests every second (create, get, patch, list in pages of 50
+and delete ConfigMaps, through `kubectl`) and a watch of all ConfigMaps
+along, which must see every change.
+
+| Test | Requests | Failed | What happened |
+|---|---|---|---|
+| leader killed (SIGKILL) at 60 s, back at 120 s | 890 in 180 s | 0 | new leader 1.6 s after the kill; the slowest request waited 1.5 s; the old leader, restarted, caught up 0.14 s after it started |
+| a follower stopped for 30 s, then removed, its data deleted, added again as a learner, promoted | 1190 in 240 s | 0 | restarted follower caught up 0.15–0.26 s after it started; the new learner caught up in 0.2 s, from the log or (with `--snapshot-count 200`) from a snapshot with the state file, and was promoted at the first try |
+| the same kill before writes were proposed again on a change of leader | 120 in 120 s | 1 | the write forwarded to the dead leader timed out after 7 s |
+
+Every watch saw every change it should: as many ADDED, MODIFIED and
+DELETED events as creates, patches and deletes succeeded. A request's
+median latency through `kubectl`, process start included, is 43 ms, the
+99th percentile 57–95 ms.
+
+The builder's volume is shared with builds, and its fsync stalls for seconds
+now and then. A stall of 4–5 s on the leader once cost it the leadership in
+the middle of a test; requests waited up to 5 s and none failed. On such a
+disk etcd stalls the same way.
+
+### A cluster on the store, and conformance
+
+Not measured yet: the stand for it (three control planes on the lab store,
+`store1`–`store3`, booted from an image built with the lab) could not start,
+the workshop cluster's machines having no memory free for its virtual
+machines.
+
+## Not done
+
+- The resource layer and the protocol layers: designs only.
+- Of the etcd API: nested transactions, `Hash`/`HashKV`, alarms (`Alarm`
+  answers that there are none), defragmentation, authentication with users
+  and roles (`Auth`), `Range` sorting and revision filters. The API server
+  uses none of them.
+- Entries are JSON, values included: simple to read, larger than etcd's
+  protobuf.
+- A snapshot sends the whole state file in one request, held by neither side
+  in memory but not resumable either.
+- The state file is not synced on every apply. A crash of the process loses
+  nothing (the log is synced and replayed); a loss of power before the
+  operating system writes the file out leaves bbolt to recover it, which it
+  may not.
 
 ## Open questions
 

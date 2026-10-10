@@ -38,7 +38,7 @@ type flags struct {
 	peerCertFile, peerKeyFile, peerTrustedCA string
 	peerClientCertAuth                       bool
 	listenMetrics                            string
-	snapshotCount                            uint64
+	snapshotCount, catchUpEntries            uint64
 	heartbeatMs, electionMs                  int
 }
 
@@ -71,6 +71,7 @@ func main() {
 	flag.BoolVar(&f.peerClientCertAuth, "peer-client-cert-auth", false, "require members' certificates")
 	flag.StringVar(&f.listenMetrics, "listen-metrics-urls", "", "URLs /health and /metrics are served on, plain HTTP")
 	flag.Uint64Var(&f.snapshotCount, "snapshot-count", 10000, "entries applied between snapshots of the state")
+	flag.Uint64Var(&f.catchUpEntries, "snapshot-catchup-entries", 5000, "entries kept before a snapshot for members a little behind")
 	flag.IntVar(&f.heartbeatMs, "heartbeat-interval", 100, "milliseconds between the leader's heartbeats")
 	flag.IntVar(&f.electionMs, "election-timeout", 1000, "milliseconds without a leader before an election")
 	klog.InitFlags(nil)
@@ -214,7 +215,7 @@ func run(f flags) error {
 	n, err := resourcestore.StartNode(resourcestore.Config{
 		Name: f.name, DataDir: f.dataDir, InitialCluster: cluster, InitialClusterState: f.initialState,
 		ClusterToken: f.token, PeerURLs: advPeer, ClientURLs: advClient, PeerClientTLS: peerClientTLS,
-		SnapshotCount: f.snapshotCount, TickMs: f.heartbeatMs, ElectionTicks: ticks,
+		SnapshotCount: f.snapshotCount, CatchUpEntries: f.catchUpEntries, TickMs: f.heartbeatMs, ElectionTicks: ticks,
 	})
 	if err != nil {
 		return err
