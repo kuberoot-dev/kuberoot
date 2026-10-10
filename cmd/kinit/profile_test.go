@@ -73,6 +73,39 @@ func TestEdgeProfileArguments(t *testing.T) {
 	}
 }
 
+// The fleet center runs only when the boot asks for it, advertised where it says.
+func TestEdgeFleetCenter(t *testing.T) {
+	p, _ := loadProfileFile("../../distros/edge/profile.yaml")
+	find := func(f facts) string {
+		services, err := renderServices(p.Spec.Roles[roleControlPlane], f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range services {
+			if s.name == "kuberoot-fleet" {
+				return strings.Join(s.args, " ")
+			}
+		}
+		return ""
+	}
+	if a := find(edgeFacts(false)); a != "" {
+		t.Errorf("kuberoot-fleet runs without kuberoot.fleet-center: %s", a)
+	}
+	for cmdline, want := range map[string]string{
+		"kuberoot.fleet-center":                   "--servers=192.168.100.11:7443",
+		"kuberoot.fleet-center=fleet.example:443": "--servers=fleet.example:443",
+	} {
+		f := edgeFacts(false)
+		f.Boot.FleetCenter = parseCmdline(cmdline).fleetCenter
+		if f.Boot.FleetCenter == fleetCenterSelf {
+			f.Boot.FleetCenter = net.JoinHostPort(f.Node.IP, "7443")
+		}
+		if a := find(f); !strings.Contains(a, want) {
+			t.Errorf("%s: kuberoot-fleet %q, want %s", cmdline, a, want)
+		}
+	}
+}
+
 func TestRescueProfileParses(t *testing.T) {
 	activeProfile = nil
 	p := loadProfileOrRescue() // no profile at the image path on a build host

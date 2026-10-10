@@ -38,6 +38,11 @@ func LoadAuthority(certFile, keyFile string) (*Authority, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ParseAuthority(certPEM, keyPEM)
+}
+
+// ParseAuthority reads a CA from its PEM certificate and key.
+func ParseAuthority(certPEM, keyPEM []byte) (*Authority, error) {
 	pair, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
@@ -48,6 +53,9 @@ func LoadAuthority(certFile, keyFile string) (*Authority, error) {
 	}
 	return &Authority{cert: cert, key: pair.PrivateKey.(crypto.Signer)}, nil
 }
+
+// Certificate is the CA's own certificate.
+func (a *Authority) Certificate() *x509.Certificate { return a.cert }
 
 // Issue returns a PEM certificate and PEM key valid for a year.
 func (a *Authority) Issue(s Spec) (certPEM, keyPEM []byte, err error) {

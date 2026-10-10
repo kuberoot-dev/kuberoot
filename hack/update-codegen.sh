@@ -37,6 +37,10 @@ go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 object:headerFile
 mkdir -p distros/observability/addons
 cp distros/iot/addons/devices.kuberoot.dev_*.yaml distros/observability/addons/
 
+# The fleet API: deepcopy, and its CRDs, which kuberoot-fleet applies itself.
+go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 object:headerFile=$HEADER \
+  paths=./pkg/apis/fleet/... crd:crdVersions=v1 output:crd:dir=pkg/fleet/crds
+
 # The models API: deepcopy, and its CRD as the ai distribution's add-on.
 go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 object:headerFile=$HEADER \
   paths=./pkg/apis/ai/... crd:crdVersions=v1 output:crd:dir=distros/ai/addons

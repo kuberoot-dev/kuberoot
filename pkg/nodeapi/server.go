@@ -32,6 +32,7 @@ import (
 
 	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 	"github.com/kuberoot-dev/kuberoot/pkg/apis/node/install"
+	fleetagent "github.com/kuberoot-dev/kuberoot/pkg/fleet"
 	"github.com/kuberoot-dev/kuberoot/pkg/generated/openapi"
 	"github.com/kuberoot-dev/kuberoot/pkg/gpu"
 	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
@@ -47,6 +48,9 @@ type Options struct {
 	KeyFile    string
 	ClientCA   string
 	Kubeconfig map[string]string // name -> file of cluster credentials to hand out
+	// PKIDir holds the node's own authority, node-ca, which a node of a
+	// fleet proves itself to the center with.
+	PKIDir string
 
 	// Aggregation into the cluster API server; all optional, the node API
 	// works standalone without them.
@@ -155,7 +159,10 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	kinit := supervisor.NewClient()
-	storages := enabledResources(o.Resources, resourceDeps{nodeName: o.NodeName, kinit: kinit})
+	// The fleet agent calls a fleet's center once the node is enrolled.
+	agent := &fleetagent.Agent{StateDir: "/var/lib/kuberoot/fleet", PKIDir: o.PKIDir,
+		LocalAPI: fmt.Sprintf("https://127.0.0.1:%d", o.BindPort), AdminGroup: AdminGroup}
+	storages := enabledResources(o.Resources, resourceDeps{nodeName: o.NodeName, kinit: kinit, fleet: agent})
 	var vms *vmHost
 	if o.Machines {
 		vms = newVMHost(o.NodeName, o.Advertise)
@@ -237,6 +244,9 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	go assessBoot(ctx, kinit, o.NodeName)
+	if storages["fleetenrollments"] != nil {
+		go agent.Run(ctx)
+	}
 	if latency != nil {
 		go latency.run(ctx)
 	}

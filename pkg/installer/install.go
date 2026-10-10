@@ -365,6 +365,7 @@ var carriedArgs = []string{
 	"kuberoot.nameserver=", "kuberoot.ip=",
 	"kuberoot.pod-cidr=", "kuberoot.service-cidr=", "kuberoot.pod-network=",
 	"kuberoot.distro=", "kuberoot.repo=", "kuberoot.repo-key=",
+	"kuberoot.fleet-center",
 }
 
 func consoleArgs() string { return carryArgs(readFile("/proc/cmdline")) }
