@@ -44,6 +44,10 @@ mkdir -p $r/usr/libexec/cni
 tar -xzf "$CACHE/cni-$CNI_VERSION.tgz" -C $r/usr/libexec/cni ./bridge ./host-local ./loopback ./portmap
 fetch "https://github.com/k3s-io/kine/releases/download/$KINE_VERSION/kine-$ARCH" "kine-$KINE_VERSION"
 install -m 0755 "$CACHE/kine-$KINE_VERSION" $r/usr/bin/kine
+# etcd: the store of a control plane that others join; etcdutl restores its snapshots.
+fetch "https://github.com/etcd-io/etcd/releases/download/$ETCD_VERSION/etcd-$ETCD_VERSION-linux-$ARCH.tar.gz" "etcd-$ETCD_VERSION-$ARCH.tgz"
+tar -xzf "$CACHE/etcd-$ETCD_VERSION-$ARCH.tgz" -C $r/usr/bin --strip-components=1 \
+  "etcd-$ETCD_VERSION-linux-$ARCH/etcd" "etcd-$ETCD_VERSION-linux-$ARCH/etcdutl"
 
 install -m 0755 "$OUT/kinit" $r/usr/sbin/kinit
 install -m 0755 "$OUT/kuberoot-node" "$OUT/kuberoot-installer" "$OUT/kuberoot-intents" "$OUT/kuberoot-router" "$OUT/kuberoot-vmctl" "$OUT/kuberoot-aictl" "$OUT/kuberoot-agent" "$OUT/kuberoot-devices" "$OUT/kubepkg" "$OUT/kubepkg-operator" $r/usr/bin/

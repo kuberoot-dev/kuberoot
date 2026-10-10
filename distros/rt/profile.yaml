@@ -47,7 +47,7 @@ spec:
     kernel.watchdog: "0"
   roles:
     controlPlane:
-      generators: [node, cluster, containers, kubelet]
+      generators: [node, cluster, etcd, containers, kubelet]
       addons: true
       packages: true
       services:
@@ -73,10 +73,12 @@ spec:
         - --pod-cidr={{.Net.Pod}}
         - --pod-network={{.Net.PodNetwork}}
         - --service-cidr={{.Net.Service}}
+        - '{{if eq .Store.Kind "etcd"}}--etcd{{end}}'
         - --latency-tests
       - name: containerd
         args: [/usr/bin/containerd, --config, /etc/containerd/config.toml]
       - name: kine
+        when: '{{eq .Store.Kind "kine"}}'
         args:
         - /usr/bin/kine
         - --endpoint
@@ -90,10 +92,36 @@ spec:
         # kine's own floor of 1000 revisions kept a quiet cluster's old
         # versions for hours, so list continuations never expired.
         - --compact-min-retain=100
+      # etcd, on a control plane that others join: one member per control
+      # plane, peers and clients authenticated with the store's own authority.
+      - name: etcd
+        when: '{{eq .Store.Kind "etcd"}}'
+        args:
+        - /usr/bin/etcd
+        - --name={{.Etcd.Name}}
+        - --data-dir=/var/lib/etcd
+        - --listen-client-urls={{.Etcd.ClientURLs}}
+        - --advertise-client-urls={{.Etcd.AdvertiseClientURL}}
+        - --listen-peer-urls={{.Etcd.PeerURL}}
+        - --initial-advertise-peer-urls={{.Etcd.PeerURL}}
+        - --initial-cluster={{.Etcd.InitialCluster}}
+        - --initial-cluster-state={{.Etcd.State}}
+        - --cert-file={{pki "etcd-server.crt"}}
+        - --key-file={{pki "etcd-server.key"}}
+        - --client-cert-auth
+        - --trusted-ca-file={{pki "etcd-ca.crt"}}
+        - --peer-cert-file={{pki "etcd-peer.crt"}}
+        - --peer-key-file={{pki "etcd-peer.key"}}
+        - --peer-client-cert-auth
+        - --peer-trusted-ca-file={{pki "etcd-ca.crt"}}
+        - --listen-metrics-urls=http://127.0.0.1:2381
       - name: kube-apiserver
         args:
         - /usr/bin/kube-apiserver
-        - --etcd-servers=unix:///run/kine/kine.sock
+        - --etcd-servers={{.Store.Servers}}
+        - '{{if eq .Store.Kind "etcd"}}--etcd-cafile={{pki "etcd-ca.crt"}}{{end}}'
+        - '{{if eq .Store.Kind "etcd"}}--etcd-certfile={{pki "apiserver-etcd-client.crt"}}{{end}}'
+        - '{{if eq .Store.Kind "etcd"}}--etcd-keyfile={{pki "apiserver-etcd-client.key"}}{{end}}'
         - --advertise-address={{.Node.IP}}
         - --secure-port=6443
         - --service-cluster-ip-range={{.Net.Service}}
@@ -145,7 +173,7 @@ spec:
         - --cluster-cidr={{.Net.Pod}}
         - --node-cidr-mask-size=24
         - --service-cluster-ip-range={{.Net.Service}}
-        - --leader-elect=false
+        - --leader-elect={{.Store.LeaderElect}}
       - name: kube-scheduler
         after: apiserver
         args:
@@ -153,7 +181,7 @@ spec:
         - --kubeconfig={{kube "scheduler.kubeconfig"}}
         - --authentication-kubeconfig={{kube "scheduler.kubeconfig"}}
         - --authorization-kubeconfig={{kube "scheduler.kubeconfig"}}
-        - --leader-elect=false
+        - --leader-elect={{.Store.LeaderElect}}
       - name: kubelet
         after: apiserver
         args:
@@ -195,6 +223,8 @@ spec:
         - --webhook-config=kubepkg-images
         - --metrics-bind-address=0
         - --health-probe-bind-address=0
+        # Several control planes run the operator; one of them acts.
+        - '{{if eq .Store.Kind "etcd"}}--leader-elect{{end}}'
         - '{{if .Boot.RepoPlainHTTP}}--plain-http{{end}}'
     worker:
       generators: [node, member, containers, kubelet]
@@ -211,6 +241,9 @@ spec:
         - --cluster-tls-private-key-file={{cluster "node-api.key"}}
         - --proxy-trust-ca-file={{cluster "ca.crt"}}
         - --routes-kubeconfig=/var/lib/kubelet/kubeconfig
+        # Several control planes: the cluster API, balanced on the node.
+        - '{{if .Member.Servers}}--api-servers={{.Member.Servers}}{{end}}'
+        - '{{if .Member.Servers}}--api-kubeconfig=/var/lib/kubelet/kubeconfig{{end}}'
         - --pod-cidr={{.Net.Pod}}
         - --pod-network={{.Net.PodNetwork}}
         - --latency-tests
