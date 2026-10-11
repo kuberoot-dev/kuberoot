@@ -99,3 +99,43 @@ func TestStoreKind(t *testing.T) {
 		t.Fatalf("default: %s", k)
 	}
 }
+
+func TestResourceStoreLabRunsInPlaceOfEtcd(t *testing.T) {
+	etcdstore.InitFile = filepath.Join(t.TempDir(), "etcd-init")
+	node := nodeInfo{name: "node-1", ip: net.ParseIP("192.168.100.11")}
+	for _, distro := range []string{"edge", "ai", "rt", "observability"} {
+		f := edgeFacts(false)
+		f.Store, f.Etcd = newStoreFacts(etcdstore.Etcd, node)
+		if e := servicesOf(t, distro, roleControlPlane, f)["etcd"]; !strings.HasPrefix(e, "/usr/bin/etcd ") {
+			t.Errorf("%s: etcd member: %s", distro, e)
+		}
+		f.Store, f.Etcd = newStoreFacts(etcdstore.KuberootStore, node)
+		lab := servicesOf(t, distro, roleControlPlane, f)
+		e := lab["etcd"]
+		if !strings.HasPrefix(e, "/usr/bin/kuberoot-store ") || !strings.Contains(e, "--initial-cluster=node-1=https://192.168.100.11:2380") {
+			t.Errorf("%s: lab store member: %s", distro, e)
+		}
+		if !strings.Contains(lab["kube-apiserver"], "--etcd-servers=https://127.0.0.1:2379") || !strings.Contains(lab["kuberoot-node"], "--etcd") {
+			t.Errorf("%s: the lab store is not reached as etcd is", distro)
+		}
+	}
+}
+
+func TestStoreKindOfTheLabStore(t *testing.T) {
+	dir := t.TempDir()
+	etcdstore.KindFile = filepath.Join(dir, "datastore")
+	labStoreBinary = filepath.Join(dir, "kuberoot-store")
+	// An image without the lab store creates its cluster on kine.
+	if k, err := storeKind(bootConfig{datastore: etcdstore.KuberootStore}); err != nil || k != etcdstore.Kine {
+		t.Fatalf("without the binary: %s %v", k, err)
+	}
+	if err := os.Remove(etcdstore.KindFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(labStoreBinary, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if k, err := storeKind(bootConfig{datastore: etcdstore.KuberootStore}); err != nil || k != etcdstore.KuberootStore {
+		t.Fatalf("with the binary: %s %v", k, err)
+	}
+}

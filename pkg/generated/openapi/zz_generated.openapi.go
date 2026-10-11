@@ -444,6 +444,13 @@ func schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref common.ReferenceCallbac
 							Format:      "",
 						},
 					},
+					"store": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Store is the kind of store the node runs a member of: etcd when empty, or kuberoot-store, the resource store lab in etcd's place.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"clusterCAKey", "frontProxyCAKey", "serviceAccountKey", "serviceAccountPub", "encryptionKey", "etcdCA", "etcdCAKey", "etcdInitialCluster"},
 			},

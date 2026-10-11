@@ -35,6 +35,8 @@ type bootConfig struct {
 	// datastore is the store of a cluster this node creates: kine, the
 	// default, for one control plane, or etcd, which other control planes
 	// can join. It is read once, when the cluster is created.
+	// kuberoot-store runs the resource store lab in etcd's place, on an
+	// image built with it (KUBEROOT_STORE_LAB=1); never a default.
 	datastore string
 	// fleetCenter makes the control plane the center of a fleet: it runs
 	// kuberoot-fleet, which nodes behind NAT call. Its value is where the

@@ -179,5 +179,8 @@ func controlPlaneShare(pkiDir string) (*nodev1.ControlPlaneShare, error) {
 		}
 		*dst = v
 	}
+	if k := etcdstore.Kind(); k != etcdstore.Etcd {
+		share.Store = k
+	}
 	return share, nil
 }
