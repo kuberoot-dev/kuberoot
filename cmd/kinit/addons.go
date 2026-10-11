@@ -236,6 +236,15 @@ func apiServerReady() bool {
 	}
 	resp, err := client.Get(apiServer + "/readyz")
 	if err != nil {
+		// The credentials may have changed under it: a control plane that
+		// joins another cluster takes that cluster's authority and admin
+		// certificate, and the old client never passes TLS again.
+		readyMu.Lock()
+		if readyClient == client {
+			readyClient = nil
+			client.CloseIdleConnections()
+		}
+		readyMu.Unlock()
 		return false
 	}
 	resp.Body.Close()
