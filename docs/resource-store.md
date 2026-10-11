@@ -227,10 +227,13 @@ Peers talk over HTTP or HTTPS with mutual certificates: Raft's messages in
 batches, one ordered queue per peer, and snapshots apart.
 
 `Maintenance.Snapshot` streams a copy of the state file, and
-`kuberoot-store snapshot restore FILE --data-dir DIR` makes a store of one
-member from it (keys, revisions and leases; not members, log or remembered
-requests), as `etcdutl snapshot restore` does for etcd. The format is the
-store's own: etcd and etcdutl cannot read it.
+`kuberoot-store snapshot restore FILE --data-dir DIR` makes a new store
+from it, with etcdutl's `--name`, `--initial-cluster` and
+`--initial-advertise-peer-urls` (keys, revisions and leases; not members,
+log or remembered requests), as `etcdutl snapshot restore` does for etcd.
+The new log starts with a Raft snapshot of the restored state, so a member
+that joins later is sent the state rather than an empty log. The format is
+the store's own: etcd and etcdutl cannot read it.
 
 ### What the API server needs that the etcd API does not spell out
 
@@ -304,10 +307,51 @@ disk etcd stalls the same way.
 
 ### A cluster on the store, and conformance
 
-Not measured yet: the stand for it (three control planes on the lab store,
-`store1`–`store3`, booted from an image built with the lab) could not start,
-the workshop cluster's machines having no memory free for its virtual
-machines.
+Three virtual machines (2 vCPU, 2.5 GiB each) boot the edge image built
+with the lab and `kuberoot.datastore=kuberoot-store`, and go through the
+same path as a cluster on etcd:
+
+1. Booted from the media, each node creates a cluster of its own on the
+   lab store: one member.
+2. An `Installation` writes each onto its disk, carrying its store as a
+   snapshot (`Maintenance.Snapshot`). Booted from the disk, the node
+   restores it (`kuberoot-store snapshot restore`): the first node keeps
+   its cluster, the node created 26 minutes before.
+3. A `JoinTicket` on the first node adds the second as a learner; applied
+   as the second node's `Membership`, it joins the store, gets the state as
+   a snapshot (at log index 218; the third at 304), is promoted by the node API, and its kubelet,
+   controller manager and scheduler start. A voting member 16 s after the
+   membership was applied, the node Ready after 22 s; the third, the same,
+   16 s and 23 s. The API servers of all three read the same objects (one
+   `kube-system` UID through each).
+
+Two bugs showed only on this path, and were fixed: a restored store started
+a new log at index 1 while its state held the restored keys, so a joining
+member replayed a log with none of them and its API server saw an empty
+cluster (the log of a restored store now starts with a Raft snapshot of
+that state); and kinit kept the readiness client built from the joining
+node's own admin certificate, so after the node took the cluster's
+authority its kubelet and controllers waited until a reboot (the client is
+now built again after a failed request; this one is not the lab store's,
+it holds for etcd too).
+
+Conformance (hydrophone, Kubernetes v1.37.1, one thread) on this
+cluster: **462 of 462 passed** in 1 h 58 min.
+
+A first run passed 461. The one that failed checks that a list
+continuation expires once its revision is compacted: it takes the first
+page and asks for the next every 20 seconds for 10 minutes, until the
+API server answers that the continuation is too old. The API server
+compacts every 5 minutes, to the revision it recorded at the previous
+round, so a revision is compacted 5 to 10 minutes after it was written.
+The store compacted on time: a probe of the oldest readable revision
+every 30 seconds showed a compaction every 5 minutes, each to the
+revision current 5 minutes before. In that run the first page came 1.5 s
+after a round of the compactor, so its revision was compacted only at
+the round 10 minutes later, a few seconds after the test had stopped
+asking. On its own the test passed in 5.6 minutes, and the second full
+run passed it. Nothing was changed in the store for it; on etcd the
+same timing would fail the same way.
 
 ## Not done
 
