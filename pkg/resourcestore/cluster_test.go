@@ -374,10 +374,10 @@ func TestRestoreFromASnapshot(t *testing.T) {
 	}
 	rc.Close()
 	m := newMember(t, "restored", nil)
-	if err := Restore(file, m.dir); err != nil {
+	if err := Restore(file, m.dir, m.name, map[string][]string{m.name: {m.peerURL}}, ""); err != nil {
 		t.Fatal(err)
 	}
-	m.start(map[string][]string{m.name: {m.peerURL}}, "new")
+	m.start(nil, "")
 	waitLeader(t, []*member{m})
 	g, err := m.client.Get(ctx, "/k", clientv3.WithPrefix())
 	if err != nil || len(g.Kvs) != 20 || g.Header.Revision != last {
@@ -390,6 +390,24 @@ func TestRestoreFromASnapshot(t *testing.T) {
 	l, err := m.client.MemberList(ctx)
 	if err != nil || len(l.Members) != 1 || l.Members[0].ID != m.node.ID() {
 		t.Fatalf("members after the restore: %v %v", l, err)
+	}
+	// A member that joins the restored store gets what was restored, not
+	// only what was written since: the log of a restored store starts with
+	// a snapshot of its state.
+	j := newMember(t, "joined", nil)
+	add, err := m.client.MemberAddAsLearner(ctx, []string{j.peerURL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.start(map[string][]string{m.name: {m.peerURL}, j.name: {j.peerURL}}, "existing")
+	eventually(t, "the joined member holds the restored keys", func() bool { return localValue(j, "/k19") == "v" })
+	eventually(t, "promotion", func() bool {
+		_, err := m.client.MemberPromote(ctx, add.Member.ID)
+		return err == nil
+	})
+	g, err = j.client.Get(ctx, "/k", clientv3.WithPrefix())
+	if err != nil || len(g.Kvs) != 20 || g.Header.Revision != last+1 {
+		t.Fatalf("on the joined member: %d keys at %d, want 20 at %d: %v", len(g.Kvs), g.Header.Revision, last+1, err)
 	}
 }
 

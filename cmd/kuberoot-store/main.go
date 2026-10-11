@@ -284,24 +284,33 @@ func run(f flags) error {
 	return nil
 }
 
-// restore makes a data directory from a snapshot. It takes etcdutl's
-// flags; the member's name and peers are those it is started with.
+// restore makes a data directory from a snapshot, with etcdutl's flags:
+// the member's name, the new store's members and its token.
 func restore(args []string) error {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return errors.New("usage: kuberoot-store snapshot restore FILE --data-dir DIR")
+		return errors.New("usage: kuberoot-store snapshot restore FILE --data-dir DIR [--name N --initial-cluster N=URL,... --initial-advertise-peer-urls URL]")
 	}
 	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
 	dataDir := fs.String("data-dir", "", "the member's data directory to create")
-	fs.String("name", "", "ignored: the member is named when it starts")
-	fs.String("initial-cluster", "", "ignored: the member starts a store of its own")
-	fs.String("initial-advertise-peer-urls", "", "ignored: taken when the member starts")
+	name := fs.String("name", "default", "this member's name in --initial-cluster")
+	initial := fs.String("initial-cluster", "", "the new store's members, name=peer-URL,... (default: this member alone)")
+	peers := fs.String("initial-advertise-peer-urls", "http://127.0.0.1:2380", "this member's peer URLs, when --initial-cluster is not given")
+	token := fs.String("initial-cluster-token", "etcd-cluster", "the store's token, part of member IDs")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	if *dataDir == "" {
 		return errors.New("--data-dir is required")
 	}
-	return resourcestore.Restore(args[0], *dataDir)
+	self, err := splitURLs(*peers)
+	if err != nil {
+		return err
+	}
+	cluster, err := parseCluster(*initial, *name, self)
+	if err != nil {
+		return err
+	}
+	return resourcestore.Restore(args[0], *dataDir, *name, cluster, *token)
 }
 
 func metrics(n *resourcestore.Node) http.Handler {
