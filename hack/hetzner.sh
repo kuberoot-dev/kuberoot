@@ -75,7 +75,7 @@ case "${1:-}" in
       tar -C "$(dirname "$d")" -czf - "$(basename "$d")" | tools tar -xzf - -C /work/recipes
     done
     tools sh -c "set -e
-      [ -x /work/bin/kubepkg ] || GOBIN=/work/bin go install github.com/kuberoot-dev/kubepkg/cmd/kubepkg@v1.2.0
+      [ -x /work/bin/kubepkg ] || GOBIN=/work/bin go install github.com/kuberoot-dev/kubepkg/cmd/kubepkg@v1.3.0
       [ -f /work/keys/repo.key ] || /work/bin/kubepkg repo keygen /work/keys/repo >/dev/null
       rm -rf /work/dist && mkdir -p /work/dist /work/out/repo
       for r in /work/recipes/*; do /work/bin/kubepkg build \$r --registry oci://$ip:5000/kubepkg-packages -o /work/dist --plain-http | tail -1; done
