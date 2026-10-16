@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,9 @@ type Agent struct {
 	mu     sync.Mutex
 	status AgentStatus
 	poke   chan struct{}
+	// broken is the server whose connection ended last: tried last next
+	// time, since a center that went away is likely the one still gone.
+	broken string
 }
 
 func (a *Agent) file() string { return filepath.Join(a.StateDir, "enrollment.json") }
@@ -83,14 +87,22 @@ func (a *Agent) Load() (*Enrollment, error) {
 	return e, json.Unmarshal(raw, e)
 }
 
-// Save replaces the enrollment and has the agent act on it at once.
+// Save replaces the enrollment and has the agent act on it at once. New
+// addresses of the same fleet, the server connected to among them, keep the
+// connection: they are used when it ends.
 func (a *Agent) Save(e *Enrollment) error {
 	if err := os.MkdirAll(a.StateDir, 0o700); err != nil {
 		return err
 	}
+	prev, _ := a.Load()
 	raw, _ := json.Marshal(e)
 	if err := atomicfile.WriteFile(a.file(), raw, 0o600); err != nil {
 		return err
+	}
+	st := a.Status()
+	if prev != nil && prev.Enrolled && e.Enrolled && prev.Name == e.Name && prev.CAHash == e.CAHash &&
+		st.Phase == AgentConnected && slices.Contains(e.Servers, st.Server) {
+		return nil
 	}
 	a.changed()
 	return nil
@@ -204,7 +216,7 @@ func (a *Agent) once(ctx context.Context, e *Enrollment) (bool, error) {
 		return false, fmt.Errorf("the node's authority: %w", err)
 	}
 	var lastErr error
-	for _, server := range e.Servers {
+	for _, server := range a.order(e.Servers) {
 		if !e.Enrolled {
 			if err := a.enroll(ctx, server, e, caPEM); err != nil {
 				lastErr = fmt.Errorf("enroll at %s: %w", server, err)
@@ -231,12 +243,28 @@ func (a *Agent) once(ctx context.Context, e *Enrollment) (bool, error) {
 		since := time.Now()
 		a.setStatus(AgentStatus{Phase: AgentConnected, Server: server, ConnectedSince: since})
 		serveTunnel(ctx, conn, local)
+		a.mu.Lock()
+		a.broken = server
+		a.mu.Unlock()
 		return true, fmt.Errorf("connection to %s closed after %s", server, time.Since(since).Round(time.Second))
 	}
 	if lastErr == nil {
 		lastErr = errors.New("no server to connect to")
 	}
 	return false, lastErr
+}
+
+// order puts the server whose connection ended last at the end.
+func (a *Agent) order(servers []string) []string {
+	a.mu.Lock()
+	broken := a.broken
+	a.mu.Unlock()
+	i := slices.Index(servers, broken)
+	if i < 0 || len(servers) < 2 {
+		return servers
+	}
+	out := append(slices.Clone(servers[:i]), servers[i+1:]...)
+	return append(out, broken)
 }
 
 // saveQuiet records the enrollment without restarting the agent.
@@ -346,7 +374,9 @@ func (c *bufferedConn) Read(p []byte) (int, error) { return c.r.Read(p) }
 // serveTunnel serves HTTP/2 on the node's connection: the center is the
 // client, the node the server, though the node dialed.
 func serveTunnel(ctx context.Context, conn net.Conn, h http.Handler) {
-	srv := &http2.Server{ReadIdleTimeout: 45 * time.Second, PingTimeout: 15 * time.Second}
+	// The center pings every 15 seconds: a center that stops, without
+	// closing the connection, is found gone in under 40.
+	srv := &http2.Server{ReadIdleTimeout: 20 * time.Second, PingTimeout: 15 * time.Second}
 	done := make(chan struct{})
 	go func() {
 		select {
