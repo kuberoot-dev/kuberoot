@@ -22,6 +22,11 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/gorilla/websocket"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/kuberoot-dev/kuberoot/pkg/pki"
 )
 
 // fakeProvider is an OpenID provider that signs in whoever it is told to,
@@ -320,5 +325,70 @@ func TestRDPNeedsATicket(t *testing.T) {
 	}
 	if pkt := <-got; string(pkt) != string(connectionRequest("")) {
 		t.Errorf("the desktop got %x", pkt)
+	}
+}
+
+func TestCertificatesFromTheClusterCAOrTheSecret(t *testing.T) {
+	ca, _, _, err := pki.NewAuthority("cluster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Certificates{Authority: ca, Names: []string{"gw"}, IPs: []net.IP{net.IPv4(10, 0, 0, 1)}}
+	issued, err := c.GetCertificate(nil)
+	if err != nil || issued.Leaf.DNSNames[0] != "gw" || !issued.Leaf.IPAddresses[0].Equal(net.IPv4(10, 0, 0, 1)) {
+		t.Fatalf("issued %v %v", issued, err)
+	}
+	if err := issued.Leaf.CheckSignatureFrom(ca.Certificate()); err != nil {
+		t.Fatalf("not the cluster CA's: %v", err)
+	}
+	other, _, _, _ := pki.NewAuthority("own")
+	certPEM, keyPEM, _ := other.Issue(pki.Spec{CommonName: "own", DNSNames: []string{"workspaces.example.org"}, Server: true})
+	if err := c.SetCustom(certPEM, keyPEM); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.GetCertificate(nil); got == issued {
+		t.Error("the Secret's certificate is not served")
+	}
+	if err := c.SetCustom([]byte("junk"), []byte("junk")); err == nil {
+		t.Error("a broken certificate was taken")
+	}
+	_ = c.SetCustom(nil, nil)
+	if got, _ := c.GetCertificate(nil); got != issued {
+		t.Error("without the Secret the issued certificate is not served again")
+	}
+}
+
+func TestGatewaySettingsFollowTheSecrets(t *testing.T) {
+	kube := fake.NewSimpleClientset()
+	g := &Gateway{}
+	c := &Controller{Kube: kube, Gateway: g}
+	c.gatewaySettings(context.Background())
+	if g.currentAuth() != nil {
+		t.Fatal("single sign-on on without its Secret")
+	}
+	secrets := kube.CoreV1().Secrets(Namespace)
+	s := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: OIDCSecret, Namespace: Namespace},
+		Data: map[string][]byte{"issuerURL": []byte("https://sso.example.org"), "clientID": []byte("ws")}}
+	_, _ = secrets.Create(context.Background(), s, metav1.CreateOptions{})
+	c.gatewaySettings(context.Background())
+	a := g.currentAuth()
+	if a == nil || a.Config.IssuerURL != "https://sso.example.org" || a.Config.UsernameClaim != "preferred_username" {
+		t.Fatalf("auth %+v", a)
+	}
+	c.gatewaySettings(context.Background())
+	if g.currentAuth() != a {
+		t.Error("an unchanged Secret made a new Auth, signing everyone out")
+	}
+	// A broken setting keeps the gateway closed rather than open by tokens.
+	s.Data["issuerURL"] = []byte("http://plain")
+	_, _ = secrets.Update(context.Background(), s, metav1.UpdateOptions{})
+	c.gatewaySettings(context.Background())
+	if a := g.currentAuth(); a == nil || a.Config.IssuerURL == "http://plain" {
+		t.Fatalf("broken setting: %+v", a)
+	}
+	_ = secrets.Delete(context.Background(), OIDCSecret, metav1.DeleteOptions{})
+	c.gatewaySettings(context.Background())
+	if g.currentAuth() != nil {
+		t.Error("single sign-on stayed on after its Secret went")
 	}
 }
