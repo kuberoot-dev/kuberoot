@@ -24,7 +24,7 @@ const downloadDir = "/var/lib/kuberoot/upgrade"
 const ReleaseKeys = "/usr/share/kuberoot/release.pub"
 
 // Fetch downloads a release bundle (a tar of vmlinuz.efi, initrd.cpio,
-// rootfs.squashfs and VERSION) and its signature, url + ".sig". Nothing is
+// rootfs.squashfs, VERSION and, for some kernels, kernel.args) and its signature, url + ".sig". Nothing is
 // unpacked before the signature checks out against the image's release keys.
 func Fetch(ctx context.Context, url, sum string, report func(done, total int64)) (bootdisk.Artifacts, error) {
 	a := bootdisk.Artifacts{Dir: downloadDir, Arch: archName(), ConsoleArg: installer.CurrentBootArgs()}
@@ -128,7 +128,7 @@ func unpack(bundle string) error {
 		}
 		name := filepath.Base(h.Name)
 		switch name {
-		case "vmlinuz.efi", "initrd.cpio", "rootfs.squashfs", "VERSION":
+		case "vmlinuz.efi", "initrd.cpio", "rootfs.squashfs", "VERSION", bootdisk.KernelArgsFile:
 		default:
 			continue
 		}

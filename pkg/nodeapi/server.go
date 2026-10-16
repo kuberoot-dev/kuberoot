@@ -3,6 +3,7 @@ package nodeapi
 import (
 	"context"
 	cryptox509 "crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -389,6 +390,10 @@ func withRequestHost(h http.Handler) http.Handler {
 func setupGPUs(ctx context.Context) {
 	for i := 0; i < 30 && ctx.Err() == nil; i++ {
 		gpus, err := gpu.Setup()
+		if errors.Is(err, gpu.ErrUnsupported) {
+			klog.Warningf("GPUs: %v", err)
+			return
+		}
 		if err == nil {
 			if len(gpus) > 0 {
 				klog.Infof("GPUs: %d ready for containers", len(gpus))

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the kuberoot kernel. Runs in the builder (hack/hetzner.sh), natively for
-# its architecture; sources and objects stay in $WORK between builds. A
+# Builds the kuberoot kernel. Runs in the builder (hack/hetzner.sh), natively or
+# with a cross compiler; sources and objects stay in $WORK between builds. A
 # distribution with a kernel fragment of its own (distros/<name>/kernel.config,
 # picked by KUBEROOT_DISTRO) gets a kernel of its own, built apart.
 # JOBS bounds the compilers run at once; all CPUs by default.
@@ -28,6 +28,9 @@ if [ ! -d "linux-$KVER" ]; then
 fi
 cd "linux-$KVER"
 O=$(kernel_build_dir "$WORK" "$KARCH")
+kernel_cross "$KARCH"
+# The arm64 EFI image pads the kernel to its size in memory, read with hexdump.
+[ "$ARCH" != arm64 ] || command -v hexdump >/dev/null || { apt-get -qq update && apt-get -qq install -y bsdextrautils >/dev/null; }
 make -s ARCH=$KARCH O="$O" defconfig
 frags="$ROOT/kernel/base.config"
 for f in "$ARCH.config" "$@"; do [ -f "$ROOT/kernel/$f" ] && frags="$frags $ROOT/kernel/$f"; done
@@ -43,4 +46,12 @@ grep -q "=m$" "$O/.config" && { echo "modules left in the kernel config:" >&2; g
 cp "$O/$IMAGE" "$OUT/vmlinuz.efi"
 cp "$O/.config" "$OUT/kernel.config"
 echo "${KFLAVOUR:-base}" > "$OUT/kernel.flavour"
+# An arm64 kernel takes either the boot loader's arguments or its own, never
+# both: the flavour's own arguments travel next to the kernel instead, as
+# kernel.args, and go into its boot entries.
+rm -f "$OUT/kernel.args"
+if [ "$ARCH" = arm64 ]; then
+  args=$(sed -n 's/^CONFIG_CMDLINE="\(.*\)"$/\1/p' "$O/.config")
+  [ -z "$args" ] || echo "$args" > "$OUT/kernel.args"
+fi
 echo "kernel: $OUT/vmlinuz.efi ($(du -h "$OUT/vmlinuz.efi" | cut -f1))"

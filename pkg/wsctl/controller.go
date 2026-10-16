@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	goruntime "runtime"
 	"sort"
 	"time"
 
@@ -28,11 +29,12 @@ const (
 	Namespace = "workstation"
 	// FirstRDPPort is where the gateway's RDP ports start, one a workspace.
 	FirstRDPPort = 33890
-	// DefaultImage is the desktop's image when a workspace names none.
-	DefaultImage = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
 )
 
 var (
+	// DefaultImage is the desktop's image when a workspace names none, for
+	// the architecture of the cluster's machines.
+	DefaultImage  = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-" + goruntime.GOARCH + ".img"
 	workspacesGVR = v1.GroupVersion.WithResource("workspaces")
 	vmsGVR        = vmv1.GroupVersion.WithResource("virtualmachines")
 )

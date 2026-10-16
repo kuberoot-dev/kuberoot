@@ -4,6 +4,8 @@
 # accepts no other, and the user space of the same release (the CUDA driver
 # library, NVML, nvidia-smi and the GSP firmware the modules load). Runs in
 # the builder; the ai distribution's extras.sh puts the tree in its image.
+# The driver is shipped for amd64 only: on arm64 nothing is built, and the
+# image's GPUs stay unused (pkg/gpu says so to whoever asks for them).
 # Usage: scripts/build-nvidia.sh <arch: amd64|arm64>
 set -euo pipefail
 
@@ -13,7 +15,11 @@ WORK=${WORK:-/work}
 OUT=${KUBEROOT_OUT:-$ROOT/out}/$ARCH
 . "$ROOT/build/components.env"
 V=$NVIDIA_DRIVER_VERSION
-case "$ARCH" in amd64) KARCH=x86_64; NARCH=x86_64 ;; arm64) KARCH=arm64; NARCH=aarch64 ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
+case "$ARCH" in
+  amd64) KARCH=x86_64; NARCH=x86_64 ;;
+  arm64) rm -rf "$OUT/nvidia"; echo "nvidia: the driver is shipped for amd64 only, the $ARCH image has no GPU support"; exit 0 ;;
+  *) echo "unknown arch $ARCH" >&2; exit 1 ;;
+esac
 . "$ROOT/scripts/kernel-flavour.sh"
 O=$(kernel_build_dir "$WORK" "$KARCH")
 KREL=$(cat "$O/include/config/kernel.release")
@@ -35,7 +41,7 @@ x="$WORK/src/nvidia-userspace-$NARCH-$V"
 [ -d "$x" ] || sh "$run" --extract-only --target "$x" >/dev/null
 # The libraries go beside the glibc runtime build-binaries.sh carries, where
 # its loader looks without a cache.
-case "$ARCH" in amd64) libdir=/lib/x86_64-linux-gnu; sysroot=/ ;; arm64) libdir=/lib/aarch64-linux-gnu; sysroot=/usr/aarch64-linux-gnu ;; esac
+libdir=/lib/x86_64-linux-gnu; sysroot=/
 tree="$OUT/nvidia"
 rm -rf "$tree"
 mkdir -p "$tree/usr/bin" "$tree$libdir" "$tree/lib/firmware/nvidia/$V"
@@ -59,12 +65,9 @@ done
 
 # The CDI hook: containers given the driver's libraries need their loader's
 # cache refreshed to find them; the device plugin's CDI descriptions call it.
-# It links NVML's loader with cgo, so it is built for the builder's own
-# architecture, against the glibc the image carries.
-if [ "$ARCH" = amd64 ]; then
-  GOBIN="$tree/usr/bin" CGO_ENABLED=1 GOFLAGS=-mod=mod \
-    go install "github.com/NVIDIA/nvidia-container-toolkit/cmd/nvidia-cdi-hook@$NVIDIA_CONTAINER_TOOLKIT_VERSION" 2>/dev/null
-fi
+# It links NVML's loader with cgo, against the glibc the image carries.
+GOBIN="$tree/usr/bin" CGO_ENABLED=1 GOFLAGS=-mod=mod \
+  go install "github.com/NVIDIA/nvidia-container-toolkit/cmd/nvidia-cdi-hook@$NVIDIA_CONTAINER_TOOLKIT_VERSION" 2>/dev/null
 
 # nvidia drives the GPU, nvidia-uvm is the memory CUDA needs, nvidia-modeset
 # what the display side links against. nvidia-drm and peermem stay out: no
