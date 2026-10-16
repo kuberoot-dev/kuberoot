@@ -29,6 +29,8 @@ fi
 cd "linux-$KVER"
 O=$(kernel_build_dir "$WORK" "$KARCH")
 kernel_cross "$KARCH"
+# The arm64 EFI image pads the kernel to its size in memory, read with hexdump.
+[ "$ARCH" != arm64 ] || command -v hexdump >/dev/null || { apt-get -qq update && apt-get -qq install -y bsdextrautils >/dev/null; }
 make -s ARCH=$KARCH O="$O" defconfig
 frags="$ROOT/kernel/base.config"
 for f in "$ARCH.config" "$@"; do [ -f "$ROOT/kernel/$f" ] && frags="$frags $ROOT/kernel/$f"; done

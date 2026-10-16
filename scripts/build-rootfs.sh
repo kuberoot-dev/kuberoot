@@ -28,7 +28,7 @@ mkdir -p $r/etc/apk/keys
 if [ "$(apk --print-arch)" = "$APK_ARCH" ]; then
   cp -r /etc/apk/keys/. $r/etc/apk/keys/
 else
-  cp -r /usr/share/apk/keys/$APK_ARCH/. $r/etc/apk/keys/
+  cp -rL /usr/share/apk/keys/$APK_ARCH/. $r/etc/apk/keys/
 fi
 cp /etc/apk/repositories $r/etc/apk/
 # The distribution may need more programs than the base (distros/<name>/apk).
