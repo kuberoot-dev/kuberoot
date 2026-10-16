@@ -90,6 +90,20 @@ func main() {
 		}
 		center := &fleet.Center{Dyn: dyn, Kube: kube, Namespace: *namespace, CAHash: fleet.Hash(ca.Certificate()),
 			Servers: servers, EnrollmentTTL: *enrollmentTTL, Settle: *settle}
+		if *leaderElect {
+			center.Leading = func(ctx context.Context) bool {
+				l, err := kube.CoordinationV1().Leases(*namespace).Get(ctx, fleet.LeaseName, metav1.GetOptions{})
+				if err != nil {
+					klog.Errorf("fleet: read the Lease: %v", err)
+					return false
+				}
+				if h := l.Spec.HolderIdentity; h == nil || *h != *identity {
+					// Hung past the lease: another replica leads now.
+					klog.Fatalf("fleet: the Lease is held by another replica, not %s", *identity)
+				}
+				return true
+			}
+		}
 		hub := &fleet.Hub{Cert: cert, Identity: center.Identity, Enroll: center.Enroll, Changed: center.Changed,
 			Authorize: center.Authorize, UserCAs: users}
 		center.Hub = hub

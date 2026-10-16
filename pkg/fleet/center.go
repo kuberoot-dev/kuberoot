@@ -68,6 +68,10 @@ type Center struct {
 	// connected get to connect again before they count as offline and
 	// rollouts move on: a new leader does not take a takeover for an outage.
 	Settle time.Duration
+	// Leading, when set, says whether this replica still leads, as the
+	// cluster sees it: a replica that hung and woke up acts on nothing
+	// before its own leader election notices.
+	Leading func(ctx context.Context) bool
 
 	locks   sync.Map // node name -> *sync.Mutex
 	poke    chan struct{}
@@ -124,6 +128,9 @@ func (c *Center) Run(ctx context.Context) {
 }
 
 func (c *Center) pass(ctx context.Context) {
+	if c.Leading != nil && !c.Leading(ctx) {
+		return
+	}
 	nodes, err := c.listNodes(ctx)
 	if err != nil {
 		klog.Errorf("fleet: list nodes: %v", err)
@@ -180,6 +187,9 @@ func (c *Center) pass(ctx context.Context) {
 	}
 	if settling {
 		return // rollouts would see the nodes not back yet as offline
+	}
+	if c.Leading != nil && !c.Leading(ctx) {
+		return
 	}
 	if err := c.reconcileRollouts(ctx); err != nil {
 		klog.Errorf("fleet: rollouts: %v", err)
