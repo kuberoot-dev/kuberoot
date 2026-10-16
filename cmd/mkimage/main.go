@@ -21,7 +21,7 @@ func main() {
 	var out string
 	var dev bool
 	var extra, trustDir string
-	flag.StringVar(&a.Dir, "artifacts", "", "directory with vmlinuz.efi, initrd.cpio, rootfs.squashfs, systemd-boot.efi")
+	flag.StringVar(&a.Dir, "artifacts", "", "directory with vmlinuz.efi, initrd.cpio, rootfs.squashfs, systemd-boot.efi and, if the kernel has them, kernel.args")
 	flag.StringVar(&a.Arch, "arch", "arm64", "target architecture")
 	flag.StringVar(&a.Version, "version", "0.1.0-dev", "release version")
 	flag.StringVar(&out, "out", "", "image file to create")
@@ -65,6 +65,9 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 		"/kuberoot/initrd.cpio":     a.Dir + "/initrd.cpio",
 		"/kuberoot/rootfs.squashfs": a.Dir + "/rootfs.squashfs",
 	}
+	if _, err := os.Stat(a.Dir + "/" + bootdisk.KernelArgsFile); err == nil {
+		files["/kuberoot/"+bootdisk.KernelArgsFile] = a.Dir + "/" + bootdisk.KernelArgsFile
+	}
 	var content int64
 	for _, src := range files {
 		st, err := os.Stat(src)
@@ -100,7 +103,7 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 		Initrd:  "/kuberoot/initrd.cpio",
 		Options: strings.Join([]string{
 			"kuberoot.root=PARTLABEL=" + bootdisk.MediaLabel + ":/kuberoot/rootfs.squashfs",
-			"kuberoot.mode=install", "quiet", a.ConsoleArg,
+			"kuberoot.mode=install", "quiet", a.BootArgs(),
 		}, " "),
 	}
 	if err := bootdisk.WriteFile(fs, "/loader/entries/kuberoot-install.conf", strings.NewReader(install.String())); err != nil {
