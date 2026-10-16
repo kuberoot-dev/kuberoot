@@ -181,6 +181,9 @@ spec:
         - --kubeconfig={{kube "admin.kubeconfig"}}
         - --listen=:7443
         - --servers={{.Boot.FleetCenter}}
+        # Every control plane booted as a center is a replica; the one
+        # holding the Lease kube-system/kuberoot-fleet leads.
+        - --identity={{.Node.Name}}
         - --user-client-ca-file={{pki "ca.crt"}}
       # Intents: lowers Apps to primitives and runs Overrides.
       - name: kuberoot-intents

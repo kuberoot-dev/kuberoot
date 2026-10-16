@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -60,9 +61,33 @@ type Center struct {
 	Servers []string
 	// CAHash pins the center in enrollments.
 	CAHash string
+	// EnrollmentTTL is how long an enrollment token works, unless the
+	// FleetNode says otherwise; 0 is no limit.
+	EnrollmentTTL time.Duration
+	// Settle is how long, after this center starts leading, nodes that were
+	// connected get to connect again before they count as offline and
+	// rollouts move on: a new leader does not take a takeover for an outage.
+	Settle time.Duration
+	// Leading, when set, says whether this replica still leads, as the
+	// cluster sees it: a replica that hung and woke up acts on nothing
+	// before its own leader election notices.
+	Leading func(ctx context.Context) bool
 
-	locks sync.Map // node name -> *sync.Mutex
-	poke  chan struct{}
+	locks   sync.Map // node name -> *sync.Mutex
+	poke    chan struct{}
+	started time.Time
+	// known are the addresses of every replica, as of this pass.
+	known atomic.Pointer[[]string]
+	// settling: this pass is within Settle and nodes are still coming back.
+	settling atomic.Bool
+}
+
+// replicaServers are the addresses of every replica, as of the last pass.
+func (c *Center) replicaServers() []string {
+	if k := c.known.Load(); k != nil && len(*k) > 0 {
+		return *k
+	}
+	return c.Servers
 }
 
 func (c *Center) lock(name string) *sync.Mutex {
@@ -88,6 +113,7 @@ func (c *Center) pokes() chan struct{} {
 // Run reconciles every few seconds, and at once when a node connects.
 func (c *Center) Run(ctx context.Context) {
 	c.pokes()
+	c.started = time.Now()
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 	for {
@@ -102,16 +128,34 @@ func (c *Center) Run(ctx context.Context) {
 }
 
 func (c *Center) pass(ctx context.Context) {
+	if c.Leading != nil && !c.Leading(ctx) {
+		return
+	}
 	nodes, err := c.listNodes(ctx)
 	if err != nil {
 		klog.Errorf("fleet: list nodes: %v", err)
 		return
 	}
 	// A node whose FleetNode is gone is out of the fleet, connected or not.
+	servers := c.servers(ctx)
+	c.known.Store(&servers)
 	known := map[string]bool{}
+	missing := 0
 	for _, n := range nodes {
 		known[n.Name] = true
+		if _, ok := c.Hub.Connected(n.Name); !ok && n.Status.Phase == v1.PhaseConnected {
+			missing++
+		}
 	}
+	settling := missing > 0 && time.Since(c.started) < c.Settle
+	if settling != c.settling.Load() {
+		if settling {
+			klog.Infof("fleet: waiting up to %s for %d nodes connected before to connect again", c.Settle, missing)
+		} else if time.Since(c.started) < 2*c.Settle {
+			klog.Infof("fleet: settled, %d nodes connected before are not back", missing)
+		}
+	}
+	c.settling.Store(settling)
 	for _, name := range c.Hub.Names() {
 		if !known[name] {
 			klog.Infof("fleet: %s is no longer in the fleet: closing its connection", name)
@@ -140,6 +184,12 @@ func (c *Center) pass(ctx context.Context) {
 	select {
 	case <-done:
 	case <-time.After(20 * time.Second):
+	}
+	if settling {
+		return // rollouts would see the nodes not back yet as offline
+	}
+	if c.Leading != nil && !c.Leading(ctx) {
+		return
 	}
 	if err := c.reconcileRollouts(ctx); err != nil {
 		klog.Errorf("fleet: rollouts: %v", err)
@@ -193,6 +243,18 @@ func (c *Center) Identity(ctx context.Context, name string) string {
 // EnrollmentSecret names the Secret with a node's one-time enrollment.
 func EnrollmentSecret(node string) string { return "fleet-enroll-" + node }
 
+// AnnotationExpires is when an enrollment Secret's token stops working, RFC 3339.
+const AnnotationExpires = "fleet.kuberoot.dev/expires"
+
+// tokenExpires reads when an enrollment's token stops working; zero is never.
+func tokenExpires(sec *corev1.Secret) (time.Time, error) {
+	v, ok := sec.Annotations[AnnotationExpires]
+	if !ok {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, v)
+}
+
 // Enroll checks a node's token against its enrollment, pins the node's
 // authority and spends the token.
 func (c *Center) Enroll(ctx context.Context, req EnrollRequest, from string) error {
@@ -213,12 +275,16 @@ func (c *Center) Enroll(ctx context.Context, req EnrollRequest, from string) err
 	if err != nil || subtle.ConstantTimeCompare(sec.Data["token"], []byte(req.Token)) != 1 {
 		return errors.New("token refused")
 	}
+	// Only the holder of the right token learns that it expired.
+	if exp, err := tokenExpires(sec); err != nil || (!exp.IsZero() && !time.Now().Before(exp)) {
+		return fmt.Errorf("token expired at %s: ask for a new enrollment", exp.UTC().Format(time.RFC3339))
+	}
 	ca, err := PEMCert([]byte(req.CA))
 	if err != nil || !ca.IsCA {
 		return errors.New("the node's certificate authority is not one")
 	}
 	n.Status.Identity = Hash(ca)
-	n.Status.Phase, n.Status.Enrollment = v1.PhaseOffline, ""
+	n.Status.Phase, n.Status.Enrollment, n.Status.EnrollmentExpires = v1.PhaseOffline, "", nil
 	n.Status.Message = "enrolled from " + from
 	if err := c.writeStatus(ctx, nodesGVR, n); err != nil {
 		return fmt.Errorf("record the enrollment: %w", err)
@@ -230,27 +296,35 @@ func (c *Center) Enroll(ctx context.Context, req EnrollRequest, from string) err
 }
 
 // enrollment makes sure a node that has not enrolled has a token, in a
-// Secret with the FleetEnrollment to apply to the node.
-func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, error) {
+// Secret with the FleetEnrollment to apply to the node, and returns when the
+// token expires, zero for never. Deleting the Secret revokes the token: the
+// next pass issues a new one.
+func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, time.Time, error) {
 	name := EnrollmentSecret(n.Name)
-	if _, err := c.Kube.CoreV1().Secrets(c.Namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-		return name, nil
+	servers := c.replicaServers()
+	if sec, err := c.Kube.CoreV1().Secrets(c.Namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		exp, err := tokenExpires(sec)
+		if err != nil {
+			return name, exp, err
+		}
+		// Replicas came or went: the unused enrollment names them all.
+		manifest, err := enrollmentManifest(n.Name, servers, c.CAHash, string(sec.Data["token"]))
+		if err == nil && !bytes.Equal(manifest, sec.Data["enrollment.yaml"]) {
+			sec.Data["enrollment.yaml"] = manifest
+			_, err = c.Kube.CoreV1().Secrets(c.Namespace).Update(ctx, sec, metav1.UpdateOptions{})
+		}
+		return name, exp, err
 	} else if !apierrors.IsNotFound(err) {
-		return "", err
+		return "", time.Time{}, err
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
-	manifest, err := yaml.Marshal(map[string]any{
-		"apiVersion": nodev1.SchemeGroupVersion.String(),
-		"kind":       "FleetEnrollment",
-		"metadata":   map[string]any{"name": "center"},
-		"spec":       map[string]any{"name": n.Name, "servers": c.Servers, "caHash": c.CAHash, "token": token},
-	})
+	manifest, err := enrollmentManifest(n.Name, servers, c.CAHash, token)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	sec := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.Namespace,
@@ -259,16 +333,38 @@ func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, error
 			OwnerReferences: []metav1.OwnerReference{{APIVersion: v1.GroupVersion.String(), Kind: "FleetNode", Name: n.Name, UID: n.UID}}},
 		Data: map[string][]byte{"token": []byte(token), "enrollment.yaml": manifest},
 	}
-	_, err = c.Kube.CoreV1().Secrets(c.Namespace).Create(ctx, sec, metav1.CreateOptions{})
-	return name, err
+	ttl := c.EnrollmentTTL
+	if n.Spec.EnrollmentTTL != nil {
+		ttl = n.Spec.EnrollmentTTL.Duration
+	}
+	var exp time.Time
+	if ttl > 0 {
+		exp = time.Now().Add(ttl).Truncate(time.Second)
+		sec.Annotations = map[string]string{AnnotationExpires: exp.UTC().Format(time.RFC3339)}
+	}
+	if _, err = c.Kube.CoreV1().Secrets(c.Namespace).Create(ctx, sec, metav1.CreateOptions{}); err != nil {
+		return "", time.Time{}, err
+	}
+	klog.Infof("fleet: %s: enrollment issued in Secret %s/%s", n.Name, c.Namespace, name)
+	return name, exp, nil
+}
+
+func enrollmentManifest(node string, servers []string, caHash, token string) ([]byte, error) {
+	return yaml.Marshal(map[string]any{
+		"apiVersion": nodev1.SchemeGroupVersion.String(),
+		"kind":       "FleetEnrollment",
+		"metadata":   map[string]any{"name": "center"},
+		"spec":       map[string]any{"name": node, "servers": servers, "caHash": caHash, "token": token},
+	})
 }
 
 // observed is what the center reads of a node.
 type observed struct {
-	os       nodev1.OSConfig
-	entries  []nodev1.BootEntry
-	services []nodev1.NodeService
-	upgrades []nodev1.Upgrade
+	os         nodev1.OSConfig
+	entries    []nodev1.BootEntry
+	services   []nodev1.NodeService
+	upgrades   []nodev1.Upgrade
+	enrollment *nodev1.FleetEnrollment
 }
 
 const nodeAPI = "https://node/apis/node.kuberoot.dev/v1alpha1/"
@@ -299,7 +395,9 @@ func (c *Center) observe(ctx context.Context, client *http.Client) (*observed, e
 	var entries nodev1.BootEntryList
 	var services nodev1.NodeServiceList
 	var upgrades nodev1.UpgradeList
-	for resource, into := range map[string]any{"osconfigs": &oses, "bootentries": &entries, "nodeservices": &services, "upgrades": &upgrades} {
+	var enrollments nodev1.FleetEnrollmentList
+	for resource, into := range map[string]any{"osconfigs": &oses, "bootentries": &entries, "nodeservices": &services, "upgrades": &upgrades,
+		"fleetenrollments": &enrollments} {
 		if err := get(ctx, client, resource, into); err != nil {
 			return nil, err
 		}
@@ -308,18 +406,16 @@ func (c *Center) observe(ctx context.Context, client *http.Client) (*observed, e
 		o.os = oses.Items[0]
 	}
 	o.entries, o.services, o.upgrades = entries.Items, services.Items, upgrades.Items
+	if len(enrollments.Items) > 0 {
+		o.enrollment = &enrollments.Items[0]
+	}
 	return &o, nil
 }
 
-// createUpgrade stages a release on the node; it reboots into it when staged.
-func createUpgrade(ctx context.Context, client *http.Client, r v1.Release) error {
-	u := nodev1.Upgrade{
-		TypeMeta:   metav1.TypeMeta{APIVersion: nodev1.SchemeGroupVersion.String(), Kind: "Upgrade"},
-		ObjectMeta: metav1.ObjectMeta{Name: UpgradeName(r)},
-		Spec:       nodev1.UpgradeSpec{URL: r.URL, Sha256: r.Sha256, Reboot: true},
-	}
-	body, _ := json.Marshal(u)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nodeAPI+"upgrades", bytes.NewReader(body))
+// send writes a resource to the node API.
+func send(ctx context.Context, client *http.Client, method, resource string, obj any) error {
+	body, _ := json.Marshal(obj)
+	req, err := http.NewRequestWithContext(ctx, method, nodeAPI+resource, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -337,21 +433,60 @@ func createUpgrade(ctx context.Context, client *http.Client, r v1.Release) error
 	if json.Unmarshal(raw, &status) == nil && status.Message != "" {
 		return &apierrors.StatusError{ErrStatus: status}
 	}
-	return fmt.Errorf("create upgrade: %s", resp.Status)
+	return fmt.Errorf("%s %s: %s", method, resource, resp.Status)
+}
+
+// shareServers gives a connected node every replica's address, so it finds
+// the next leader when this one is gone. The node stays connected.
+func (c *Center) shareServers(ctx context.Context, client *http.Client, name string, e *nodev1.FleetEnrollment) {
+	known := c.replicaServers()
+	if e == nil || len(known) == 0 || sameServers(e.Spec.Servers, known) {
+		return
+	}
+	next := nodev1.FleetEnrollment{
+		TypeMeta:   metav1.TypeMeta{APIVersion: nodev1.SchemeGroupVersion.String(), Kind: "FleetEnrollment"},
+		ObjectMeta: metav1.ObjectMeta{Name: e.Name},
+		Spec:       nodev1.FleetEnrollmentSpec{Name: e.Spec.Name, Servers: known, CAHash: e.Spec.CAHash},
+	}
+	if err := send(ctx, client, http.MethodPut, "fleetenrollments/"+e.Name, next); err != nil {
+		klog.Errorf("fleet: %s: give it the center's addresses: %v", name, err)
+		return
+	}
+	klog.Infof("fleet: %s: now knows the center at %v", name, known)
+}
+
+// createUpgrade stages a release on the node; it reboots into it when staged.
+func createUpgrade(ctx context.Context, client *http.Client, r v1.Release) error {
+	return send(ctx, client, http.MethodPost, "upgrades", nodev1.Upgrade{
+		TypeMeta:   metav1.TypeMeta{APIVersion: nodev1.SchemeGroupVersion.String(), Kind: "Upgrade"},
+		ObjectMeta: metav1.ObjectMeta{Name: UpgradeName(r)},
+		Spec:       nodev1.UpgradeSpec{URL: r.URL, Sha256: r.Sha256, Reboot: true},
+	})
 }
 
 func (c *Center) reconcileNode(ctx context.Context, n *v1.FleetNode) error {
 	st := n.Status.DeepCopy()
 	if st.Identity == "" {
-		secret, err := c.enrollment(ctx, n)
+		secret, exp, err := c.enrollment(ctx, n)
 		if err != nil {
 			return err
 		}
-		st.Phase, st.Enrollment = v1.PhasePending, secret
+		st.Phase, st.Enrollment, st.EnrollmentExpires = v1.PhasePending, secret, nil
 		st.Message = fmt.Sprintf("apply the FleetEnrollment in Secret %s/%s to the node", c.Namespace, secret)
+		if !exp.IsZero() {
+			t := metav1.NewTime(exp)
+			st.EnrollmentExpires = &t
+			if !time.Now().Before(exp) {
+				st.Message = fmt.Sprintf("the enrollment token expired at %s: delete Secret %s/%s to issue a new one",
+					exp.UTC().Format(time.RFC3339), c.Namespace, secret)
+			}
+		}
 		return c.updateNode(ctx, n, st)
 	}
 	conn, ok := c.Hub.Connected(n.Name)
+	if !ok && c.settling.Load() && n.Status.Phase == v1.PhaseConnected {
+		return nil // it was connected to the last leader: give it time to come back
+	}
 	if !ok {
 		// What it ran when last seen stays; how it is now is not known.
 		st.Phase, st.Address, st.ConnectedSince, st.Health = v1.PhaseOffline, "", nil, "Unknown"
@@ -374,6 +509,7 @@ func (c *Center) reconcileNode(ctx context.Context, n *v1.FleetNode) error {
 	st.LastSeen = &now
 	describe(st, o)
 	c.relabel(ctx, n, o)
+	c.shareServers(octx, client, n.Name, o.enrollment)
 	if n.Spec.Release == nil {
 		st.Update = nil
 		return c.updateNode(ctx, n, st)
@@ -473,7 +609,7 @@ func (c *Center) reconcileRollouts(ctx context.Context) error {
 	for _, n := range nodes {
 		_, connected := c.Hub.Connected(n.Name)
 		views[n.Name] = nodeView{Labels: n.Labels, Connected: connected, Release: n.Spec.Release, Update: n.Status.Update,
-			Rollout: n.Annotations[AnnotationRollout]}
+			Rollout: n.Annotations[AnnotationRollout], Enrolled: n.Status.Identity != ""}
 	}
 	created := map[string]metav1.Time{}
 	for _, u := range list.Items {

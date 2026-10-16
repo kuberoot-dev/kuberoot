@@ -256,3 +256,55 @@ func TestPinsBothWays(t *testing.T) {
 	}
 	conn.Close()
 }
+
+// A node told of a second center replica stays connected; when its center
+// goes away it connects to the other one.
+func TestFailoverToAnotherReplica(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	firstCtx, stopFirst := context.WithCancel(ctx)
+	f, api := newTestFleet(t, firstCtx)
+	first := f.addr
+	a := f.agent(api)
+	if err := a.Save(&Enrollment{Name: "shop-1", Servers: []string{first}, CAHash: f.centerPin, Token: "t0k3n"}); err != nil {
+		t.Fatal(err)
+	}
+	go a.Run(ctx)
+	waitConnected(t, f, "shop-1")
+
+	// The second replica: the same authority and pins, as replicas share them.
+	second := &Hub{Cert: f.hub.Cert, Identity: f.hub.Identity, Enroll: f.hub.Enroll, Changed: f.hub.Changed}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = second.ServeListener(ctx, ln) }()
+
+	e, _ := a.Load()
+	e.Servers = []string{first, ln.Addr().String()}
+	if err := a.Save(e); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case name := <-f.connected:
+		t.Fatalf("%s reconnected for new addresses", name)
+	case <-time.After(2 * time.Second):
+	}
+	if _, ok := f.hub.Connected("shop-1"); !ok {
+		t.Fatal("not connected to the first replica any more")
+	}
+
+	stopFirst()
+	<-f.connected // the first replica saw it go
+	select {
+	case <-f.connected:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the node did not connect to the second replica")
+	}
+	if _, ok := second.Connected("shop-1"); !ok {
+		t.Fatal("not connected to the second replica")
+	}
+	if a.Status().Server != ln.Addr().String() {
+		t.Errorf("agent %+v", a.Status())
+	}
+}

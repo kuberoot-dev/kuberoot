@@ -36,7 +36,7 @@ func TestWaveSizes(t *testing.T) {
 func fleetOf(names ...string) map[string]nodeView {
 	out := map[string]nodeView{}
 	for _, n := range names {
-		out[n] = nodeView{Labels: map[string]string{"site": "shop"}, Connected: true}
+		out[n] = nodeView{Labels: map[string]string{"site": "shop"}, Connected: true, Enrolled: true}
 	}
 	return out
 }
@@ -213,5 +213,83 @@ func TestRolloutPauseSoakSelector(t *testing.T) {
 	}
 	if nodes["lab"].Release != nil {
 		t.Error("the selector let lab in")
+	}
+}
+
+// A node that enrolls while a rollout is under way joins its last wave: it
+// waits for the waves before it, then takes the release with the rest.
+func TestRolloutLateNodes(t *testing.T) {
+	nodes := fleetOf("f1", "f2", "f3")
+	r := rollout(v1.FleetRolloutSpec{Release: v2, Waves: []intstr.IntOrString{intstr.FromInt32(1), intstr.FromString("100%")}})
+	now := time.Now()
+	advance(t, r, nodes, now)
+
+	// late enrolls during wave 1; pending, an unenrolled node stays out.
+	for name, n := range fleetOf("late", "pending") {
+		if name == "pending" {
+			n.Enrolled = false
+		}
+		nodes[name] = n
+	}
+	if got := advance(t, r, nodes, now); got != nil {
+		t.Fatalf("a late node went ahead of wave 1: %v", got)
+	}
+	if len(r.Status.Nodes) != 4 || !r.Status.Nodes[3].Late || r.Status.Nodes[3].Wave != 2 || r.Status.Nodes[3].Name != "late" {
+		t.Fatalf("late node not in the last wave: %+v", r.Status.Nodes)
+	}
+	if r.Status.Nodes[1].Wave != 2 || r.Status.Nodes[0].Wave != 1 {
+		t.Fatalf("a late node moved the others: %+v", r.Status.Nodes)
+	}
+	setPhase(nodes, "f1", v1.UpdateUpdated)
+	if got := advance(t, r, nodes, now); !reflect.DeepEqual(got, []string{"f2", "f3", "late"}) {
+		t.Fatalf("wave 2 = %v", got)
+	}
+
+	// In the last wave already, a node that enrolls now gets it at once.
+	nodes["later"] = fleetOf("later")["later"]
+	if got := advance(t, r, nodes, now); !reflect.DeepEqual(got, []string{"later"}) {
+		t.Fatalf("joining the wave under way: %v", got)
+	}
+	for _, n := range []string{"f2", "f3", "late", "later"} {
+		setPhase(nodes, n, v1.UpdateUpdated)
+	}
+	advance(t, r, nodes, now)
+	if r.Status.Phase != v1.RolloutComplete || r.Status.Updated != "5/5" {
+		t.Fatalf("status %+v", r.Status)
+	}
+	// Complete is final: a node enrolling now waits for the next rollout.
+	nodes["after"] = fleetOf("after")["after"]
+	if got := advance(t, r, nodes, now); got != nil || len(r.Status.Nodes) != 5 {
+		t.Errorf("a complete rollout took a node: %v, %+v", got, r.Status.Nodes)
+	}
+}
+
+func TestRolloutLateNodesIgnore(t *testing.T) {
+	nodes := fleetOf("f1", "f2")
+	r := rollout(v1.FleetRolloutSpec{Release: v2, LateNodes: v1.LateNodesIgnore})
+	advance(t, r, nodes, time.Now())
+	nodes["late"] = fleetOf("late")["late"]
+	advance(t, r, nodes, time.Now())
+	if len(r.Status.Nodes) != 2 {
+		t.Errorf("Ignore let a late node in: %+v", r.Status.Nodes)
+	}
+}
+
+// A node that has not enrolled when the rollout starts is not waited for:
+// it joins when it enrolls.
+func TestRolloutPicksEnrolledNodes(t *testing.T) {
+	nodes := fleetOf("f1", "f2")
+	v := nodes["f2"]
+	v.Enrolled, v.Connected = false, false
+	nodes["f2"] = v
+	r := rollout(v1.FleetRolloutSpec{Release: v2, Waves: []intstr.IntOrString{intstr.FromString("100%")}})
+	advance(t, r, nodes, time.Now())
+	if len(r.Status.Nodes) != 1 || r.Status.Nodes[0].Name != "f1" {
+		t.Fatalf("picked %+v", r.Status.Nodes)
+	}
+	v.Enrolled, v.Connected = true, true
+	nodes["f2"] = v
+	if got := advance(t, r, nodes, time.Now()); !reflect.DeepEqual(got, []string{"f2"}) || !r.Status.Nodes[1].Late {
+		t.Errorf("after enrolling: %v, %+v", got, r.Status.Nodes)
 	}
 }

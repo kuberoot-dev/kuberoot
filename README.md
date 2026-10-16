@@ -289,7 +289,7 @@ A lab, not for clusters that matter: [a store in the model of Kubernetes resourc
 
 Shops, towers and plants each run a node of their own, a cluster of one, often behind NAT and on a poor link. A fleet manages them from one central cluster, the center, without inbound ports on the nodes: every node calls the center and keeps the connection open, and the center reaches the node API through it, HTTP/2 inside the connection the node dialed. The center is `kuberoot-fleet`, which the edge control plane runs when booted with `kuberoot.fleet-center` (or `kuberoot.fleet-center=<host:port>,...` to name the address nodes reach it at through NAT); it applies its own resources, so any cluster can run it with a kubeconfig. The node side is part of the node API, nothing to install, no containers.
 
-A node joins with a one-time token. Creating a `FleetNode` in the center issues it: a Secret in `kube-system` holds a ready `FleetEnrollment`, which an operator on site, or the boot media, applies to the node:
+A node joins with a one-time token. Creating a `FleetNode` in the center issues it: a Secret in `kube-system` holds a ready `FleetEnrollment`, which an operator on site, or the boot media, applies to the node. The token expires a day after it is issued (`--enrollment-ttl` of the center, or the FleetNode's `spec.enrollmentTTL`; `0` for no limit), when it is shown in the FleetNode's `status.enrollmentExpires`; an expired token is refused. Deleting the Secret revokes the token, and the center issues a new one in its place:
 
 ```yaml
 apiVersion: fleet.kuberoot.dev/v1alpha1
@@ -304,7 +304,7 @@ spec:
   name: shop-12
   servers: [fleet.example.org:7443]
   caHash: sha256:4769fc58...   # the center's authority, pinned
-  token: ...                   # works once
+  token: ...                   # works once, until it expires
 ```
 
 Both ends are pinned. The node talks only to a center whose authority hashes to `caHash`. When the token is spent, the center pins the node's own authority, the one every kuberoot node has for its node API, and from then on opens the node's connection only for a client certificate that authority issued for the node's name. Deleting the FleetNode, or the node's FleetEnrollment, ends the membership.
@@ -329,11 +329,13 @@ spec:
   soak: 30m                     # optional: how long a wave runs before the next
 ```
 
-The nodes are fixed when the rollout starts and taken in order of name. A wave starts once every node of the waves before it is updated (and has soaked, if asked). A node that rolls the release back or cannot stage it is a failure, and more than `maxFailures` stop the rollout: the nodes it has not reached keep what they run, and a stopped rollout starts again only when its spec changes. `paused: true` holds the next wave. A node that is offline when its wave comes holds the wave (`Wait`) or is left behind (`Skip`); either way its release is set and it takes it when it connects again. A node keeps running without the center; the center only acts when it hears from the node. A node belongs to the newest rollout that gave it a release.
+The nodes are picked when the rollout starts, of those that have enrolled, and taken in order of name. A node that enrolls or gets the selector's labels later joins the last wave while the rollout is under way (`lateNodes: Join`, the default; `Ignore` leaves it out): it never goes ahead of the waves that test the release, and a rollout that is Complete or Stopped takes no more nodes. A wave starts once every node of the waves before it is updated (and has soaked, if asked). A node that rolls the release back or cannot stage it is a failure, and more than `maxFailures` stop the rollout: the nodes it has not reached keep what they run, and a stopped rollout starts again only when its spec changes. `paused: true` holds the next wave. A node that is offline when its wave comes holds the wave (`Wait`) or is left behind (`Skip`); either way its release is set and it takes it when it connects again. A node keeps running without the center; the center only acts when it hears from the node. A node belongs to the newest rollout that gave it a release.
 
 The center also serves a connected node's API to its users, at `https://<center>:7443/nodes/<name>/`: `kubectl` with the center's client certificate and the center's authority (ConfigMap `kube-system/kuberoot-fleet-ca`, server name `kuberoot-fleet`) reaches the node's `nodeservices`, `bootentries` and the rest, for whoever the center's RBAC allows `get` on `fleetnodes/proxy`.
 
-What it does not do yet: the center is one process, not highly available; the center acts on a node as a node admin, so whoever holds the center holds the fleet; tokens do not expire on their own (delete the FleetNode to revoke one); nodes added after a rollout started are not in it; the node's own cluster API (pods, `devices`) is not reached through the center, only its node API; and it was tried on four nodes, not thousands.
+The center runs as several replicas: every control plane of a highly available edge cluster booted with `kuberoot.fleet-center` runs one, and any cluster can run more with a kubeconfig. The replica holding the Lease `kube-system/kuberoot-fleet` leads: it alone listens on 7443 and acts, while the others wait without listening, so nodes, and a load balancer if there is one, find it by who answers. Every replica writes the addresses it is reached at into the ConfigMap `kube-system/kuberoot-fleet-centers`; enrollments name them all, and the leader gives every connected node the full list without breaking its connection. When the leader goes away, a node tries the other addresses until the next leader answers, and the new leader waits a little (`--settle`, two minutes) for the nodes connected before to come back before it counts them offline or moves a rollout on. A leader that loses the Lease exits and starts over as a follower. Everything the center knows is in its cluster's resources, so nothing is lost on a takeover: a rollout goes on from the wave it was in, and nodes that were updating report how it went when they connect again. Run outside kuberoot, the center needs, besides the fleet API, Leases, ConfigMaps and Secrets in its namespace.
+
+What it does not do yet: the center acts on a node as a node admin, so whoever holds the center holds the fleet; the node's own cluster API (pods, `devices`) is not reached through the center, only its node API; and it was tried on four nodes, not thousands.
 
 ## Node API
 
