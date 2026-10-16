@@ -375,7 +375,7 @@ func (r *etcdRotator) apply(ctx context.Context, rot *etcdstore.Rotation) error 
 		if err := etcdstore.Trust(next...); err != nil {
 			return err
 		}
-		return r.restart(ctx, true)
+		return r.restart(ctx)
 	case etcdstore.PhaseReissuing:
 		if rot.Authority {
 			keyPEM, err := etcdstore.Unseal(rot.NewCAKey)
@@ -394,24 +394,21 @@ func (r *etcdRotator) apply(ctx context.Context, rot *etcdstore.Rotation) error 
 		if err != nil {
 			return err
 		}
-		if err := etcdstore.ReissueLeaves(ca); err != nil {
-			return err
-		}
-		// Members' connections to each other outlive certificates; the
-		// restart makes this one present its new certificate now.
-		return r.restart(ctx, false)
+		// etcd and its clients read their certificates on each connection:
+		// new connections present the new ones, open ones are not cut.
+		return etcdstore.ReissueLeaves(ca)
 	case etcdstore.PhaseDropping:
 		if err := etcdstore.Trust(); err != nil {
 			return err
 		}
-		return r.restart(ctx, true)
+		return r.restart(ctx)
 	}
 	return fmt.Errorf("unknown phase %q", rot.Phase)
 }
 
-// restart restarts the member, then, if asked, the API server, each once
-// the one before answers.
-func (r *etcdRotator) restart(ctx context.Context, apiServer bool) error {
+// restart restarts the member, then the API server, each once the one
+// before answers.
+func (r *etcdRotator) restart(ctx context.Context) error {
 	if err := r.restartService(ctx, "etcd", func(ctx context.Context) error {
 		c, err := etcdstore.Client()
 		if err != nil {
@@ -422,9 +419,6 @@ func (r *etcdRotator) restart(ctx context.Context, apiServer bool) error {
 		return err
 	}); err != nil {
 		return err
-	}
-	if !apiServer {
-		return nil
 	}
 	return r.restartService(ctx, "kube-apiserver", func(ctx context.Context) error {
 		body, err := r.admin.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
