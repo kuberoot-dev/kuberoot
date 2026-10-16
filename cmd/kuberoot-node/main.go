@@ -14,9 +14,14 @@ import (
 
 	"github.com/kuberoot-dev/kuberoot/pkg/distro"
 	"github.com/kuberoot-dev/kuberoot/pkg/nodeapi"
+	"github.com/kuberoot-dev/kuberoot/pkg/rt"
 )
 
 func main() {
+	// The node runs itself as the probe of deadline latency tests.
+	if len(os.Args) > 1 && os.Args[1] == rt.ProbeCommand {
+		os.Exit(rt.ProbeMain(os.Args[2:]))
+	}
 	var o nodeapi.Options
 	var kubeconfigs string
 	hostname, _ := os.Hostname()

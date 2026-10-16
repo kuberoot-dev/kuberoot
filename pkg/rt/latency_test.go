@@ -141,3 +141,18 @@ func TestCPUsKeepsOnlyOnlineTicklessCPUs(t *testing.T) {
 		t.Fatalf("format: %q", got)
 	}
 }
+
+func TestValidateDeadlineTest(t *testing.T) {
+	if err := Validate(node.LatencyTestSpec{Policy: "deadline"}); err != nil {
+		t.Errorf("defaults: %v", err)
+	}
+	if d := Defaults(node.LatencyTestSpec{Policy: "deadline", IntervalMicroseconds: 500}); d.RuntimeMicroseconds != 50 {
+		t.Errorf("runtime %d, want 50", d.RuntimeMicroseconds)
+	}
+	if err := Validate(node.LatencyTestSpec{Policy: "deadline", RuntimeMicroseconds: 2000}); err == nil {
+		t.Error("runtime longer than the interval was accepted")
+	}
+	if err := Validate(node.LatencyTestSpec{Policy: "edf"}); err == nil {
+		t.Error("unknown policy was accepted")
+	}
+}
