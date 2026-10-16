@@ -35,17 +35,14 @@ foreign() {
 rm -rf "$OUT/glibc"
 sysroot=""
 [ "$(dpkg --print-architecture)" = "$ARCH" ] || sysroot=$(foreign libc6)
-multiarch=$(cd "$sysroot/" && ls -d lib/*-linux-gnu | head -1)
+# By the target's triplet: a builder with cross compilers has other
+# architectures' directories under /lib too.
+case "$ARCH" in amd64) multiarch=lib/x86_64-linux-gnu ;; arm64) multiarch=lib/aarch64-linux-gnu ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
 mkdir -p "$OUT/glibc/$multiarch"
 for l in libc.so.6 libresolv.so.2 libpthread.so.0; do cp -L "$sysroot/$multiarch/$l" "$OUT/glibc/$multiarch/"; done
-for loader in lib/ld-linux-*.so.* lib64/ld-linux-*.so.*; do [ -e "$sysroot/$loader" ] && break; done
+case "$ARCH" in amd64) loader=lib64/ld-linux-x86-64.so.2 ;; arm64) loader=lib/ld-linux-aarch64.so.1 ;; esac
 mkdir -p "$OUT/glibc/$(dirname "$loader")"
-# The loader may link into the multiarch directory, which is carried too.
-if [ -L "$sysroot/$loader" ] && [ ! -e "$(readlink -f "$sysroot/$loader")" ]; then
-  cp -L "$sysroot/$multiarch/$(basename "$loader")" "$OUT/glibc/$loader"
-else
-  cp -L "$sysroot/$loader" "$OUT/glibc/$loader"
-fi
+(cd "$sysroot/$(dirname "$loader")" && cp -L "$(basename "$loader")" "$OUT/glibc/$loader")
 [ -z "$sysroot" ] || rm -rf "$(dirname "$sysroot")"
 
 # Release bundles must be signed with this key; a development key is made once.
