@@ -7,13 +7,35 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Each architecture kuberoot ships, on a runner of its own: the tests run
+    # natively, not under emulation.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    name: test (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: gofmt
+        if: matrix.arch == 'amd64'
         run: test -z "$(gofmt -l cmd pkg)" || { gofmt -l cmd pkg; exit 1; }
       - run: go vet ./...
       - run: go test ./...
+      # Every binary the root filesystem carries, for this architecture, as
+      # build-binaries.sh builds them; the pinned kubepkg too.
+      - name: build
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath ./cmd/...
+          cd build/kubepkg && go build -trimpath github.com/kuberoot-dev/kubepkg/cmd/kubepkg github.com/kuberoot-dev/kubepkg/cmd/kubepkg-operator
