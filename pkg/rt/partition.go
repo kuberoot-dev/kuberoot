@@ -27,8 +27,10 @@ func read(path string) string {
 	return strings.TrimSpace(string(raw))
 }
 
+// write sets a cgroup file; with a newline, so that an empty value is a
+// write too.
 func write(path, value string) error {
-	if err := os.WriteFile(path, []byte(value), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(value+"\n"), 0o644); err != nil {
 		return fmt.Errorf("%s: %w", strings.TrimPrefix(path, CgroupRoot+"/"), err)
 	}
 	return nil

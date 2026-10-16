@@ -122,6 +122,14 @@ func TestRelease(t *testing.T) {
 	if got := read(filepath.Join(root, "kubepods/cpuset.cpus.exclusive")); got != "3" {
 		t.Errorf("exclusive %q, want 3", got)
 	}
+	// The last pod gone: the file is written empty.
+	os.RemoveAll(filepath.Join(root, "kubepods/podA"))
+	if err := Release("kubepods"); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(root, "kubepods/cpuset.cpus.exclusive")); string(raw) != "\n" {
+		t.Errorf("exclusive %q, want an empty write", raw)
+	}
 }
 
 func TestFirstProcess(t *testing.T) {
