@@ -186,11 +186,40 @@ spec:
     mqtt: {broker: "tcp://broker.plant:1883", topic: factory/press-7/alarm, qos: 1}
 ```
 
-A Device is read on its schedule over one Modbus TCP connection. Its status shows whether it answers, and its values (`kubectl get devices` lists them). A Route sends every reading to an MQTT topic, or, with `when`, a CEL expression over the device's points, only each time the expression becomes true. A route that keeps its device and condition across a change remembers whether the condition held, so a change does not send the same alarm twice.
+A Device is read on its schedule over one Modbus TCP connection, or over a serial line, or from an OPC UA server. Its status shows whether it answers, and its values (`kubectl get devices` lists them). A Route sends every reading to an MQTT topic, or, with `when`, a CEL expression over the device's points, only each time the expression becomes true. A route that keeps its device and condition across a change remembers whether the condition held, so a change does not send the same alarm twice.
+
+Devices on an RS-485 line take `protocol: modbus-rtu`, the serial port as the address, and their own unit addresses. Devices on one port share it: the node opens the port once and they take turns on it, so their requests never interleave, and one that stops answering leaves the line working for the others. A line runs at one speed and framing, so devices that ask a port for different `serial` settings are refused. The kernel has the usual USB adapters (FTDI, CH34x, CP210x, PL2303) and CDC ACM devices.
+
+```yaml
+apiVersion: devices.kuberoot.dev/v1alpha1
+kind: Device
+metadata: {name: meter-3}
+spec:
+  protocol: modbus-rtu
+  address: /dev/ttyUSB0
+  unitID: 3
+  serial: {baudRate: 19200, parity: even}   # 9600 8N1 when left out
+  points:
+  - {name: power, kind: input, register: 12, type: float32, unit: kW}
+---
+apiVersion: devices.kuberoot.dev/v1alpha1
+kind: Device
+metadata: {name: line-2}
+spec:
+  protocol: opc-ua
+  address: opc.tcp://10.0.5.30:4840
+  opcua: {securityPolicy: Basic256Sha256, subscribe: true}
+  credentials: {name: line-2-opcua}   # tls.crt, tls.key, server.crt or ca.crt; username, password
+  points:
+  - {name: speed, nodeID: "ns=2;s=Line2.Speed", unit: "m/min"}
+  - {name: jammed, nodeID: "ns=2;s=Line2.Jammed", type: bool}
+```
+
+An OPC UA device is read by node ID: every point in one request each period, or, with `subscribe`, the server reports changes, sampled each period, and the node keeps what it last sent. Values carry their own types; `type: bool` makes a route take one as true or false. With `Basic256Sha256` the node presents its certificate and key from the credentials (`tls.crt`, `tls.key`, an RSA key, with the application URI the certificate names) and trusts the server only by a pinned `server.crt` or a CA in `ca.crt`, or with `tls.insecureSkipVerify`. A username and password go when the credentials hold them. `hack/plc-sim` plays both: `plc-sim serve -rtu` serves its PLC over RTU framing on a TCP socket, which a VM's serial port can connect to, and `opcua_sim.py` is an OPC UA server on asyncua, an implementation other than the client's.
 
 Changes run on trial under a Safeguard (`kind: Safeguard`, named `default`). A change that makes a device that was answering go silent, or a broker that was taking messages unreachable, is undone at once: the node goes back to the last confirmed configuration, keeps it across reboots, and marks the resources it does not run `RolledBack` with the reason. A change that runs its trial healthy becomes final by itself, or only by `spec.confirm` with `autoConfirm: false`.
 
-Why without pods: a gateway does one job, close to the devices, often on small hardware and with nobody nearby. Here the protocol code, the configuration and the operating system are one image, upgraded together with A/B slots and rolled back together. The configuration is typed and checked when it is written. It goes through RBAC and audit, can be reviewed like code, and is undone by itself when it cuts a device off. On a test node the whole system took about 630 MiB, most of it the API server; `kuberoot-devices` took 35 MiB.
+Why without pods: a gateway does one job, close to the devices, often on small hardware and with nobody nearby. Here the protocol code, the configuration and the operating system are one image, upgraded together with A/B slots and rolled back together. The configuration is typed and checked when it is written. It goes through RBAC and audit, can be reviewed like code, and is undone by itself when it cuts a device off. On a test node the whole system took about 630 MiB, most of it the API server; `kuberoot-devices` took 35 MiB, and 42 MiB reading a Modbus device and an OPC UA server over Basic256Sha256.
 
 ## The observability distribution
 

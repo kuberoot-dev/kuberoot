@@ -53,18 +53,27 @@ type Device struct {
 	Status DeviceStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="self.protocol != 'modbus-tcp' || (has(self.points) && size(self.points) > 0)",message="a Modbus device needs points"
+// +kubebuilder:validation:XValidation:rule="!(self.protocol in ['modbus-tcp', 'modbus-rtu']) || (has(self.points) && size(self.points) > 0)",message="a Modbus device needs points"
+// +kubebuilder:validation:XValidation:rule="self.protocol != 'modbus-rtu' || self.address.startsWith('/dev/')",message="a Modbus RTU device's address is its serial port, as /dev/ttyUSB0"
+// +kubebuilder:validation:XValidation:rule="self.protocol == 'modbus-rtu' || !has(self.serial)",message="serial is for modbus-rtu"
+// +kubebuilder:validation:XValidation:rule="self.protocol != 'opc-ua' || self.address.startsWith('opc.tcp://')",message="an OPC UA device's address is its endpoint, as opc.tcp://host:4840"
+// +kubebuilder:validation:XValidation:rule="self.protocol != 'opc-ua' || (has(self.points) && size(self.points) > 0 && self.points.all(p, has(p.nodeID)))",message="an OPC UA device needs points with a nodeID"
+// +kubebuilder:validation:XValidation:rule="self.protocol == 'opc-ua' || !has(self.opcua)",message="opcua is for opc-ua"
+// +kubebuilder:validation:XValidation:rule="!has(self.opcua) || self.opcua.securityPolicy == 'None' || has(self.credentials)",message="an OPC UA security policy needs credentials with the client's certificate and key"
 // +kubebuilder:validation:XValidation:rule="self.protocol != 'snmp' || (has(self.points) && size(self.points) > 0 && self.points.all(p, has(p.oid)))",message="an SNMP device needs points with an oid"
 type DeviceSpec struct {
-	// Protocol the device speaks: modbus-tcp; snmp; redfish, a server's
-	// BMC; or a probe of a service: http, tcp, icmp.
-	// +kubebuilder:validation:Enum=modbus-tcp;snmp;redfish;http;tcp;icmp
+	// Protocol the device speaks: modbus-tcp; modbus-rtu, Modbus over a
+	// serial line; opc-ua; snmp; redfish, a server's BMC; or a probe of a
+	// service: http, tcp, icmp.
+	// +kubebuilder:validation:Enum=modbus-tcp;modbus-rtu;opc-ua;snmp;redfish;http;tcp;icmp
 	Protocol string `json:"protocol"`
 	// Address of the device: host:port for modbus-tcp, snmp (port 161 when
-	// left out) and tcp; the BMC's https://host for redfish; the URL for
-	// http; the host for icmp.
+	// left out) and tcp; the serial port for modbus-rtu, as /dev/ttyUSB0;
+	// the endpoint for opc-ua, as opc.tcp://host:4840; the BMC's
+	// https://host for redfish; the URL for http; the host for icmp.
 	Address string `json:"address"`
-	// UnitID addresses a Modbus device behind a gateway; 1 when unset.
+	// UnitID addresses a Modbus device behind a gateway, or on a serial
+	// line shared with others (its slave address); 1 when unset.
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=255
@@ -79,12 +88,23 @@ type DeviceSpec struct {
 	// and password for redfish; community for snmp version 2c; username,
 	// and authProtocol (MD5, SHA, SHA256, SHA512), authPassword, privProtocol
 	// (DES, AES, AES256) and privPassword as it needs them, for version 3.
+	// For opc-ua: username and password when the server asks for them, and
+	// with a security policy the client's certificate and key, tls.crt and
+	// tls.key in PEM, and how to trust the server: its certificate,
+	// server.crt, or the CA that issued it, ca.crt.
 	// +optional
 	Credentials *SecretRef `json:"credentials,omitempty"`
+	// Serial line settings, for modbus-rtu.
+	// +optional
+	Serial *Serial `json:"serial,omitempty"`
+	// OPC UA settings.
+	// +optional
+	OPCUA *OPCUA `json:"opcua,omitempty"`
 	// SNMP settings.
 	// +optional
 	SNMP *SNMP `json:"snmp,omitempty"`
-	// TLS for redfish and https probes.
+	// TLS for redfish and https probes; for opc-ua, insecureSkipVerify
+	// accepts any server certificate.
 	// +optional
 	TLS *TLS `json:"tls,omitempty"`
 	// Points are the values read from the device. A BMC and a probe report
@@ -100,6 +120,45 @@ type SecretRef struct {
 	Name string `json:"name"`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
+}
+
+// Serial is how a serial line runs. Devices on one port share it, so they
+// must agree on it.
+type Serial struct {
+	// BaudRate of the line.
+	// +kubebuilder:default=9600
+	// +kubebuilder:validation:Enum=1200;2400;4800;9600;19200;38400;57600;115200
+	BaudRate int32 `json:"baudRate,omitempty"`
+	// DataBits per character.
+	// +kubebuilder:default=8
+	// +kubebuilder:validation:Enum=7;8
+	DataBits int32 `json:"dataBits,omitempty"`
+	// Parity of each character.
+	// +kubebuilder:default=none
+	// +kubebuilder:validation:Enum=none;even;odd
+	Parity string `json:"parity,omitempty"`
+	// StopBits after each character.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Enum=1;2
+	StopBits int32 `json:"stopBits,omitempty"`
+}
+
+// OPCUA is how the node talks to an OPC UA server.
+type OPCUA struct {
+	// SecurityPolicy of the secure channel: None, or Basic256Sha256 with the
+	// client's certificate and the server's trusted by the credentials.
+	// +kubebuilder:default=None
+	// +kubebuilder:validation:Enum=None;Basic256Sha256
+	SecurityPolicy string `json:"securityPolicy,omitempty"`
+	// SecurityMode with a security policy: messages signed, or signed and
+	// encrypted.
+	// +kubebuilder:default=SignAndEncrypt
+	// +kubebuilder:validation:Enum=Sign;SignAndEncrypt
+	SecurityMode string `json:"securityMode,omitempty"`
+	// Subscribe has the server report changes, sampled every period, instead
+	// of the node reading every point each period.
+	// +optional
+	Subscribe bool `json:"subscribe,omitempty"`
 }
 
 type SNMP struct {
@@ -130,13 +189,19 @@ type Point struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=65535
 	Register int32 `json:"register,omitempty"`
+	// NodeID of an OPC UA variable, as ns=2;s=Press7.Temperature or
+	// ns=3;i=1001.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^(ns=[0-9]+;)?[isgb]=.+$`
+	NodeID string `json:"nodeID,omitempty"`
 	// OID of an SNMP value, as 1.3.6.1.2.1.1.3.0.
 	// +optional
 	// +kubebuilder:validation:Pattern=`^\.?[0-9]+(\.[0-9]+)*$`
 	OID string `json:"oid,omitempty"`
 	// Type of a Modbus value: 16-bit registers as they are, 32-bit ones from
 	// two registers, the high word first; bool for coils and discrete
-	// inputs. SNMP values carry their own types.
+	// inputs. SNMP and OPC UA values carry their own types; bool there
+	// makes routes take the value as true or false.
 	// +kubebuilder:default=uint16
 	// +kubebuilder:validation:Enum=int16;uint16;int32;uint32;float32;bool
 	Type string `json:"type,omitempty"`

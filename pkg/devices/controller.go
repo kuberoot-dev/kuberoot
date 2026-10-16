@@ -57,13 +57,18 @@ func Revision(c Config) string {
 }
 
 // Check keeps the resources the node can run, and says what is wrong with
-// the others: a route whose device is missing or whose condition does not
-// compile against the device's points.
+// the others: a device that wants a serial port with other settings than
+// the devices already on it, a route whose device is missing or whose
+// condition does not compile against the device's points.
 func Check(c Config) (Config, map[string]string) {
-	problems := map[string]string{}
-	out := Config{Devices: c.Devices}
+	problems := CheckSerial(c.Devices)
+	out := Config{}
 	points := map[string][]v1.Point{}
 	for _, d := range c.Devices {
+		if _, bad := problems["Device/"+d.Name]; bad {
+			continue
+		}
+		out.Devices = append(out.Devices, d)
 		points[d.Name] = d.Spec.Points
 		for _, p := range d.Spec.Points {
 			if _, err := Scale(p); err != nil {
