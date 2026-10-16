@@ -692,6 +692,91 @@ type EtcdMemberList struct {
 	Items []EtcdMember `json:"items"`
 }
 
+// EtcdRotation replaces the certificates of the cluster store's members,
+// and with spec.authority the store's authority too, one control plane at a
+// time, so the store keeps its majority throughout. A rotation of the
+// authority makes every member trust the new one before any presents a
+// certificate it issued, and drops the old one only once none does. The
+// store keeps the rotation, so every control plane serves the same one; one
+// runs at a time. Control planes also start one themselves when a third of
+// a certificate's validity is left.
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient:nonNamespaced
+type EtcdRotation struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   EtcdRotationSpec   `json:"spec,omitempty"`
+	Status EtcdRotationStatus `json:"status,omitempty"`
+}
+
+type EtcdRotationSpec struct {
+	// Authority: replace the store's authority as well, not only the
+	// certificates it issued.
+	Authority bool `json:"authority,omitempty"`
+}
+
+type EtcdRotationStatus struct {
+	// Phase: Trusting (members trust the new authority beside the old),
+	// Reissuing (members take new certificates), Dropping (members stop
+	// trusting the old authority), Done.
+	Phase string `json:"phase,omitempty"`
+	// Members are the store's members and the phase each has completed.
+	// +listType=atomic
+	Members     []EtcdRotationMember `json:"members,omitempty"`
+	StartedAt   *metav1.Time         `json:"startedAt,omitempty"`
+	CompletedAt *metav1.Time         `json:"completedAt,omitempty"`
+}
+
+type EtcdRotationMember struct {
+	Name string `json:"name"`
+	// Completed is the last phase the member completed.
+	Completed string `json:"completed,omitempty"`
+	// Message says why the member has not completed the current phase.
+	Message string `json:"message,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type EtcdRotationList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []EtcdRotation `json:"items"`
+}
+
+// EtcdCertificate is one of this control plane's credentials for the
+// cluster store: the authority, or a certificate it issued.
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient:nonNamespaced
+type EtcdCertificate struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Status EtcdCertificateStatus `json:"status,omitempty"`
+}
+
+type EtcdCertificateStatus struct {
+	Subject   string      `json:"subject"`
+	Issuer    string      `json:"issuer"`
+	NotBefore metav1.Time `json:"notBefore"`
+	NotAfter  metav1.Time `json:"notAfter"`
+	// RenewAfter: from then on, a third of its validity is left, and the
+	// control plane starts a rotation.
+	RenewAfter metav1.Time `json:"renewAfter"`
+	// Trusted are the authorities trusted beside the one that signs, while
+	// a rotation replaces it (the authority only).
+	// +listType=atomic
+	Trusted []string `json:"trusted,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+type EtcdCertificateList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []EtcdCertificate `json:"items"`
+}
+
 // FleetEnrollment makes the node a node of a fleet: it calls the fleet's
 // center and keeps the connection open, and the center reaches this node's
 // API through it, so the node needs no inbound port. There is one, named

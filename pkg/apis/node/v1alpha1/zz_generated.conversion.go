@@ -136,6 +136,36 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddGeneratedConversionFunc((*EtcdCertificate)(nil), (*node.EtcdCertificate)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdCertificate_To_node_EtcdCertificate(a.(*EtcdCertificate), b.(*node.EtcdCertificate), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdCertificate)(nil), (*EtcdCertificate)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdCertificate_To_v1alpha1_EtcdCertificate(a.(*node.EtcdCertificate), b.(*EtcdCertificate), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdCertificateList)(nil), (*node.EtcdCertificateList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdCertificateList_To_node_EtcdCertificateList(a.(*EtcdCertificateList), b.(*node.EtcdCertificateList), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdCertificateList)(nil), (*EtcdCertificateList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdCertificateList_To_v1alpha1_EtcdCertificateList(a.(*node.EtcdCertificateList), b.(*EtcdCertificateList), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdCertificateStatus)(nil), (*node.EtcdCertificateStatus)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdCertificateStatus_To_node_EtcdCertificateStatus(a.(*EtcdCertificateStatus), b.(*node.EtcdCertificateStatus), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdCertificateStatus)(nil), (*EtcdCertificateStatus)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdCertificateStatus_To_v1alpha1_EtcdCertificateStatus(a.(*node.EtcdCertificateStatus), b.(*EtcdCertificateStatus), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddGeneratedConversionFunc((*EtcdMember)(nil), (*node.EtcdMember)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha1_EtcdMember_To_node_EtcdMember(a.(*EtcdMember), b.(*node.EtcdMember), scope)
 	}); err != nil {
@@ -163,6 +193,56 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*node.EtcdMemberStatus)(nil), (*EtcdMemberStatus)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_node_EtcdMemberStatus_To_v1alpha1_EtcdMemberStatus(a.(*node.EtcdMemberStatus), b.(*EtcdMemberStatus), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdRotation)(nil), (*node.EtcdRotation)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdRotation_To_node_EtcdRotation(a.(*EtcdRotation), b.(*node.EtcdRotation), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdRotation)(nil), (*EtcdRotation)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdRotation_To_v1alpha1_EtcdRotation(a.(*node.EtcdRotation), b.(*EtcdRotation), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdRotationList)(nil), (*node.EtcdRotationList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdRotationList_To_node_EtcdRotationList(a.(*EtcdRotationList), b.(*node.EtcdRotationList), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdRotationList)(nil), (*EtcdRotationList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdRotationList_To_v1alpha1_EtcdRotationList(a.(*node.EtcdRotationList), b.(*EtcdRotationList), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdRotationMember)(nil), (*node.EtcdRotationMember)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdRotationMember_To_node_EtcdRotationMember(a.(*EtcdRotationMember), b.(*node.EtcdRotationMember), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdRotationMember)(nil), (*EtcdRotationMember)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdRotationMember_To_v1alpha1_EtcdRotationMember(a.(*node.EtcdRotationMember), b.(*EtcdRotationMember), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdRotationSpec)(nil), (*node.EtcdRotationSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdRotationSpec_To_node_EtcdRotationSpec(a.(*EtcdRotationSpec), b.(*node.EtcdRotationSpec), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdRotationSpec)(nil), (*EtcdRotationSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdRotationSpec_To_v1alpha1_EtcdRotationSpec(a.(*node.EtcdRotationSpec), b.(*EtcdRotationSpec), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*EtcdRotationStatus)(nil), (*node.EtcdRotationStatus)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_EtcdRotationStatus_To_node_EtcdRotationStatus(a.(*EtcdRotationStatus), b.(*node.EtcdRotationStatus), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*node.EtcdRotationStatus)(nil), (*EtcdRotationStatus)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_node_EtcdRotationStatus_To_v1alpha1_EtcdRotationStatus(a.(*node.EtcdRotationStatus), b.(*EtcdRotationStatus), scope)
 	}); err != nil {
 		return err
 	}
@@ -911,6 +991,74 @@ func Convert_node_DiskStatus_To_v1alpha1_DiskStatus(in *node.DiskStatus, out *Di
 	return autoConvert_node_DiskStatus_To_v1alpha1_DiskStatus(in, out, s)
 }
 
+func autoConvert_v1alpha1_EtcdCertificate_To_node_EtcdCertificate(in *EtcdCertificate, out *node.EtcdCertificate, s conversion.Scope) error {
+	out.ObjectMeta = in.ObjectMeta
+	if err := Convert_v1alpha1_EtcdCertificateStatus_To_node_EtcdCertificateStatus(&in.Status, &out.Status, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Convert_v1alpha1_EtcdCertificate_To_node_EtcdCertificate is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdCertificate_To_node_EtcdCertificate(in *EtcdCertificate, out *node.EtcdCertificate, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdCertificate_To_node_EtcdCertificate(in, out, s)
+}
+
+func autoConvert_node_EtcdCertificate_To_v1alpha1_EtcdCertificate(in *node.EtcdCertificate, out *EtcdCertificate, s conversion.Scope) error {
+	out.ObjectMeta = in.ObjectMeta
+	if err := Convert_node_EtcdCertificateStatus_To_v1alpha1_EtcdCertificateStatus(&in.Status, &out.Status, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Convert_node_EtcdCertificate_To_v1alpha1_EtcdCertificate is an autogenerated conversion function.
+func Convert_node_EtcdCertificate_To_v1alpha1_EtcdCertificate(in *node.EtcdCertificate, out *EtcdCertificate, s conversion.Scope) error {
+	return autoConvert_node_EtcdCertificate_To_v1alpha1_EtcdCertificate(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdCertificateList_To_node_EtcdCertificateList(in *EtcdCertificateList, out *node.EtcdCertificateList, s conversion.Scope) error {
+	out.ListMeta = in.ListMeta
+	out.Items = *(*[]node.EtcdCertificate)(unsafe.Pointer(&in.Items))
+	return nil
+}
+
+// Convert_v1alpha1_EtcdCertificateList_To_node_EtcdCertificateList is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdCertificateList_To_node_EtcdCertificateList(in *EtcdCertificateList, out *node.EtcdCertificateList, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdCertificateList_To_node_EtcdCertificateList(in, out, s)
+}
+
+func autoConvert_node_EtcdCertificateList_To_v1alpha1_EtcdCertificateList(in *node.EtcdCertificateList, out *EtcdCertificateList, s conversion.Scope) error {
+	out.ListMeta = in.ListMeta
+	out.Items = *(*[]EtcdCertificate)(unsafe.Pointer(&in.Items))
+	return nil
+}
+
+// Convert_node_EtcdCertificateList_To_v1alpha1_EtcdCertificateList is an autogenerated conversion function.
+func Convert_node_EtcdCertificateList_To_v1alpha1_EtcdCertificateList(in *node.EtcdCertificateList, out *EtcdCertificateList, s conversion.Scope) error {
+	return autoConvert_node_EtcdCertificateList_To_v1alpha1_EtcdCertificateList(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdCertificateStatus_To_node_EtcdCertificateStatus(in *EtcdCertificateStatus, out *node.EtcdCertificateStatus, s conversion.Scope) error {
+	*out = *(*node.EtcdCertificateStatus)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_v1alpha1_EtcdCertificateStatus_To_node_EtcdCertificateStatus is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdCertificateStatus_To_node_EtcdCertificateStatus(in *EtcdCertificateStatus, out *node.EtcdCertificateStatus, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdCertificateStatus_To_node_EtcdCertificateStatus(in, out, s)
+}
+
+func autoConvert_node_EtcdCertificateStatus_To_v1alpha1_EtcdCertificateStatus(in *node.EtcdCertificateStatus, out *EtcdCertificateStatus, s conversion.Scope) error {
+	*out = *(*EtcdCertificateStatus)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_node_EtcdCertificateStatus_To_v1alpha1_EtcdCertificateStatus is an autogenerated conversion function.
+func Convert_node_EtcdCertificateStatus_To_v1alpha1_EtcdCertificateStatus(in *node.EtcdCertificateStatus, out *EtcdCertificateStatus, s conversion.Scope) error {
+	return autoConvert_node_EtcdCertificateStatus_To_v1alpha1_EtcdCertificateStatus(in, out, s)
+}
+
 func autoConvert_v1alpha1_EtcdMember_To_node_EtcdMember(in *EtcdMember, out *node.EtcdMember, s conversion.Scope) error {
 	out.ObjectMeta = in.ObjectMeta
 	if err := Convert_v1alpha1_EtcdMemberStatus_To_node_EtcdMemberStatus(&in.Status, &out.Status, s); err != nil {
@@ -977,6 +1125,120 @@ func autoConvert_node_EtcdMemberStatus_To_v1alpha1_EtcdMemberStatus(in *node.Etc
 // Convert_node_EtcdMemberStatus_To_v1alpha1_EtcdMemberStatus is an autogenerated conversion function.
 func Convert_node_EtcdMemberStatus_To_v1alpha1_EtcdMemberStatus(in *node.EtcdMemberStatus, out *EtcdMemberStatus, s conversion.Scope) error {
 	return autoConvert_node_EtcdMemberStatus_To_v1alpha1_EtcdMemberStatus(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdRotation_To_node_EtcdRotation(in *EtcdRotation, out *node.EtcdRotation, s conversion.Scope) error {
+	out.ObjectMeta = in.ObjectMeta
+	if err := Convert_v1alpha1_EtcdRotationSpec_To_node_EtcdRotationSpec(&in.Spec, &out.Spec, s); err != nil {
+		return err
+	}
+	if err := Convert_v1alpha1_EtcdRotationStatus_To_node_EtcdRotationStatus(&in.Status, &out.Status, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Convert_v1alpha1_EtcdRotation_To_node_EtcdRotation is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdRotation_To_node_EtcdRotation(in *EtcdRotation, out *node.EtcdRotation, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdRotation_To_node_EtcdRotation(in, out, s)
+}
+
+func autoConvert_node_EtcdRotation_To_v1alpha1_EtcdRotation(in *node.EtcdRotation, out *EtcdRotation, s conversion.Scope) error {
+	out.ObjectMeta = in.ObjectMeta
+	if err := Convert_node_EtcdRotationSpec_To_v1alpha1_EtcdRotationSpec(&in.Spec, &out.Spec, s); err != nil {
+		return err
+	}
+	if err := Convert_node_EtcdRotationStatus_To_v1alpha1_EtcdRotationStatus(&in.Status, &out.Status, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Convert_node_EtcdRotation_To_v1alpha1_EtcdRotation is an autogenerated conversion function.
+func Convert_node_EtcdRotation_To_v1alpha1_EtcdRotation(in *node.EtcdRotation, out *EtcdRotation, s conversion.Scope) error {
+	return autoConvert_node_EtcdRotation_To_v1alpha1_EtcdRotation(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdRotationList_To_node_EtcdRotationList(in *EtcdRotationList, out *node.EtcdRotationList, s conversion.Scope) error {
+	out.ListMeta = in.ListMeta
+	out.Items = *(*[]node.EtcdRotation)(unsafe.Pointer(&in.Items))
+	return nil
+}
+
+// Convert_v1alpha1_EtcdRotationList_To_node_EtcdRotationList is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdRotationList_To_node_EtcdRotationList(in *EtcdRotationList, out *node.EtcdRotationList, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdRotationList_To_node_EtcdRotationList(in, out, s)
+}
+
+func autoConvert_node_EtcdRotationList_To_v1alpha1_EtcdRotationList(in *node.EtcdRotationList, out *EtcdRotationList, s conversion.Scope) error {
+	out.ListMeta = in.ListMeta
+	out.Items = *(*[]EtcdRotation)(unsafe.Pointer(&in.Items))
+	return nil
+}
+
+// Convert_node_EtcdRotationList_To_v1alpha1_EtcdRotationList is an autogenerated conversion function.
+func Convert_node_EtcdRotationList_To_v1alpha1_EtcdRotationList(in *node.EtcdRotationList, out *EtcdRotationList, s conversion.Scope) error {
+	return autoConvert_node_EtcdRotationList_To_v1alpha1_EtcdRotationList(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdRotationMember_To_node_EtcdRotationMember(in *EtcdRotationMember, out *node.EtcdRotationMember, s conversion.Scope) error {
+	*out = *(*node.EtcdRotationMember)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_v1alpha1_EtcdRotationMember_To_node_EtcdRotationMember is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdRotationMember_To_node_EtcdRotationMember(in *EtcdRotationMember, out *node.EtcdRotationMember, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdRotationMember_To_node_EtcdRotationMember(in, out, s)
+}
+
+func autoConvert_node_EtcdRotationMember_To_v1alpha1_EtcdRotationMember(in *node.EtcdRotationMember, out *EtcdRotationMember, s conversion.Scope) error {
+	*out = *(*EtcdRotationMember)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_node_EtcdRotationMember_To_v1alpha1_EtcdRotationMember is an autogenerated conversion function.
+func Convert_node_EtcdRotationMember_To_v1alpha1_EtcdRotationMember(in *node.EtcdRotationMember, out *EtcdRotationMember, s conversion.Scope) error {
+	return autoConvert_node_EtcdRotationMember_To_v1alpha1_EtcdRotationMember(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdRotationSpec_To_node_EtcdRotationSpec(in *EtcdRotationSpec, out *node.EtcdRotationSpec, s conversion.Scope) error {
+	*out = *(*node.EtcdRotationSpec)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_v1alpha1_EtcdRotationSpec_To_node_EtcdRotationSpec is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdRotationSpec_To_node_EtcdRotationSpec(in *EtcdRotationSpec, out *node.EtcdRotationSpec, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdRotationSpec_To_node_EtcdRotationSpec(in, out, s)
+}
+
+func autoConvert_node_EtcdRotationSpec_To_v1alpha1_EtcdRotationSpec(in *node.EtcdRotationSpec, out *EtcdRotationSpec, s conversion.Scope) error {
+	*out = *(*EtcdRotationSpec)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_node_EtcdRotationSpec_To_v1alpha1_EtcdRotationSpec is an autogenerated conversion function.
+func Convert_node_EtcdRotationSpec_To_v1alpha1_EtcdRotationSpec(in *node.EtcdRotationSpec, out *EtcdRotationSpec, s conversion.Scope) error {
+	return autoConvert_node_EtcdRotationSpec_To_v1alpha1_EtcdRotationSpec(in, out, s)
+}
+
+func autoConvert_v1alpha1_EtcdRotationStatus_To_node_EtcdRotationStatus(in *EtcdRotationStatus, out *node.EtcdRotationStatus, s conversion.Scope) error {
+	*out = *(*node.EtcdRotationStatus)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_v1alpha1_EtcdRotationStatus_To_node_EtcdRotationStatus is an autogenerated conversion function.
+func Convert_v1alpha1_EtcdRotationStatus_To_node_EtcdRotationStatus(in *EtcdRotationStatus, out *node.EtcdRotationStatus, s conversion.Scope) error {
+	return autoConvert_v1alpha1_EtcdRotationStatus_To_node_EtcdRotationStatus(in, out, s)
+}
+
+func autoConvert_node_EtcdRotationStatus_To_v1alpha1_EtcdRotationStatus(in *node.EtcdRotationStatus, out *EtcdRotationStatus, s conversion.Scope) error {
+	*out = *(*EtcdRotationStatus)(unsafe.Pointer(in))
+	return nil
+}
+
+// Convert_node_EtcdRotationStatus_To_v1alpha1_EtcdRotationStatus is an autogenerated conversion function.
+func Convert_node_EtcdRotationStatus_To_v1alpha1_EtcdRotationStatus(in *node.EtcdRotationStatus, out *EtcdRotationStatus, s conversion.Scope) error {
+	return autoConvert_node_EtcdRotationStatus_To_v1alpha1_EtcdRotationStatus(in, out, s)
 }
 
 func autoConvert_v1alpha1_FleetEnrollment_To_node_FleetEnrollment(in *FleetEnrollment, out *node.FleetEnrollment, s conversion.Scope) error {
