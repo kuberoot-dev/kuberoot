@@ -278,7 +278,8 @@ func (r *etcdRotator) pass(ctx context.Context) time.Duration {
 			}
 			return 5 * time.Second
 		}
-		return time.Hour
+		// Rotations started by hand on any control plane show up here.
+		return 30 * time.Second
 	}
 	if rot.Advance(members, time.Now().UTC().Truncate(time.Second)) {
 		if ok, err := etcdstore.SaveRotation(ctx, all, rot, rev); err == nil && ok {
