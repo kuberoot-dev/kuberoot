@@ -49,6 +49,11 @@ type WorkspaceSpec struct {
 	// Owner is the person's user name in the desktop.
 	// +kubebuilder:validation:Pattern=`^[a-z_][a-z0-9_-]{0,31}$`
 	Owner string `json:"owner"`
+	// User is the person at the identity provider the gateway signs people
+	// in with, by the name its username claim gives; the owner when unset.
+	// Others open the workspace when RBAC lets them get workspaces/desktop.
+	// +optional
+	User string `json:"user,omitempty"`
 	// Image is the desktop's disk image when it is first created: a cloud
 	// image (qcow2 or raw, UEFI) of a distribution that runs cloud-init and
 	// has packages for a desktop; Ubuntu 24.04 when unset.
@@ -83,7 +88,8 @@ type WorkspaceStatus struct {
 	Machine string `json:"machine,omitempty"`
 	Node    string `json:"node,omitempty"`
 	Address string `json:"address,omitempty"`
-	// URL opens the desktop in a browser; it carries the workspace's token.
+	// URL opens the desktop in a browser; without single sign-on it carries
+	// the workspace's token.
 	URL string `json:"url,omitempty"`
 	// RDP is where an RDP client reaches the desktop.
 	RDP string `json:"rdp,omitempty"`
