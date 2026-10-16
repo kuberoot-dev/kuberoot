@@ -6,9 +6,11 @@ package gpu
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +32,13 @@ var (
 	// CDIHook refreshes a container's loader cache for the libraries given.
 	CDIHook = "/usr/bin/nvidia-cdi-hook"
 )
+
+// Supported says whether kuberoot ships the NVIDIA driver for the node's
+// architecture: it does for amd64 only.
+var Supported = runtime.GOARCH == "amd64"
+
+// ErrUnsupported is what asking for GPUs gets where no driver is shipped.
+var ErrUnsupported = errors.New("NVIDIA GPUs are not supported on " + runtime.GOARCH + ": kuberoot ships the NVIDIA driver for amd64 only")
 
 // GPU is one GPU as the driver reports it.
 type GPU struct {
@@ -219,6 +228,9 @@ func CDI(gpus []GPU, devices []string) ([]byte, error) {
 // Setup finds the GPUs, creates their device files and writes their CDI
 // description; with none, it removes a description left from before.
 func Setup() ([]GPU, error) {
+	if !Supported {
+		return nil, ErrUnsupported
+	}
 	gpus, err := Find()
 	if err != nil || len(gpus) == 0 {
 		_ = os.Remove(CDIFile)
