@@ -13,6 +13,7 @@ case "$ARCH" in amd64) KARCH=x86_64 ;; arm64) KARCH=arm64 ;; *) echo "unknown ar
 . "$ROOT/scripts/kernel-flavour.sh"
 O=$(kernel_build_dir "$WORK" "$KARCH")
 KREL=$(cat "$O/include/config/kernel.release")
+kernel_cross "$KARCH"
 
 # DRBD adapts to the kernel with coccinelle patches.
 command -v spatch >/dev/null && command -v patch >/dev/null || { apt-get -qq update && apt-get -qq install -y coccinelle patch >/dev/null; }
@@ -24,7 +25,7 @@ if [ ! -d "drbd-$DRBD_VERSION" ]; then
 fi
 cd "drbd-$DRBD_VERSION"
 make -s clean >/dev/null 2>&1 || true
-make -s -j"${JOBS:-$(nproc)}" KDIR="$O" ARCH=$KARCH module
+make -s -j"${JOBS:-$(nproc)}" KDIR="$O" ARCH=$KARCH ${CROSS_COMPILE:+CROSS_COMPILE=$CROSS_COMPILE} module
 
 dst="$OUT/modules/$KREL/extra"
 rm -rf "$OUT/modules"
