@@ -36,6 +36,8 @@ func newReader(spec v1.DeviceSpec, creds Credentials) reader {
 		return &redfishDevice{spec: spec, creds: creds, client: httpClient(spec)}
 	case "http", "tcp", "icmp":
 		return &probe{spec: spec, client: httpClient(spec)}
+	case "opc-ua":
+		return &opcuaDevice{spec: spec, creds: creds}
 	}
 	return newModbusDevice(spec)
 }

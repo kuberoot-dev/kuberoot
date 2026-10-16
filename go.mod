@@ -9,6 +9,7 @@ require (
 	github.com/diskfs/go-diskfs v1.9.4
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/google/cel-go v0.29.2
+	github.com/gopcua/opcua v0.9.1
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/gosnmp/gosnmp v1.45.0
 	github.com/insomniacslk/dhcp v0.0.0-20260901064844-234b97448fae
