@@ -39,9 +39,12 @@ spec:
     net.bridge.bridge-nf-call-ip6tables: "1"
     fs.inotify.max_user_instances: "8192"
     fs.inotify.max_user_watches: "524288"
-    # Real-time tasks may take a CPU whole; the kernel's fair server keeps
-    # the node's own work running beside them.
-    kernel.sched_rt_runtime_us: "-1"
+    # Without real-time group scheduling the kernel does not throttle
+    # real-time tasks: they may take a CPU whole, and its fair server keeps
+    # the node's own work running beside them. The setting bounds deadline
+    # tasks instead: 95% of each CPU, which admission control holds them to
+    # (-1 would turn admission off).
+    kernel.sched_rt_runtime_us: "950000"
     # Timer migration and soft lockup checks wake CPUs of real-time work.
     kernel.timer_migration: "0"
     kernel.watchdog: "0"
@@ -75,6 +78,7 @@ spec:
         - --service-cidr={{.Net.Service}}
         - '{{if eq .Store.Kind "etcd"}}--etcd{{end}}'
         - --latency-tests
+        - --deadline-pods
       - name: containerd
         args: [/usr/bin/containerd, --config, /etc/containerd/config.toml]
       - name: kine
@@ -248,6 +252,7 @@ spec:
         - --pod-cidr={{.Net.Pod}}
         - --pod-network={{.Net.PodNetwork}}
         - --latency-tests
+        - --deadline-pods
       - name: containerd
         args: [/usr/bin/containerd, --config, /etc/containerd/config.toml]
       - name: kubelet

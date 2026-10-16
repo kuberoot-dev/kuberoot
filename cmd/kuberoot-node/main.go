@@ -56,6 +56,7 @@ func main() {
 	flag.StringVar(&o.APIKubeconfig, "api-kubeconfig", "", "credentials to follow the control planes as the cluster lists them")
 	flag.Int64Var(&o.ModelReserveMiB, "model-reserve-mib", 1024, "memory, in MiB, the model servers leave to the node")
 	flag.BoolVar(&o.LatencyTests, "latency-tests", false, "measure real-time latency: the latencytests resource")
+	flag.BoolVar(&o.DeadlinePods, "deadline-pods", false, "run containers that ask for it under SCHED_DEADLINE (deadline.rt.kuberoot.dev/<container>)")
 	flag.StringVar(&o.PodCIDR, "pod-cidr", "", "pod address range of the cluster (control plane node)")
 	flag.StringVar(&o.PodNetwork, "pod-network", nodeapi.PodNetworkVXLAN, "how pod traffic crosses between nodes: vxlan, host-gw on a plain layer-2 network, or none when a CNI package provides it")
 	flag.StringVar(&o.ServiceCIDR, "service-cidr", "", "service address range of the cluster (control plane node)")
