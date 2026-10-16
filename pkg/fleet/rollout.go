@@ -100,10 +100,11 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		sel = s
 	}
 	if st.Phase == "" || st.Release != version {
-		// A new rollout, or a new release: the nodes it covers are picked now.
+		// A new rollout, or a new release: the nodes it covers are picked now,
+		// of those that enrolled; the others join as they enroll.
 		var names []string
 		for name, n := range nodes {
-			if sel.Matches(labels.Set(n.Labels)) {
+			if n.Enrolled && sel.Matches(labels.Set(n.Labels)) {
 				names = append(names, name)
 			}
 		}

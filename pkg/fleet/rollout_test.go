@@ -274,3 +274,22 @@ func TestRolloutLateNodesIgnore(t *testing.T) {
 		t.Errorf("Ignore let a late node in: %+v", r.Status.Nodes)
 	}
 }
+
+// A node that has not enrolled when the rollout starts is not waited for:
+// it joins when it enrolls.
+func TestRolloutPicksEnrolledNodes(t *testing.T) {
+	nodes := fleetOf("f1", "f2")
+	v := nodes["f2"]
+	v.Enrolled, v.Connected = false, false
+	nodes["f2"] = v
+	r := rollout(v1.FleetRolloutSpec{Release: v2, Waves: []intstr.IntOrString{intstr.FromString("100%")}})
+	advance(t, r, nodes, time.Now())
+	if len(r.Status.Nodes) != 1 || r.Status.Nodes[0].Name != "f1" {
+		t.Fatalf("picked %+v", r.Status.Nodes)
+	}
+	v.Enrolled, v.Connected = true, true
+	nodes["f2"] = v
+	if got := advance(t, r, nodes, time.Now()); !reflect.DeepEqual(got, []string{"f2"}) || !r.Status.Nodes[1].Late {
+		t.Errorf("after enrolling: %v, %+v", got, r.Status.Nodes)
+	}
+}
