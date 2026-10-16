@@ -219,7 +219,7 @@ An OPC UA device is read by node ID: every point in one request each period, or,
 
 Changes run on trial under a Safeguard (`kind: Safeguard`, named `default`). A change that makes a device that was answering go silent, or a broker that was taking messages unreachable, is undone at once: the node goes back to the last confirmed configuration, keeps it across reboots, and marks the resources it does not run `RolledBack` with the reason. A change that runs its trial healthy becomes final by itself, or only by `spec.confirm` with `autoConfirm: false`.
 
-Why without pods: a gateway does one job, close to the devices, often on small hardware and with nobody nearby. Here the protocol code, the configuration and the operating system are one image, upgraded together with A/B slots and rolled back together. The configuration is typed and checked when it is written. It goes through RBAC and audit, can be reviewed like code, and is undone by itself when it cuts a device off. On a test node the whole system took about 630 MiB, most of it the API server; `kuberoot-devices` took 35 MiB.
+Why without pods: a gateway does one job, close to the devices, often on small hardware and with nobody nearby. Here the protocol code, the configuration and the operating system are one image, upgraded together with A/B slots and rolled back together. The configuration is typed and checked when it is written. It goes through RBAC and audit, can be reviewed like code, and is undone by itself when it cuts a device off. On a test node the whole system took about 630 MiB, most of it the API server; `kuberoot-devices` took 35 MiB, and 42 MiB reading a Modbus device and an OPC UA server over Basic256Sha256.
 
 ## The observability distribution
 
