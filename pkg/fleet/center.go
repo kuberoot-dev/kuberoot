@@ -473,7 +473,7 @@ func (c *Center) reconcileRollouts(ctx context.Context) error {
 	for _, n := range nodes {
 		_, connected := c.Hub.Connected(n.Name)
 		views[n.Name] = nodeView{Labels: n.Labels, Connected: connected, Release: n.Spec.Release, Update: n.Status.Update,
-			Rollout: n.Annotations[AnnotationRollout]}
+			Rollout: n.Annotations[AnnotationRollout], Enrolled: n.Status.Identity != ""}
 	}
 	created := map[string]metav1.Time{}
 	for _, u := range list.Items {

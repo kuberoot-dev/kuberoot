@@ -68,6 +68,8 @@ type nodeView struct {
 	// has it, the older ones leave it alone.
 	Rollout string
 	Newer   bool
+	// Enrolled: the node has joined the fleet, so it can take a release.
+	Enrolled bool
 }
 
 func sameRelease(a *v1.Release, b v1.Release) bool {
@@ -89,16 +91,16 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		}
 	}
 	st.ObservedGeneration = r.Generation
-	if st.Phase == "" || st.Release != version {
-		// A new rollout, or a new release: the nodes it covers are fixed now.
-		sel := labels.Everything()
-		if r.Spec.Selector != nil {
-			s, err := metav1.LabelSelectorAsSelector(r.Spec.Selector)
-			if err != nil {
-				return st, nil, err
-			}
-			sel = s
+	sel := labels.Everything()
+	if r.Spec.Selector != nil {
+		s, err := metav1.LabelSelectorAsSelector(r.Spec.Selector)
+		if err != nil {
+			return st, nil, err
 		}
+		sel = s
+	}
+	if st.Phase == "" || st.Release != version {
+		// A new rollout, or a new release: the nodes it covers are picked now.
 		var names []string
 		for name, n := range nodes {
 			if sel.Matches(labels.Set(n.Labels)) {
@@ -110,14 +112,44 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		for _, name := range names {
 			st.Nodes = append(st.Nodes, v1.RolloutNode{Name: name})
 		}
+	} else if r.Spec.LateNodes != v1.LateNodesIgnore {
+		// Enrolled nodes the selector picks now and did not then join the
+		// last wave; a node a newer rollout has is that rollout's.
+		in := map[string]bool{}
+		for _, rn := range st.Nodes {
+			in[rn.Name] = true
+		}
+		var late []string
+		for name, n := range nodes {
+			if !in[name] && n.Enrolled && !n.Newer && sel.Matches(labels.Set(n.Labels)) {
+				late = append(late, name)
+			}
+		}
+		sort.Strings(late)
+		for _, name := range late {
+			st.Nodes = append(st.Nodes, v1.RolloutNode{Name: name, Late: true})
+		}
 	}
-	sizes := waveSizes(r.Spec.Waves, len(st.Nodes))
-	wave := 0
-	for i := range st.Nodes {
+	// Waves are sized by the nodes picked at the start, so a late node
+	// moves no other node into an earlier wave.
+	picked := 0
+	for _, rn := range st.Nodes {
+		if !rn.Late {
+			picked++
+		}
+	}
+	sizes := waveSizes(r.Spec.Waves, picked)
+	wave, i := 0, 0
+	for j := range st.Nodes {
+		if st.Nodes[j].Late {
+			st.Nodes[j].Wave = int32(len(sizes))
+			continue
+		}
 		for wave < len(sizes)-1 && i >= sizes[wave] {
 			wave++
 		}
-		st.Nodes[i].Wave = int32(wave + 1)
+		st.Nodes[j].Wave = int32(wave + 1)
+		i++
 	}
 
 	// Where each node is, and the highest wave given the release so far.

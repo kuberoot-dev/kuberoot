@@ -62,6 +62,12 @@ spec:
             type: object
           spec:
             properties:
+              enrollmentTTL:
+                description: |-
+                  EnrollmentTTL is how long the node's enrollment token works once
+                  issued; the center's --enrollment-ttl when unset, and 0 for no limit.
+                  An expired token is refused: delete its Secret to issue a new one.
+                type: string
               release:
                 description: |-
                   Release the node should run. The center upgrades the node to it
@@ -107,6 +113,11 @@ spec:
                 description: |-
                   Enrollment names the Secret holding the node's one-time enrollment
                   while the node has not used it.
+                type: string
+              enrollmentExpires:
+                description: EnrollmentExpires is when the token in that Secret stops
+                  working.
+                format: date-time
                 type: string
               health:
                 description: |-
