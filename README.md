@@ -146,9 +146,35 @@ spec:
       limits: {cpu: "1", memory: 256Mi}
 ```
 
-A task with CAP_SYS_NICE runs at a real-time priority (SCHED_FIFO); real-time tasks may take a CPU whole, and the kernel's fair server keeps the node's own work running beside them. SCHED_DEADLINE is not offered to pods: the kernel admits it only for tasks free to run on all the CPUs of their scheduling domain, and a pod's are pinned.
+A task with CAP_SYS_NICE runs at a real-time priority (SCHED_FIFO); real-time tasks may take a CPU whole, and the kernel's fair server keeps the node's own work running beside them.
+
+A loop that must finish its work by a deadline, every period, asks for SCHED_DEADLINE instead: the kernel then reserves it a share of the CPU and runs it before anything else when its deadline comes first (earliest deadline first). The pod names the reservation in an annotation per container, `deadline.rt.kuberoot.dev/<container>`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: loop
+  annotations:
+    deadline.rt.kuberoot.dev/loop: runtime=200us,deadline=1ms,period=1ms
+spec:
+  readinessGates:
+  - conditionType: rt.kuberoot.dev/deadline
+  containers:
+  - name: loop
+    image: registry.example.org/plant/loop:1.4
+    resources:
+      requests: {cpu: "1", memory: 256Mi}
+      limits: {cpu: "1", memory: 256Mi}
+```
+
+The kernel admits a deadline task only if it may run on every CPU of its scheduling domain, and a pod's CPUs are a few of the node's. So `kuberoot-node` makes the container's CPUs a domain of their own, a cpuset partition, and then gives the container's first process the reservation; the process needs no privileges of its own, and its children run under the normal policy. The partition has its own deadline bandwidth: the kernel admits reservations on it up to 95% of each CPU, the 5% its fair server keeps for the node's own work included, and refuses what does not fit. Further threads of the container may ask for reservations of their own (`sched_setattr`, `chrt --deadline`, with CAP_SYS_NICE) within what is left. The CPUs return to the shared pool when the pod goes.
+
+The outcome is the pod's condition `rt.kuberoot.dev/deadline`: true with the process, reservation and CPUs, or false with the reason and an event. Listed in `readinessGates`, it keeps the pod unready until the loop runs with its reservation. A pod that cannot have one is refused when it is made: the container must ask for whole CPUs, in a pod of the Guaranteed class, and the values are durations with runtime <= deadline <= period (deadline or period may be left out: each then equals the other).
 
 How late the node wakes a real-time task is a resource of the node API, `latencytests`: cyclictest runs a SCHED_FIFO thread on each CPU asked for, the CPUs without a timer tick by default, and the test reports per CPU and overall the least, mean and most latency and the 99th and 99.99th percentiles.
+
+With `policy: deadline` the test measures deadline tasks: each CPU becomes a partition of its own for the test's length, with a thread that reserves `runtimeMicroseconds` (a tenth of the interval by default) every `intervalMicroseconds` and reports how late each period's job started. The test takes its CPUs whole, so it runs only on CPUs no pod holds.
 
 ```yaml
 apiVersion: node.kuberoot.dev/v1alpha1

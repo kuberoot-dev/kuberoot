@@ -99,6 +99,10 @@ type Options struct {
 	// tasks (latencytests resource).
 	LatencyTests bool
 
+	// DeadlinePods runs containers that ask for it under SCHED_DEADLINE, on
+	// CPUs made a scheduling domain of their own; pods are read with
+	// RoutesKubeconfig.
+	DeadlinePods bool
 	// RoutesKubeconfig reads the nodes to route pod subnets between them.
 	RoutesKubeconfig string
 
@@ -272,6 +276,9 @@ func Run(ctx context.Context, o Options) error {
 		if o.VMNetworkKubeconfig != "" {
 			go vms.runNetwork(ctx, o.VMNetworkKubeconfig, net.ParseIP(o.Advertise))
 		}
+	}
+	if o.DeadlinePods && o.RoutesKubeconfig != "" {
+		go syncDeadlines(ctx, o.RoutesKubeconfig, o.NodeName)
 	}
 	if o.RoutesKubeconfig != "" {
 		_, podRange, _ := net.ParseCIDR(o.PodCIDR)

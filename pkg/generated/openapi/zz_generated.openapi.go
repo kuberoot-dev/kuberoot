@@ -1565,6 +1565,13 @@ func schema_pkg_apis_node_v1alpha1_LatencyTestSpec(ref common.ReferenceCallback)
 							Format:      "",
 						},
 					},
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy of the measuring threads: fifo (SCHED_FIFO at Priority, the default) or deadline (SCHED_DEADLINE, a reservation of RuntimeMicroseconds every IntervalMicroseconds, each measured CPU made a scheduling domain of its own for the test's length).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"priority": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Priority of the measuring threads, SCHED_FIFO; 95 when 0.",
@@ -1574,7 +1581,14 @@ func schema_pkg_apis_node_v1alpha1_LatencyTestSpec(ref common.ReferenceCallback)
 					},
 					"intervalMicroseconds": {
 						SchemaProps: spec.SchemaProps{
-							Description: "IntervalMicroseconds between wake-ups; 1000 when 0.",
+							Description: "IntervalMicroseconds between wake-ups; 1000 when 0. Under deadline, the period and the deadline.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"runtimeMicroseconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RuntimeMicroseconds the deadline threads reserve every period; a tenth of the interval when 0.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
 )
@@ -24,6 +25,12 @@ var (
 	// NohzFull lists the CPUs without a timer tick: those of real-time work.
 	NohzFull = "/sys/devices/system/cpu/nohz_full"
 	Online   = "/sys/devices/system/cpu/online"
+)
+
+// Policies of the measuring threads.
+const (
+	PolicyFIFO     = "fifo"
+	PolicyDeadline = "deadline"
 )
 
 // HistogramMicroseconds bounds the histogram; later wake-ups only count
@@ -41,6 +48,12 @@ func Defaults(s node.LatencyTestSpec) node.LatencyTestSpec {
 	if s.IntervalMicroseconds == 0 {
 		s.IntervalMicroseconds = 1000
 	}
+	if s.Policy == "" {
+		s.Policy = PolicyFIFO
+	}
+	if s.Policy == PolicyDeadline && s.RuntimeMicroseconds == 0 {
+		s.RuntimeMicroseconds = max(s.IntervalMicroseconds/10, 2)
+	}
 	return s
 }
 
@@ -53,6 +66,15 @@ func Validate(s node.LatencyTestSpec) error {
 		return fmt.Errorf("priority: from 1 to 99")
 	case s.IntervalMicroseconds < 0 || (s.IntervalMicroseconds > 0 && s.IntervalMicroseconds < 50):
 		return fmt.Errorf("intervalMicroseconds: 50 or more")
+	case s.Policy != "" && s.Policy != PolicyFIFO && s.Policy != PolicyDeadline:
+		return fmt.Errorf("policy: fifo or deadline")
+	case s.RuntimeMicroseconds < 0:
+		return fmt.Errorf("runtimeMicroseconds: 0 or more")
+	}
+	if d := Defaults(s); d.Policy == PolicyDeadline {
+		if err := probeDeadline(d).Validate(); err != nil {
+			return fmt.Errorf("runtimeMicroseconds, intervalMicroseconds: %w", err)
+		}
 	}
 	if s.CPUs != "" {
 		if _, err := ParseCPUList(s.CPUs); err != nil {
@@ -139,6 +161,9 @@ func Args(s node.LatencyTestSpec, cpus, out string) []string {
 func Run(ctx context.Context, s node.LatencyTestSpec, dir string) (node.LatencyTestStatus, error) {
 	var st node.LatencyTestStatus
 	s = Defaults(s)
+	if s.Policy == PolicyDeadline {
+		return runDeadline(ctx, s)
+	}
 	out := filepath.Join(dir, "cyclictest.json")
 	cmd := exec.CommandContext(ctx, Cyclictest, Args(s, CPUs(s), out)...)
 	if msg, err := cmd.CombinedOutput(); err != nil {
@@ -234,4 +259,10 @@ func ParseCPUList(s string) ([]int, error) {
 		}
 	}
 	return out, nil
+}
+
+// probeDeadline is the reservation of a latency test's deadline threads.
+func probeDeadline(s node.LatencyTestSpec) Deadline {
+	period := time.Duration(s.IntervalMicroseconds) * time.Microsecond
+	return Deadline{Runtime: time.Duration(s.RuntimeMicroseconds) * time.Microsecond, Deadline: period, Period: period}
 }
