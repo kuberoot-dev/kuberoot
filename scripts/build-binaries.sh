@@ -22,14 +22,31 @@ if [ "${KUBEROOT_STORE_LAB:-}" = 1 ]; then
 fi
 "$ROOT/scripts/build-kubepkg.sh" "$ARCH"
 
-# The upstream kubelet is linked against glibc: carry just its runtime.
+# The upstream kubelet is linked against glibc: carry just its runtime. The
+# builder's own for its architecture; another's from Debian's package of it.
+# foreign <package>: a Debian package for $ARCH, unpacked into a temporary root.
+foreign() {
+  dpkg --print-foreign-architectures | grep -qx "$ARCH" || { dpkg --add-architecture "$ARCH" && apt-get -qq update >/dev/null; }
+  local d
+  d=$(mktemp -d)
+  (cd "$d" && apt-get -qq download "$1:$ARCH" >/dev/null && dpkg-deb -x ./*.deb x)
+  echo "$d/x"
+}
 rm -rf "$OUT/glibc"
-multiarch=$(ls -d /lib/*-linux-gnu | head -1)
-mkdir -p "$OUT/glibc$multiarch"
-for l in libc.so.6 libresolv.so.2 libpthread.so.0; do cp -L "$multiarch/$l" "$OUT/glibc$multiarch/"; done
-for loader in /lib/ld-linux-*.so.* /lib64/ld-linux-*.so.*; do [ -e "$loader" ] && break; done
-mkdir -p "$OUT/glibc$(dirname "$loader")"
-cp -L "$loader" "$OUT/glibc$loader"
+sysroot=""
+[ "$(dpkg --print-architecture)" = "$ARCH" ] || sysroot=$(foreign libc6)
+multiarch=$(cd "$sysroot/" && ls -d lib/*-linux-gnu | head -1)
+mkdir -p "$OUT/glibc/$multiarch"
+for l in libc.so.6 libresolv.so.2 libpthread.so.0; do cp -L "$sysroot/$multiarch/$l" "$OUT/glibc/$multiarch/"; done
+for loader in lib/ld-linux-*.so.* lib64/ld-linux-*.so.*; do [ -e "$sysroot/$loader" ] && break; done
+mkdir -p "$OUT/glibc/$(dirname "$loader")"
+# The loader may link into the multiarch directory, which is carried too.
+if [ -L "$sysroot/$loader" ] && [ ! -e "$(readlink -f "$sysroot/$loader")" ]; then
+  cp -L "$sysroot/$multiarch/$(basename "$loader")" "$OUT/glibc/$loader"
+else
+  cp -L "$sysroot/$loader" "$OUT/glibc/$loader"
+fi
+[ -z "$sysroot" ] || rm -rf "$(dirname "$sysroot")"
 
 # Release bundles must be signed with this key; a development key is made once.
 KEYS=${KUBEROOT_KEYS:-$WORK/keys}
@@ -39,10 +56,15 @@ if [ ! -f "$KEYS/release.pub" ]; then
 fi
 cp "$KEYS/release.pub" "$OUT/release.pub"
 
-# systemd-boot from the distribution's package.
-tmp=$(mktemp -d)
-(cd "$tmp" && apt-get -qq download systemd-boot-efi && dpkg-deb -x systemd-boot-efi_*.deb x)
-efi=$(ls "$tmp"/x/usr/lib/systemd/boot/efi/systemd-boot*.efi | head -1)
+# systemd-boot from the distribution's package, for the target's firmware.
+if [ "$(dpkg --print-architecture)" = "$ARCH" ]; then
+  tmp=$(mktemp -d)
+  (cd "$tmp" && apt-get -qq download systemd-boot-efi && dpkg-deb -x systemd-boot-efi_*.deb x)
+  tmp="$tmp/x"
+else
+  tmp=$(foreign systemd-boot-efi)
+fi
+efi=$(ls "$tmp"/usr/lib/systemd/boot/efi/systemd-boot*.efi | head -1)
 cp "$efi" "$OUT/systemd-boot.efi"
-rm -rf "$tmp"
+rm -rf "$(dirname "$tmp")"
 echo "binaries: $OUT"

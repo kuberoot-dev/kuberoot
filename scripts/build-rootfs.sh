@@ -20,14 +20,21 @@ apk add --no-cache -q curl squashfs-tools tar
 mkdir -p "$CACHE"
 fetch() { [ -s "$CACHE/$2" ] || curl -fsSL -o "$CACHE/$2" "$1"; }
 
+# Alpine's packages for the target architecture, which may not be the
+# builder's: apk installs another's, verified with that architecture's keys.
+case "$ARCH" in amd64) APK_ARCH=x86_64 ;; arm64) APK_ARCH=aarch64 ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
 r=$(mktemp -d)
-mkdir -p $r/etc/apk
-cp -r /etc/apk/keys $r/etc/apk/
+mkdir -p $r/etc/apk/keys
+if [ "$(apk --print-arch)" = "$APK_ARCH" ]; then
+  cp -r /etc/apk/keys/. $r/etc/apk/keys/
+else
+  cp -r /usr/share/apk/keys/$APK_ARCH/. $r/etc/apk/keys/
+fi
 cp /etc/apk/repositories $r/etc/apk/
 # The distribution may need more programs than the base (distros/<name>/apk).
 extra=""
 [ -f "$ROOT/distros/$DISTRO/apk" ] && extra=$(grep -v '^#' "$ROOT/distros/$DISTRO/apk" | tr '\n' ' ')
-apk add -q --root $r --initdb --no-scripts --no-cache \
+apk add -q --root $r --arch $APK_ARCH --initdb --no-scripts --no-cache \
   nftables mount umount conntrack-tools ca-certificates-bundle e2fsprogs $extra
 rm -rf $r/etc/apk $r/lib/apk $r/var/cache/apk
 
