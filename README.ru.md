@@ -255,7 +255,41 @@ spec:
 
 `kuberoot-wsctl` на control plane делает из рабочего места VirtualMachine из облачного образа (Ubuntu 24.04, если `spec.image` не называет другой). cloud-init образа ставит рабочий стол при первой загрузке: учётную запись владельца, Xfce, VNC-сервер, который держит сеанс между подключениями, и xrdp для RDP-клиентов. Пока рабочий стол не отвечает, рабочее место в фазе `Provisioning`, потом — `Ready`. В его статусе — адрес, по которому оно открывается в браузере (`status.url`), и адрес для RDP-клиента (`status.rdp`). Secret, который называет `status.credentials`, хранит токен рабочего места и пароль владельца.
 
-Шлюз — часть `kuberoot-wsctl`, процесса ноды control plane, порт 6080. Браузеру, который пришёл с токеном рабочего места, он отдаёт noVNC и проводит WebSocket noVNC до VNC-сервера рабочего стола, а тот спрашивает пароль владельца. Ещё у каждого рабочего места свой RDP-порт на ноде, проброшенный до xrdp. Графической консоли у cloud-hypervisor нет, поэтому рабочий стол отдаёт сам гость, а кластер даёт путь к нему. Пока шлюз работает по обычному HTTP: ставьте перед ним TLS; следующий шаг — единый вход (OIDC) вместо токенов.
+Шлюз — часть `kuberoot-wsctl`, процесса ноды control plane, по адресу `https://<нода>:6080`. Он отдаёт noVNC и проводит WebSocket noVNC до VNC-сервера рабочего стола, а тот спрашивает пароль владельца. Ещё у каждого рабочего места свой RDP-порт на ноде, проброшенный до xrdp. Графической консоли у cloud-hypervisor нет, поэтому рабочий стол отдаёт сам гость, а кластер даёт путь к нему.
+
+Шлюз говорит только по TLS; на обычный HTTP-запрос он отвечает ошибкой. Сертификат ему выпускает CA кластера на имя и адрес ноды, если только `kubernetes.io/tls`-Secret `workstation/gateway-tls` не даёт свой — его шлюз подхватывает за несколько секунд.
+
+Без единого входа браузер пускают по токену рабочего места из `status.url`. Secret `workstation/gateway-oidc` включает вход через OpenID-провайдер (Dex, Keycloak, Entra ID, Google и другие), и токены больше ничего не открывают:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata: {name: gateway-oidc, namespace: workstation}
+stringData:
+  issuerURL: https://sso.example.org/dex
+  clientID: workspaces
+  # clientSecret: ...           для конфиденциального клиента; PKCE работает в любом случае
+  # redirectURL: https://workspaces.example.org/callback   по умолчанию https://<хост>/callback
+  # usernameClaim: preferred_username
+  # groupsClaim: groups
+  # usernamePrefix / groupsPrefix: как --oidc-username-prefix у API-сервера
+  # ca.crt: CA провайдера, если он не публичный
+```
+
+Шлюз впускает людей через authorization code flow с PKCE и на `/` показывает каждому рабочие места, которые ему можно открыть. Рабочее место открыто тому, кого называет `spec.user` (владельцу, если поле не задано), и тем, кому RBAC разрешает `get` на подресурс `workspaces/desktop`, по пользователю или группе:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: open-shared-desktop}
+rules:
+- apiGroups: [workstation.kuberoot.dev]
+  resources: [workspaces/desktop]
+  resourceNames: [shared]
+  verbs: [get]
+```
+
+Подключение к рабочему столу открывается по билету, который шлюз подписывает для этого рабочего места и этого человека; билет действует пять минут, а само подключение живёт, пока открыто, в том числе через живую миграцию. В браузере билет едет в адресе WebSocket noVNC. Для RDP шлюз отдаёт файл `.rdp`, в `loadbalanceinfo` которого лежит билет; mstsc отправляет его как routing token, FreeRDP — с `/load-balance-info:`. Шлюз проверяет билет в запросе на подключение и передаёт запрос дальше уже без него, так что xrdp видит обычного клиента. RDP-подключение без действующего билета на это рабочее место закрывается, не дойдя до рабочего стола. Сеансы и билеты подписываются ключом, который шлюз создаёт при старте: перезапуск разлогинивает всех.
 
 Данные cloud-init машина получает от шлюза машин, а не с диска-семени: у VirtualMachine может быть `userData`, прямо в спецификации или в Secret, шлюз отдаёт их только по адресу этой машины, а машина находит их по своему серийному номеру DMI (`ds=nocloud;s=…`). Этим может пользоваться любая VirtualMachine дистрибутива hypervisor.
 
