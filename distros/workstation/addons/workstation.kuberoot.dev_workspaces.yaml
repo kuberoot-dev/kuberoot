@@ -109,6 +109,12 @@ spec:
                 description: 'Running: false shuts the desktop down and keeps its
                   disk.'
                 type: boolean
+              user:
+                description: |-
+                  User is the person at the identity provider the gateway signs people
+                  in with, by the name its username claim gives; the owner when unset.
+                  Others open the workspace when RBAC lets them get workspaces/desktop.
+                type: string
             required:
             - owner
             type: object
@@ -141,8 +147,9 @@ spec:
                 format: int32
                 type: integer
               url:
-                description: URL opens the desktop in a browser; it carries the workspace's
-                  token.
+                description: |-
+                  URL opens the desktop in a browser; without single sign-on it carries
+                  the workspace's token.
                 type: string
             type: object
         required:

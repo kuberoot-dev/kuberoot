@@ -6,8 +6,10 @@ require (
 	filippo.io/age v1.2.1
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/diskfs/go-diskfs v1.9.4
 	github.com/eclipse/paho.mqtt.golang v1.5.1
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/cel-go v0.29.2
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/gosnmp/gosnmp v1.45.0
@@ -20,6 +22,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.7.0
 	go.etcd.io/raft/v3 v3.7.0
 	golang.org/x/net v0.57.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.48.0
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
@@ -133,7 +136,6 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
