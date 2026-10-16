@@ -28,6 +28,7 @@ func main() {
 	listen := flag.String("listen", ":7443", "where nodes connect")
 	servers := flag.String("servers", "", "the center's addresses as nodes reach it, host:port, comma separated; enrollments carry them")
 	namespace := flag.String("namespace", "kube-system", "namespace of the center's authority and the enrollment Secrets")
+	enrollmentTTL := flag.Duration("enrollment-ttl", 24*time.Hour, "how long an enrollment token works once issued, unless the FleetNode sets spec.enrollmentTTL; 0 for no limit")
 	userCA := flag.String("user-client-ca-file", "", "CA of the center cluster's client certificates, for the node API proxy at /nodes/<name>/")
 	klog.InitFlags(nil)
 	flag.Parse()
@@ -62,7 +63,8 @@ func main() {
 	if err != nil {
 		klog.Fatalf("serving certificate: %v", err)
 	}
-	center := &fleet.Center{Dyn: dyn, Kube: kube, Namespace: *namespace, CAHash: fleet.Hash(ca.Certificate())}
+	center := &fleet.Center{Dyn: dyn, Kube: kube, Namespace: *namespace, CAHash: fleet.Hash(ca.Certificate()),
+		EnrollmentTTL: *enrollmentTTL}
 	for _, s := range strings.Split(*servers, ",") {
 		if s = strings.TrimSpace(s); s != "" {
 			center.Servers = append(center.Servers, s)

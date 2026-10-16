@@ -60,6 +60,9 @@ type Center struct {
 	Servers []string
 	// CAHash pins the center in enrollments.
 	CAHash string
+	// EnrollmentTTL is how long an enrollment token works, unless the
+	// FleetNode says otherwise; 0 is no limit.
+	EnrollmentTTL time.Duration
 
 	locks sync.Map // node name -> *sync.Mutex
 	poke  chan struct{}
@@ -193,6 +196,18 @@ func (c *Center) Identity(ctx context.Context, name string) string {
 // EnrollmentSecret names the Secret with a node's one-time enrollment.
 func EnrollmentSecret(node string) string { return "fleet-enroll-" + node }
 
+// AnnotationExpires is when an enrollment Secret's token stops working, RFC 3339.
+const AnnotationExpires = "fleet.kuberoot.dev/expires"
+
+// tokenExpires reads when an enrollment's token stops working; zero is never.
+func tokenExpires(sec *corev1.Secret) (time.Time, error) {
+	v, ok := sec.Annotations[AnnotationExpires]
+	if !ok {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, v)
+}
+
 // Enroll checks a node's token against its enrollment, pins the node's
 // authority and spends the token.
 func (c *Center) Enroll(ctx context.Context, req EnrollRequest, from string) error {
@@ -213,12 +228,16 @@ func (c *Center) Enroll(ctx context.Context, req EnrollRequest, from string) err
 	if err != nil || subtle.ConstantTimeCompare(sec.Data["token"], []byte(req.Token)) != 1 {
 		return errors.New("token refused")
 	}
+	// Only the holder of the right token learns that it expired.
+	if exp, err := tokenExpires(sec); err != nil || (!exp.IsZero() && !time.Now().Before(exp)) {
+		return fmt.Errorf("token expired at %s: ask for a new enrollment", exp.UTC().Format(time.RFC3339))
+	}
 	ca, err := PEMCert([]byte(req.CA))
 	if err != nil || !ca.IsCA {
 		return errors.New("the node's certificate authority is not one")
 	}
 	n.Status.Identity = Hash(ca)
-	n.Status.Phase, n.Status.Enrollment = v1.PhaseOffline, ""
+	n.Status.Phase, n.Status.Enrollment, n.Status.EnrollmentExpires = v1.PhaseOffline, "", nil
 	n.Status.Message = "enrolled from " + from
 	if err := c.writeStatus(ctx, nodesGVR, n); err != nil {
 		return fmt.Errorf("record the enrollment: %w", err)
@@ -230,17 +249,20 @@ func (c *Center) Enroll(ctx context.Context, req EnrollRequest, from string) err
 }
 
 // enrollment makes sure a node that has not enrolled has a token, in a
-// Secret with the FleetEnrollment to apply to the node.
-func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, error) {
+// Secret with the FleetEnrollment to apply to the node, and returns when the
+// token expires, zero for never. Deleting the Secret revokes the token: the
+// next pass issues a new one.
+func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, time.Time, error) {
 	name := EnrollmentSecret(n.Name)
-	if _, err := c.Kube.CoreV1().Secrets(c.Namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-		return name, nil
+	if sec, err := c.Kube.CoreV1().Secrets(c.Namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		exp, err := tokenExpires(sec)
+		return name, exp, err
 	} else if !apierrors.IsNotFound(err) {
-		return "", err
+		return "", time.Time{}, err
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
 	manifest, err := yaml.Marshal(map[string]any{
@@ -250,7 +272,7 @@ func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, error
 		"spec":       map[string]any{"name": n.Name, "servers": c.Servers, "caHash": c.CAHash, "token": token},
 	})
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	sec := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.Namespace,
@@ -259,8 +281,20 @@ func (c *Center) enrollment(ctx context.Context, n *v1.FleetNode) (string, error
 			OwnerReferences: []metav1.OwnerReference{{APIVersion: v1.GroupVersion.String(), Kind: "FleetNode", Name: n.Name, UID: n.UID}}},
 		Data: map[string][]byte{"token": []byte(token), "enrollment.yaml": manifest},
 	}
-	_, err = c.Kube.CoreV1().Secrets(c.Namespace).Create(ctx, sec, metav1.CreateOptions{})
-	return name, err
+	ttl := c.EnrollmentTTL
+	if n.Spec.EnrollmentTTL != nil {
+		ttl = n.Spec.EnrollmentTTL.Duration
+	}
+	var exp time.Time
+	if ttl > 0 {
+		exp = time.Now().Add(ttl).Truncate(time.Second)
+		sec.Annotations = map[string]string{AnnotationExpires: exp.UTC().Format(time.RFC3339)}
+	}
+	if _, err = c.Kube.CoreV1().Secrets(c.Namespace).Create(ctx, sec, metav1.CreateOptions{}); err != nil {
+		return "", time.Time{}, err
+	}
+	klog.Infof("fleet: %s: enrollment issued in Secret %s/%s", n.Name, c.Namespace, name)
+	return name, exp, nil
 }
 
 // observed is what the center reads of a node.
@@ -343,12 +377,20 @@ func createUpgrade(ctx context.Context, client *http.Client, r v1.Release) error
 func (c *Center) reconcileNode(ctx context.Context, n *v1.FleetNode) error {
 	st := n.Status.DeepCopy()
 	if st.Identity == "" {
-		secret, err := c.enrollment(ctx, n)
+		secret, exp, err := c.enrollment(ctx, n)
 		if err != nil {
 			return err
 		}
-		st.Phase, st.Enrollment = v1.PhasePending, secret
+		st.Phase, st.Enrollment, st.EnrollmentExpires = v1.PhasePending, secret, nil
 		st.Message = fmt.Sprintf("apply the FleetEnrollment in Secret %s/%s to the node", c.Namespace, secret)
+		if !exp.IsZero() {
+			t := metav1.NewTime(exp)
+			st.EnrollmentExpires = &t
+			if !time.Now().Before(exp) {
+				st.Message = fmt.Sprintf("the enrollment token expired at %s: delete Secret %s/%s to issue a new one",
+					exp.UTC().Format(time.RFC3339), c.Namespace, secret)
+			}
+		}
 		return c.updateNode(ctx, n, st)
 	}
 	conn, ok := c.Hub.Connected(n.Name)
