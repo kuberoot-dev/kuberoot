@@ -283,6 +283,18 @@ Workers that join a cluster of several control planes reach the API through a ba
 
 `etcdmembers`, on a control plane, lists the store's members; deleting one removes it, as replacing a lost control plane needs: remove its member, then join the new node. A control plane that leaves its cluster (deleting its `Membership`) takes itself out of the store first. Install control planes before they join: an installation carries the store of a single member, not of one member among others. Moving an existing cluster from kine to etcd is not automatic: create the new cluster on etcd and move workloads over (Velero, or the packages and their data).
 
+The store's certificates are renewed without stopping it. A node reissues them on every boot, and a control plane that stays up starts a rotation itself once a third of a certificate's validity is left (a year's certificates after eight months, the ten-year authority after six years and eight months); `etcdcertificates` shows when. A rotation can also be started by hand, of the certificates, or of the authority as well:
+
+```yaml
+apiVersion: node.kuberoot.dev/v1alpha1
+kind: EtcdRotation
+metadata: {name: new-authority}
+spec:
+  authority: true
+```
+
+The store keeps the rotation, so every control plane shows the same one, with the phase each member has completed. Members take each step one at a time, under a lock in the store and only while every member answers, so the store keeps its majority. Replacing the authority takes three phases: every member trusts the new authority beside the old one; members take certificates from the new authority; members stop trusting the old one. A member never presents a certificate another member does not trust. etcd and its clients read certificates on every new connection, so new certificates need no restart, and a renewal of the certificates alone restarts nothing. They read their trust once at start, though: in the first and last phases of replacing the authority, a member's API server and etcd restart. The API server goes first: it leaves the cluster's `kubernetes` Service while etcd still answers and serves what it has in flight, so clients that reach it through the Service, or through a worker's balancer, move to the other control planes before etcd stops; a client pinned to that one control plane's address sees it gone for the restart. A rotation cannot be stopped halfway; it waits for a member that is down and finishes when it is back. Control planes do not join while one runs.
+
 A lab, not for clusters that matter: [a store in the model of Kubernetes resources](docs/resource-store.md), replicated by etcd's Raft library and speaking etcd's API, runs in etcd's place on an image built with `KUBEROOT_STORE_LAB=1` and booted with `kuberoot.datastore=kuberoot-store`. No image carries it otherwise.
 
 ## A fleet of edge nodes
@@ -347,6 +359,8 @@ What it does not do yet: the center is one process, not highly available; the ce
 | `upgrades` | stages a signed release into the inactive slot |
 | `memberships`, `jointickets` | joins nodes to a cluster, as workers or control planes |
 | `etcdmembers` | the members of the cluster store, on a control plane that runs etcd |
+| `etcdrotations` | rotations of the cluster store's certificates, and of its authority |
+| `etcdcertificates` | the control plane's certificates for the cluster store, and when each is renewed |
 | `statebackups` | the control plane's state archives |
 | `volumes`, `machines` | virtual machines' disks and machines (hypervisor) |
 | `modelservers` | the language models the node serves (ai) |

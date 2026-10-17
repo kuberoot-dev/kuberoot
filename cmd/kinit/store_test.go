@@ -63,6 +63,11 @@ func TestControlPlaneRunsTheStoreItWasCreatedWith(t *testing.T) {
 				t.Errorf("%s: %s elects no leader among control planes", distro, svc)
 			}
 		}
+		// The API server leaves the Service before it stops, for the others
+		// to take its clients; the flag is the API server's alone.
+		if !strings.Contains(a, "--shutdown-delay-duration=") || strings.Contains(ha["kuberoot-node"], "--shutdown-delay-duration") {
+			t.Errorf("%s: shutdown delay: API server %s; node API %s", distro, a, ha["kuberoot-node"])
+		}
 		if !strings.Contains(ha["kuberoot-node"], "--etcd") {
 			t.Errorf("%s: the node API does not serve the store's members", distro)
 		}
