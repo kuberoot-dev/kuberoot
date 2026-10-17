@@ -406,10 +406,25 @@ func (r *etcdRotator) apply(ctx context.Context, rot *etcdstore.Rotation) error 
 	return fmt.Errorf("unknown phase %q", rot.Phase)
 }
 
-// restart restarts the member, then the API server, each once the one
-// before answers.
+// restart restarts the API server and the member under it. The API server
+// goes first: it leaves the kubernetes Service while etcd still answers and
+// keeps serving what it has in flight, so clients move to the other control
+// planes before etcd stops; it takes clients again once etcd is back.
 func (r *etcdRotator) restart(ctx context.Context) error {
-	if err := r.restartService(ctx, "etcd", func(ctx context.Context) error {
+	apiAsked := time.Now()
+	if err := r.kinit.Restart(ctx, "kube-apiserver"); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(deregisterTime):
+	}
+	etcdAsked := time.Now()
+	if err := r.kinit.Restart(ctx, "etcd"); err != nil {
+		return err
+	}
+	if err := r.await(ctx, "etcd", etcdAsked, func(ctx context.Context) error {
 		c, err := etcdstore.Client()
 		if err != nil {
 			return err
@@ -420,7 +435,7 @@ func (r *etcdRotator) restart(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	return r.restartService(ctx, "kube-apiserver", func(ctx context.Context) error {
+	return r.await(ctx, "kube-apiserver", apiAsked, func(ctx context.Context) error {
 		body, err := r.admin.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
 		if err == nil && string(body) != "ok" {
 			err = fmt.Errorf("readyz: %s", body)
@@ -429,12 +444,12 @@ func (r *etcdRotator) restart(ctx context.Context) error {
 	})
 }
 
-// restartService restarts a service and waits until ready says it serves.
-func (r *etcdRotator) restartService(ctx context.Context, name string, ready func(context.Context) error) error {
-	asked := time.Now()
-	if err := r.kinit.Restart(ctx, name); err != nil {
-		return err
-	}
+// deregisterTime is how long the API server is given to leave the
+// kubernetes Service, and kube-proxy to follow, before etcd stops.
+const deregisterTime = 3 * time.Second
+
+// await waits until a service restarted after asked and ready says it serves.
+func (r *etcdRotator) await(ctx context.Context, name string, asked time.Time, ready func(context.Context) error) error {
 	deadline := time.Now().Add(3 * time.Minute)
 	var last error
 	for time.Now().Before(deadline) {
