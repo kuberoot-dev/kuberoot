@@ -61,8 +61,9 @@ spec:
               address:
                 description: |-
                   Address of the device: host:port for modbus-tcp, snmp (port 161 when
-                  left out) and tcp; the BMC's https://host for redfish; the URL for
-                  http; the host for icmp.
+                  left out) and tcp; the serial port for modbus-rtu, as /dev/ttyUSB0;
+                  the endpoint for opc-ua, as opc.tcp://host:4840; the BMC's
+                  https://host for redfish; the URL for http; the host for icmp.
                 type: string
               credentials:
                 description: |-
@@ -70,6 +71,10 @@ spec:
                   and password for redfish; community for snmp version 2c; username,
                   and authProtocol (MD5, SHA, SHA256, SHA512), authPassword, privProtocol
                   (DES, AES, AES256) and privPassword as it needs them, for version 3.
+                  For opc-ua: username and password when the server asks for them, and
+                  with a security policy the client's certificate and key, tls.crt and
+                  tls.key in PEM, and how to trust the server: its certificate,
+                  server.crt, or the CA that issued it, ca.crt.
                 properties:
                   name:
                     type: string
@@ -82,6 +87,33 @@ spec:
                 default: 1s
                 description: Every is how often the device is read.
                 type: string
+              opcua:
+                description: OPC UA settings.
+                properties:
+                  securityMode:
+                    default: SignAndEncrypt
+                    description: |-
+                      SecurityMode with a security policy: messages signed, or signed and
+                      encrypted.
+                    enum:
+                    - Sign
+                    - SignAndEncrypt
+                    type: string
+                  securityPolicy:
+                    default: None
+                    description: |-
+                      SecurityPolicy of the secure channel: None, or Basic256Sha256 with the
+                      client's certificate and the server's trusted by the credentials.
+                    enum:
+                    - None
+                    - Basic256Sha256
+                    type: string
+                  subscribe:
+                    description: |-
+                      Subscribe has the server report changes, sampled every period, instead
+                      of the node reading every point each period.
+                    type: boolean
+                type: object
               points:
                 description: |-
                   Points are the values read from the device. A BMC and a probe report
@@ -106,6 +138,12 @@ spec:
                         identifier.'
                       pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                       type: string
+                    nodeID:
+                      description: |-
+                        NodeID of an OPC UA variable, as ns=2;s=Press7.Temperature or
+                        ns=3;i=1001.
+                      pattern: ^(ns=[0-9]+;)?[isgb]=.+$
+                      type: string
                     oid:
                       description: OID of an SNMP value, as 1.3.6.1.2.1.1.3.0.
                       pattern: ^\.?[0-9]+(\.[0-9]+)*$
@@ -127,7 +165,8 @@ spec:
                       description: |-
                         Type of a Modbus value: 16-bit registers as they are, 32-bit ones from
                         two registers, the high word first; bool for coils and discrete
-                        inputs. SNMP values carry their own types.
+                        inputs. SNMP and OPC UA values carry their own types; bool there
+                        makes routes take the value as true or false.
                       enum:
                       - int16
                       - uint16
@@ -148,16 +187,61 @@ spec:
                 x-kubernetes-list-type: map
               protocol:
                 description: |-
-                  Protocol the device speaks: modbus-tcp; snmp; redfish, a server's
-                  BMC; or a probe of a service: http, tcp, icmp.
+                  Protocol the device speaks: modbus-tcp; modbus-rtu, Modbus over a
+                  serial line; opc-ua; snmp; redfish, a server's BMC; or a probe of a
+                  service: http, tcp, icmp.
                 enum:
                 - modbus-tcp
+                - modbus-rtu
+                - opc-ua
                 - snmp
                 - redfish
                 - http
                 - tcp
                 - icmp
                 type: string
+              serial:
+                description: Serial line settings, for modbus-rtu.
+                properties:
+                  baudRate:
+                    default: 9600
+                    description: BaudRate of the line.
+                    enum:
+                    - 1200
+                    - 2400
+                    - 4800
+                    - 9600
+                    - 19200
+                    - 38400
+                    - 57600
+                    - 115200
+                    format: int32
+                    type: integer
+                  dataBits:
+                    default: 8
+                    description: DataBits per character.
+                    enum:
+                    - 7
+                    - 8
+                    format: int32
+                    type: integer
+                  parity:
+                    default: none
+                    description: Parity of each character.
+                    enum:
+                    - none
+                    - even
+                    - odd
+                    type: string
+                  stopBits:
+                    default: 1
+                    description: StopBits after each character.
+                    enum:
+                    - 1
+                    - 2
+                    format: int32
+                    type: integer
+                type: object
               snmp:
                 description: SNMP settings.
                 properties:
@@ -173,7 +257,9 @@ spec:
                 description: Timeout of one request.
                 type: string
               tls:
-                description: TLS for redfish and https probes.
+                description: |-
+                  TLS for redfish and https probes; for opc-ua, insecureSkipVerify
+                  accepts any server certificate.
                 properties:
                   insecureSkipVerify:
                     description: |-
@@ -183,8 +269,9 @@ spec:
                 type: object
               unitID:
                 default: 1
-                description: UnitID addresses a Modbus device behind a gateway; 1
-                  when unset.
+                description: |-
+                  UnitID addresses a Modbus device behind a gateway, or on a serial
+                  line shared with others (its slave address); 1 when unset.
                 format: int32
                 maximum: 255
                 minimum: 0
@@ -195,8 +282,23 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: a Modbus device needs points
-              rule: self.protocol != 'modbus-tcp' || (has(self.points) && size(self.points)
-                > 0)
+              rule: '!(self.protocol in [''modbus-tcp'', ''modbus-rtu'']) || (has(self.points)
+                && size(self.points) > 0)'
+            - message: a Modbus RTU device's address is its serial port, as /dev/ttyUSB0
+              rule: self.protocol != 'modbus-rtu' || self.address.startsWith('/dev/')
+            - message: serial is for modbus-rtu
+              rule: self.protocol == 'modbus-rtu' || !has(self.serial)
+            - message: an OPC UA device's address is its endpoint, as opc.tcp://host:4840
+              rule: self.protocol != 'opc-ua' || self.address.startsWith('opc.tcp://')
+            - message: an OPC UA device needs points with a nodeID
+              rule: self.protocol != 'opc-ua' || (has(self.points) && size(self.points)
+                > 0 && self.points.all(p, has(p.nodeID)))
+            - message: opcua is for opc-ua
+              rule: self.protocol == 'opc-ua' || !has(self.opcua)
+            - message: an OPC UA security policy needs credentials with the client's
+                certificate and key
+              rule: '!has(self.opcua) || self.opcua.securityPolicy == ''None'' ||
+                has(self.credentials)'
             - message: an SNMP device needs points with an oid
               rule: self.protocol != 'snmp' || (has(self.points) && size(self.points)
                 > 0 && self.points.all(p, has(p.oid)))
