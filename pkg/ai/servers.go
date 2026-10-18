@@ -180,6 +180,9 @@ func (s *Servers) assignGPUs(name string, spec node.ModelServerSpec) ([]int32, e
 		_ = os.Remove(file)
 		return nil, nil
 	}
+	if !gpu.Supported {
+		return nil, gpu.ErrUnsupported
+	}
 	present := map[int32]bool{}
 	for _, g := range GPUsPresent() {
 		present[g] = true

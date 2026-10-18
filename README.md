@@ -10,7 +10,7 @@ The repository builds eight distributions: `edge`, a general-purpose cluster for
 
 ## What a node is
 
-- **Kernel**: Linux 6.18 built for the distribution, with every driver built in. The only modules a node loads are the ones its profile names (DRBD for replicated storage), signed with the build's key; after them, loading modules is switched off.
+- **Kernel**: Linux 6.18 built for the distribution, with every driver built in, for amd64 and arm64. The only modules a node loads are the ones its profile names (DRBD for replicated storage), signed with the build's key; after them, loading modules is switched off.
 - **kinit**: PID 1. It mounts the read-only root and the state partition, brings up the network, issues the node's certificates and runs the services of the node's role: containerd, kubelet and kube-proxy everywhere, plus kine (the cluster store on SQLite), the API server, the controller manager and the scheduler on the control plane.
 - **Node API**: every node serves `node.kuberoot.dev`, aggregated into the cluster API, so `kubectl get disks`, `kubectl get bootentries` or `kubectl create upgrade` act on a node. It works before a cluster exists, which is how a node is installed.
 - **Pod network**: VXLAN between nodes, or plain routes on a flat network, or none, for a CNI package such as Cilium.
@@ -109,7 +109,7 @@ Each node serves its part through the node API: `modelservers` (the models it se
 
 The ai distribution is edge with pods and packages, so everything else for AI work comes as kubepkg packages: GPU sharing, queues, serving engines, training and vector databases, and ready-made combinations of them.
 
-The NVIDIA driver is part of the image, not a container that installs it. The open kernel modules are built against kuberoot's kernel and signed with its key, the only modules it loads. The CUDA driver library, NVML, nvidia-smi and the GSP firmware come from the same driver release. A node with NVIDIA GPUs loads the driver at boot. kuberoot-node creates the device files and describes the GPUs to containerd as CDI devices (`nvidia.com/gpu=0`, `=all`), for a device plugin to hand them to pods, and OSConfig lists them in `status.gpus`; kuberoot-aictl labels such nodes `nvidia.com/gpu.present=true` for GPU packages to find them, and the NVIDIA CDI hook in the image refreshes a container's loader cache for the driver libraries it is given. A node without NVIDIA GPUs goes on without the driver. A Model can run on GPUs too: `spec.gpus` per replica places it only on nodes with as many free and runs it with every layer on the GPUs, served by the engine its source names: a llama-server built for CUDA (Turing to Hopper), published beside each release. An engine is fetched like the weights, by the nodes that run it, so the image stays small and the engine changes without the OS; a new engine is a new version of the model and rolls out like new weights. GPUs given to models are best kept from the device plugin's pods.
+The NVIDIA driver is part of the image, not a container that installs it. The open kernel modules are built against kuberoot's kernel and signed with its key, the only modules it loads. The CUDA driver library, NVML, nvidia-smi and the GSP firmware come from the same driver release. A node with NVIDIA GPUs loads the driver at boot. kuberoot-node creates the device files and describes the GPUs to containerd as CDI devices (`nvidia.com/gpu=0`, `=all`), for a device plugin to hand them to pods, and OSConfig lists them in `status.gpus`; kuberoot-aictl labels such nodes `nvidia.com/gpu.present=true` for GPU packages to find them, and the NVIDIA CDI hook in the image refreshes a container's loader cache for the driver libraries it is given. A node without NVIDIA GPUs goes on without the driver. A Model can run on GPUs too: `spec.gpus` per replica places it only on nodes with as many free and runs it with every layer on the GPUs, served by the engine its source names: a llama-server built for CUDA (Turing to Hopper), published beside each release. An engine is fetched like the weights, by the nodes that run it, so the image stays small and the engine changes without the OS; a new engine is a new version of the model and rolls out like new weights. GPUs given to models are best kept from the device plugin's pods. The driver is shipped for amd64 only: an arm64 node reports no GPUs, so a Model that asks for them is not placed there, and its node API refuses a model server with GPUs, saying why.
 
 ### The operator agent
 
@@ -183,7 +183,7 @@ metadata: {name: baseline}
 spec: {durationSeconds: 300}
 ```
 
-The distribution needs four CPUs or more. The kernel is built for it apart from the other distributions' (`distros/rt/kernel.config`); on amd64 its CPU layout is part of the kernel's own command line.
+The distribution needs four CPUs or more. The kernel is built for it apart from the other distributions' (`distros/rt/kernel.config`); its CPU layout is part of the kernel's own command line on amd64; an arm64 kernel cannot add arguments to the boot loader's, so there the layout travels next to the kernel (`kernel.args`) and goes into its boot entries.
 
 ## The iot distribution
 
@@ -525,12 +525,13 @@ The node comes back as the same node, with the same name, certificates and clust
 
 ## Building
 
-Builds run in a container with the toolchain, not on the workstation: `scripts/` hold the steps (kernel, DRBD, binaries, root filesystem, initramfs, bundle). `hack/hetzner.sh` drives a builder pod in a Kubernetes cluster and runs them there; `hack/hetzner/` has the builder, a registry and the VM definitions the author tests nodes with.
+Builds run in a container with the toolchain, not on the workstation: `scripts/` hold the steps (kernel, DRBD, binaries, root filesystem, initramfs, bundle). An amd64 builder builds arm64 too: the kernel and DRBD with a cross compiler, Go without cgo, and the glibc runtime, systemd-boot and Alpine's programs from those distributions' arm64 packages. `hack/hetzner.sh` drives a builder pod in a Kubernetes cluster and runs them there; `hack/hetzner/` has the builder, a registry and the VM definitions the author tests nodes with.
 
 ```sh
 hack/hetzner.sh build amd64      # kernel if missing, binaries, root filesystem, initramfs
 hack/hetzner.sh bundle amd64     # a signed release bundle
 hack/hetzner.sh media amd64      # boot media
+hack/hetzner.sh build arm64      # the same for arm64
 hack/hetzner.sh test             # go test ./...
 ```
 

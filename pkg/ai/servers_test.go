@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
+	"github.com/kuberoot-dev/kuberoot/pkg/gpu"
 )
 
 func dirs(t *testing.T) {
@@ -114,9 +116,10 @@ func TestStatusTellsAServerThatDied(t *testing.T) {
 
 func TestAssignGPUs(t *testing.T) {
 	dirs(t)
-	orig := GPUsPresent
+	orig, supported := GPUsPresent, gpu.Supported
 	GPUsPresent = func() []int32 { return []int32{0, 1, 2} }
-	defer func() { GPUsPresent = orig }()
+	gpu.Supported = true
+	defer func() { GPUsPresent, gpu.Supported = orig, supported }()
 	s := &Servers{}
 	save := func(name string, n int32) node.ModelServerSpec {
 		spec := node.ModelServerSpec{URL: "u", SHA256: sum(name), Model: name, Port: 8100, GPUs: n}
@@ -183,5 +186,21 @@ func TestPruneKeepsEngines(t *testing.T) {
 		if _, err := os.Stat(f); (err == nil) != keep {
 			t.Errorf("%s kept=%v, want %v", filepath.Base(f), err == nil, keep)
 		}
+	}
+}
+
+func TestAssignGPUsUnsupported(t *testing.T) {
+	dirs(t)
+	supported := gpu.Supported
+	gpu.Supported = false
+	defer func() { gpu.Supported = supported }()
+	s := &Servers{}
+	spec := node.ModelServerSpec{URL: "u", SHA256: sum("a"), Model: "a", Port: 8100, GPUs: 1}
+	if _, err := s.assignGPUs("a", spec); !errors.Is(err, gpu.ErrUnsupported) {
+		t.Fatalf("GPUs where no driver is shipped: %v, want %v", err, gpu.ErrUnsupported)
+	}
+	spec.GPUs = 0
+	if got, err := s.assignGPUs("a", spec); err != nil || got != nil {
+		t.Fatalf("no GPUs asked for: %v, %v", got, err)
 	}
 }

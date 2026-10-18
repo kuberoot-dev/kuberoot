@@ -12,7 +12,10 @@ VERSION=$(cat "$OUT/VERSION")
 BUNDLE="$OUT/bundles/kuberoot-$VERSION-$ARCH.tar"
 
 mkdir -p "$OUT/bundles"
-tar -C "$OUT" -cf "$BUNDLE" VERSION vmlinuz.efi initrd.cpio rootfs.squashfs
+files="VERSION vmlinuz.efi initrd.cpio rootfs.squashfs"
+# The kernel's own boot arguments, where it cannot carry them (arm64).
+[ -f "$OUT/kernel.args" ] && files="$files kernel.args"
+tar -C "$OUT" -cf "$BUNDLE" $files
 sha256sum "$BUNDLE" | cut -d' ' -f1 > "$BUNDLE.sha256"
 # Nodes install only bundles signed with a key their image trusts.
 (cd "$ROOT" && go run ./cmd/kuberoot-release sign "$BUNDLE" "${KUBEROOT_RELEASE_KEY:-${KUBEROOT_KEYS:-$WORK/keys}/release.key}" >/dev/null)

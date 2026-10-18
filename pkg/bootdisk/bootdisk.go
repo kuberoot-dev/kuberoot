@@ -38,13 +38,33 @@ func RootLabel(slot string) string { return "kuberoot-root-" + slot }
 
 // Artifacts are the files a kuberoot release consists of.
 type Artifacts struct {
-	Dir        string // holds vmlinuz.efi, initrd.cpio, rootfs.squashfs, systemd-boot.efi
+	Dir        string // holds vmlinuz.efi, initrd.cpio, rootfs.squashfs, systemd-boot.efi, maybe kernel.args
 	Arch       string // arm64 or amd64
 	Version    string
 	ConsoleArg string // console= arguments for the kernel command line
 }
 
 func (a Artifacts) file(name string) string { return path.Join(a.Dir, name) }
+
+// KernelArgsFile holds the kernel's own boot arguments where the kernel
+// cannot add them to the boot loader's itself, as on arm64: they go into
+// every boot entry of that kernel.
+const KernelArgsFile = "kernel.args"
+
+// KernelArgs are the kernel's own boot arguments; none without the file.
+func (a Artifacts) KernelArgs() string {
+	raw, err := os.ReadFile(a.file(KernelArgsFile))
+	if err != nil {
+		return ""
+	}
+	return strings.Join(strings.Fields(string(raw)), " ")
+}
+
+// BootArgs are the arguments every boot entry of the artifacts carries
+// after its own: the kernel's, then the console and carried settings.
+func (a Artifacts) BootArgs() string {
+	return strings.TrimSpace(a.KernelArgs() + " " + a.ConsoleArg)
+}
 
 // RemovableBootPath is where firmware looks for a bootloader without NVRAM entries.
 func (a Artifacts) RemovableBootPath() string {
@@ -136,7 +156,7 @@ func SlotEntry(a Artifacts, slot, version string) Entry {
 		Version: version,
 		Kernel:  "/kuberoot/" + slot + "/vmlinuz.efi",
 		Initrd:  "/kuberoot/" + slot + "/initrd.cpio",
-		Options: strings.TrimSpace("kuberoot.root=PARTLABEL=" + RootLabel(slot) + " quiet panic=10 " + a.ConsoleArg),
+		Options: strings.TrimSpace("kuberoot.root=PARTLABEL=" + RootLabel(slot) + " quiet panic=10 " + a.BootArgs()),
 	}
 }
 
