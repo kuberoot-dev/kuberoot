@@ -24,10 +24,15 @@ fi
 
 # The upstream kubelet is linked against glibc: carry just its runtime.
 rm -rf "$OUT/glibc"
-multiarch=$(ls -d /lib/*-linux-gnu | head -1)
+# By the target's triplet: a builder with cross compilers has other
+# architectures' directories under /lib too.
+case "$ARCH" in
+  amd64) multiarch=/lib/x86_64-linux-gnu; loader=/lib64/ld-linux-x86-64.so.2 ;;
+  arm64) multiarch=/lib/aarch64-linux-gnu; loader=/lib/ld-linux-aarch64.so.1 ;;
+  *) echo "unknown arch $ARCH" >&2; exit 1 ;;
+esac
 mkdir -p "$OUT/glibc$multiarch"
 for l in libc.so.6 libresolv.so.2 libpthread.so.0; do cp -L "$multiarch/$l" "$OUT/glibc$multiarch/"; done
-for loader in /lib/ld-linux-*.so.* /lib64/ld-linux-*.so.*; do [ -e "$loader" ] && break; done
 mkdir -p "$OUT/glibc$(dirname "$loader")"
 cp -L "$loader" "$OUT/glibc$loader"
 
