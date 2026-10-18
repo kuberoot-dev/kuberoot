@@ -1,13 +1,18 @@
 package wsctl
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"reflect"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -49,7 +54,26 @@ type Controller struct {
 	HTTPPort  int
 	// Reachable tells whether a desktop answers; a TCP dial when nil.
 	Reachable func(address string, port int) bool
+	// Certificates is the gateway's serving certificate, which the Secret
+	// workstation/gateway-tls replaces when there is one.
+	Certificates *Certificates
+
+	oidc     []byte // the gateway-oidc Secret's data the gateway runs with
+	accessMu sync.Mutex
+	accessed map[string]accessAnswer
 }
+
+type accessAnswer struct {
+	ok   bool
+	when time.Time
+}
+
+const (
+	// TLSSecret holds the gateway's own certificate (kubernetes.io/tls).
+	TLSSecret = "gateway-tls"
+	// OIDCSecret turns single sign-on on; see OIDCConfig.
+	OIDCSecret = "gateway-oidc"
+)
 
 func (c *Controller) Run(ctx context.Context) error {
 	if c.Reachable == nil {
@@ -113,7 +137,105 @@ func (c *Controller) reconcile(ctx context.Context) {
 	}
 	if c.Gateway != nil {
 		c.Gateway.SetRoutes(routes)
+		c.gatewaySettings(ctx)
 	}
+}
+
+// gatewaySettings follows the gateway's Secrets: its certificate and its
+// single sign-on.
+func (c *Controller) gatewaySettings(ctx context.Context) {
+	secrets := c.Kube.CoreV1().Secrets(Namespace)
+	if c.Certificates != nil {
+		s, err := secrets.Get(ctx, TLSSecret, metav1.GetOptions{})
+		switch {
+		case apierrors.IsNotFound(err):
+			_ = c.Certificates.SetCustom(nil, nil)
+		case err != nil:
+			klog.Errorf("%s: %v", TLSSecret, err)
+		default:
+			if err := c.Certificates.SetCustom(s.Data[corev1.TLSCertKey], s.Data[corev1.TLSPrivateKeyKey]); err != nil {
+				klog.Errorf("%s: %v", TLSSecret, err)
+			}
+		}
+	}
+	s, err := secrets.Get(ctx, OIDCSecret, metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("%s: %v", OIDCSecret, err)
+		return
+	}
+	var data map[string][]byte
+	if err == nil {
+		data = s.Data
+	}
+	fp := fingerprint(data)
+	if bytes.Equal(fp, c.oidc) {
+		return
+	}
+	if data == nil {
+		klog.Infof("single sign-on off: browsers open workspaces by their tokens")
+		c.Gateway.SetAuth(nil)
+		c.oidc = fp
+		return
+	}
+	cfg, err := configFromSecret(data)
+	var a *Auth
+	if err == nil {
+		a, err = NewAuth(cfg, c.mayOpen)
+	}
+	if err != nil {
+		// Closed rather than open: a broken setting must not bring the
+		// tokens back.
+		klog.Errorf("%s: %v; the gateway lets no one in until it is fixed", OIDCSecret, err)
+		a, _ = NewAuth(OIDCConfig{IssuerURL: "https://invalid.", ClientID: "invalid"}, func(context.Context, Person, string) (bool, error) { return false, nil })
+	} else {
+		klog.Infof("single sign-on with %s", cfg.IssuerURL)
+	}
+	c.Gateway.SetAuth(a)
+	c.oidc = fp
+}
+
+func fingerprint(data map[string][]byte) []byte {
+	if data == nil {
+		return []byte{}
+	}
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	h := sha256.New()
+	for _, k := range keys {
+		fmt.Fprintf(h, "%d:%s%d:", len(k), k, len(data[k]))
+		h.Write(data[k])
+	}
+	return h.Sum(nil)
+}
+
+// mayOpen asks the cluster whether a person may get workspaces/desktop of
+// the workspace, the permission RBAC grants to open others' desktops;
+// answers are kept for half a minute.
+func (c *Controller) mayOpen(ctx context.Context, p Person, workspace string) (bool, error) {
+	key := p.User + "\x00" + strings.Join(p.Groups, "\x00") + "\x00" + workspace
+	c.accessMu.Lock()
+	if a, ok := c.accessed[key]; ok && time.Since(a.when) < 30*time.Second {
+		c.accessMu.Unlock()
+		return a.ok, nil
+	}
+	c.accessMu.Unlock()
+	review, err := c.Kube.AuthorizationV1().SubjectAccessReviews().Create(ctx, &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{User: p.User, Groups: p.Groups,
+			ResourceAttributes: &authorizationv1.ResourceAttributes{Group: v1.GroupVersion.Group, Resource: "workspaces",
+				Subresource: "desktop", Verb: "get", Name: workspace}}}, metav1.CreateOptions{})
+	if err != nil {
+		return false, err
+	}
+	c.accessMu.Lock()
+	if c.accessed == nil || len(c.accessed) > 10000 {
+		c.accessed = map[string]accessAnswer{}
+	}
+	c.accessed[key] = accessAnswer{review.Status.Allowed, time.Now()}
+	c.accessMu.Unlock()
+	return review.Status.Allowed, nil
 }
 
 // MachineName is the VirtualMachine a workspace's desktop runs in.
@@ -147,7 +269,11 @@ func (c *Controller) apply(ctx context.Context, w *v1.Workspace, used map[int32]
 		return st, Route{}, fmt.Errorf("machine: %w", err)
 	}
 	token := string(access.Data["token"])
-	st.URL = fmt.Sprintf("http://%s/ws/%s/?token=%s", net.JoinHostPort(c.Advertise, fmt.Sprint(c.HTTPPort)), w.Name, token)
+	base := fmt.Sprintf("https://%s/ws/%s/", net.JoinHostPort(c.Advertise, fmt.Sprint(c.HTTPPort)), w.Name)
+	st.URL = base + "?token=" + token
+	if c.Gateway != nil && c.Gateway.currentAuth() != nil {
+		st.URL = base
+	}
 	st.RDP = net.JoinHostPort(c.Advertise, fmt.Sprint(st.RDPPort))
 
 	u, err := c.Dynamic.Resource(vmsGVR).Get(ctx, MachineName(w.Name), metav1.GetOptions{})
@@ -160,7 +286,11 @@ func (c *Controller) apply(ctx context.Context, w *v1.Workspace, used map[int32]
 	}
 	st.Node, st.Address = m.Status.Node, m.Status.Address
 	st.Phase, st.Message = Phase(m.Status.Phase, m.Status.Address != "" && c.Reachable(m.Status.Address, VNCPort)), m.Status.Message
-	return st, Route{Address: m.Status.Address, Token: token, RDPPort: st.RDPPort}, nil
+	user := w.Spec.User
+	if user == "" {
+		user = w.Spec.Owner
+	}
+	return st, Route{Address: m.Status.Address, Token: token, RDPPort: st.RDPPort, User: user, Owner: w.Spec.Owner}, nil
 }
 
 // Phase is a workspace's phase from its machine's and whether its desktop

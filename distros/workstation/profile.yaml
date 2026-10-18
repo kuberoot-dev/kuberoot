@@ -145,7 +145,10 @@ spec:
         - --kubeconfig={{kube "admin.kubeconfig"}}
         - --network=10.123.0.0/24
       # Makes each workspace a machine with a desktop; its gateway opens the
-      # desktops in a browser at port 6080, and for RDP clients.
+      # desktops in a browser at https://<node>:6080, and for RDP clients.
+      # Its certificate comes from the cluster's CA unless the Secret
+      # workstation/gateway-tls gives one; workstation/gateway-oidc turns
+      # single sign-on on.
       - name: kuberoot-wsctl
         after: apiserver
         args:
@@ -153,6 +156,9 @@ spec:
         - --kubeconfig={{kube "admin.kubeconfig"}}
         - --advertise-address={{.Node.IP}}
         - --port=6080
+        - --tls-ca-cert-file={{pki "ca.crt"}}
+        - --tls-ca-key-file={{pki "ca.key"}}
+        - --tls-san={{.Node.Name}}
 
     worker:
       generators: [node, member, containers, kubelet]

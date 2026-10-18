@@ -255,7 +255,41 @@ spec:
 
 `kuberoot-wsctl`, on the control plane, makes the workspace a VirtualMachine from a cloud image (Ubuntu 24.04 unless `spec.image` names another). The image's cloud-init installs the desktop at the first boot: the owner's account, Xfce, a VNC server that keeps the session running between connections, and xrdp for RDP clients. The workspace is `Provisioning` until its desktop answers, then `Ready`. Its status gives the address to open it at in a browser (`status.url`) and the one for an RDP client (`status.rdp`). The Secret `status.credentials` names holds the workspace's token and the owner's password.
 
-The gateway is part of `kuberoot-wsctl`, a process of the control plane node, port 6080. For a browser that brings the workspace's token it serves noVNC and carries noVNC's WebSocket to the desktop's VNC server, which then asks for the owner's password. Each workspace also gets an RDP port of its own on the node, passed through to xrdp. cloud-hypervisor has no graphical console, so the desktop is served by the guest itself; the cluster gives the way in. The gateway serves plain HTTP for now: put it behind TLS, and single sign-on (OIDC) in place of tokens is the next step.
+The gateway is part of `kuberoot-wsctl`, a process of the control plane node, at `https://<node>:6080`. It serves noVNC and carries noVNC's WebSocket to the desktop's VNC server, which then asks for the owner's password. Each workspace also gets an RDP port of its own on the node, passed through to xrdp. cloud-hypervisor has no graphical console, so the desktop is served by the guest itself; the cluster gives the way in.
+
+The gateway speaks only TLS; a plain HTTP request gets an error. Its certificate comes from the cluster's CA, for the node's name and address, unless a `kubernetes.io/tls` Secret `workstation/gateway-tls` gives one, which the gateway takes up within seconds.
+
+Without single sign-on a browser is let in by the workspace's token in `status.url`. The Secret `workstation/gateway-oidc` turns sign-in with an OpenID provider on (Dex, Keycloak, Entra ID, Google and so on), and the tokens stop opening anything:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata: {name: gateway-oidc, namespace: workstation}
+stringData:
+  issuerURL: https://sso.example.org/dex
+  clientID: workspaces
+  # clientSecret: ...           for a confidential client; PKCE is used either way
+  # redirectURL: https://workspaces.example.org/callback   https://<host>/callback by default
+  # usernameClaim: preferred_username
+  # groupsClaim: groups
+  # usernamePrefix / groupsPrefix: as the API server's --oidc-username-prefix
+  # ca.crt: the provider's CA, when it is not a public one
+```
+
+The gateway signs people in with the authorization code flow and PKCE and lists the workspaces each may open at `/`. A workspace is open to the person `spec.user` names (the owner when unset), and to whoever RBAC lets `get` the `workspaces/desktop` subresource, by user or group:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: open-shared-desktop}
+rules:
+- apiGroups: [workstation.kuberoot.dev]
+  resources: [workspaces/desktop]
+  resourceNames: [shared]
+  verbs: [get]
+```
+
+A desktop connection opens with a ticket the gateway signs for that workspace and person, valid for five minutes; the connection then stays as long as it is open, through a live migration too. In the browser the ticket rides in noVNC's WebSocket address. For RDP the gateway hands out an `.rdp` file whose `loadbalanceinfo` carries the ticket; mstsc sends it as the routing token, FreeRDP with `/load-balance-info:`. The gateway checks it in the connection request and passes the request on without it, so xrdp sees an ordinary client. An RDP connection without a valid ticket for that workspace is closed before it reaches the desktop. Sessions and tickets are signed with a key the gateway makes when it starts: a restart signs everyone out.
 
 The machine's cloud-init data comes from the machines' gateway, not from a seed disk: a VirtualMachine may carry `userData`, inline or in a Secret, which the gateway serves to that machine's address only, and the machine finds it through its DMI serial number (`ds=nocloud;s=…`). Any VirtualMachine of the hypervisor distribution can use it.
 
