@@ -64,6 +64,10 @@ type FleetNodeSpec struct {
 	// whenever the node is connected, and not again once the node rolled it
 	// back. A FleetRollout sets it; it can be set by hand.
 	Release *Release `json:"release,omitempty"`
+	// EnrollmentTTL is how long the node's enrollment token works once
+	// issued; the center's --enrollment-ttl when unset, and 0 for no limit.
+	// An expired token is refused: delete its Secret to issue a new one.
+	EnrollmentTTL *metav1.Duration `json:"enrollmentTTL,omitempty"`
 }
 
 // Phases of a FleetNode.
@@ -79,6 +83,8 @@ type FleetNodeStatus struct {
 	// Enrollment names the Secret holding the node's one-time enrollment
 	// while the node has not used it.
 	Enrollment string `json:"enrollment,omitempty"`
+	// EnrollmentExpires is when the token in that Secret stops working.
+	EnrollmentExpires *metav1.Time `json:"enrollmentExpires,omitempty"`
 	// Identity is the node's own certificate authority, pinned when it
 	// enrolled: sha256 of the CA certificate. Only a client certificate this
 	// CA issued, for this node's name, opens the node's connection.
@@ -169,6 +175,12 @@ const (
 	OfflineSkip = "Skip"
 )
 
+// Late-node policies.
+const (
+	LateNodesJoin   = "Join"
+	LateNodesIgnore = "Ignore"
+)
+
 type FleetRolloutSpec struct {
 	Release Release `json:"release"`
 	// Selector picks the nodes; all nodes when empty.
@@ -192,6 +204,14 @@ type FleetRolloutSpec struct {
 	Offline string `json:"offline,omitempty"`
 	// Soak is how long a wave's nodes run the release before the next wave.
 	Soak *metav1.Duration `json:"soak,omitempty"`
+	// LateNodes is what the rollout does about nodes its selector picks
+	// after it started, as nodes enroll or are labelled: Join puts them in
+	// the last wave, so they take the release with the rest of the fleet and
+	// never ahead of the waves that test it; Ignore leaves them out. A
+	// Complete or Stopped rollout takes no more nodes either way.
+	// +kubebuilder:validation:Enum=Join;Ignore
+	// +kubebuilder:default=Join
+	LateNodes string `json:"lateNodes,omitempty"`
 }
 
 // Rollout phases.
@@ -211,8 +231,8 @@ type FleetRolloutStatus struct {
 	Release string `json:"release,omitempty"`
 	// Wave in progress, as "<n>/<waves>".
 	Wave string `json:"wave,omitempty"`
-	// Nodes the rollout covers, fixed when it starts, in the order waves
-	// take them, with the wave of each.
+	// Nodes the rollout covers, picked when it starts, in the order waves
+	// take them, with the wave of each; late nodes come after them.
 	Nodes []RolloutNode `json:"nodes,omitempty"`
 	// Updated is "<updated>/<nodes>"; Failed counts failures.
 	Updated string `json:"updated,omitempty"`
@@ -229,6 +249,8 @@ type RolloutNode struct {
 	// State: Pending until its wave, then the node's update phase, Offline
 	// or Skipped.
 	State string `json:"state,omitempty"`
+	// Late: the node joined after the rollout started, into its last wave.
+	Late bool `json:"late,omitempty"`
 }
 
 // +kubebuilder:object:root=true

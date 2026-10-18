@@ -63,6 +63,18 @@ spec:
             type: object
           spec:
             properties:
+              lateNodes:
+                default: Join
+                description: |-
+                  LateNodes is what the rollout does about nodes its selector picks
+                  after it started, as nodes enroll or are labelled: Join puts them in
+                  the last wave, so they take the release with the rest of the fleet and
+                  never ahead of the waves that test it; Ignore leaves them out. A
+                  Complete or Stopped rollout takes no more nodes either way.
+                enum:
+                - Join
+                - Ignore
+                type: string
               maxFailures:
                 description: MaxFailures the rollout carries on through; one more
                   stops it.
@@ -183,11 +195,15 @@ spec:
                 type: string
               nodes:
                 description: |-
-                  Nodes the rollout covers, fixed when it starts, in the order waves
-                  take them, with the wave of each.
+                  Nodes the rollout covers, picked when it starts, in the order waves
+                  take them, with the wave of each; late nodes come after them.
                 items:
                   description: RolloutNode is a node of a rollout and where it is.
                   properties:
+                    late:
+                      description: 'Late: the node joined after the rollout started,
+                        into its last wave.'
+                      type: boolean
                     name:
                       type: string
                     state:
