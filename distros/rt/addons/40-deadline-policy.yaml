@@ -1,0 +1,57 @@
+# Pods ask for SCHED_DEADLINE with deadline.rt.kuberoot.dev/<container>:
+# "runtime=200us,deadline=1ms,period=1ms". kuberoot-node makes the
+# container's CPUs a scheduling domain of their own, so the container needs
+# CPUs no one else has: whole CPUs of the static CPU manager, in a pod of
+# the Guaranteed class. Requests the node could not honour are refused here,
+# when the pod is made; the bandwidth itself the kernel admits or refuses on
+# the node, and the pod's condition rt.kuberoot.dev/deadline says which.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kuberoot-rt-deadline
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - {apiGroups: [""], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [pods]}
+  variables:
+    - name: asks
+      expression: >-
+        has(object.metadata.annotations) ?
+        object.metadata.annotations.filter(k, k.startsWith('deadline.rt.kuberoot.dev/')) : []
+  validations:
+    - expression: >-
+        variables.asks.all(k, object.spec.containers.exists(c,
+          c.name == k.substring(25)))
+      messageExpression: >-
+        'deadline.rt.kuberoot.dev/<container> names a container the pod does not have: ' +
+        variables.asks.filter(k, !object.spec.containers.exists(c, c.name == k.substring(25))).join(', ')
+    - expression: >-
+        variables.asks.all(k, object.metadata.annotations[k].matches(
+          '^\\s*(runtime|deadline|period)=[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s)(\\s*,\\s*(runtime|deadline|period)=[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s))*\\s*$'))
+      message: >-
+        deadline.rt.kuberoot.dev/<container> takes durations: "runtime=200us,deadline=1ms,period=1ms"
+        (deadline and period may be left out: each then equals the other)
+    - expression: >-
+        variables.asks.all(k, object.spec.containers.filter(c, c.name == k.substring(25)).all(c,
+          has(c.resources) && has(c.resources.limits) &&
+          'cpu' in c.resources.limits && 'memory' in c.resources.limits &&
+          quantity(c.resources.limits['cpu']).isInteger() &&
+          quantity(c.resources.limits['cpu']).asInteger() > 0 &&
+          (!has(c.resources.requests) || (
+            (!('cpu' in c.resources.requests) ||
+              quantity(c.resources.requests['cpu']).compareTo(quantity(c.resources.limits['cpu'])) == 0) &&
+            (!('memory' in c.resources.requests) ||
+              quantity(c.resources.requests['memory']).compareTo(quantity(c.resources.limits['memory'])) == 0)))))
+      message: >-
+        a container under SCHED_DEADLINE needs CPUs of its own: a CPU limit of whole CPUs and a memory
+        limit, with requests equal to them (the Guaranteed class), so that the static CPU manager gives
+        it exclusive CPUs
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kuberoot-rt-deadline
+spec:
+  policyName: kuberoot-rt-deadline
+  validationActions: [Deny]

@@ -618,10 +618,19 @@ type LatencyTestSpec struct {
 	// CPUs to measure, as a list like 2-3; the CPUs kept for real-time work
 	// (those without a timer tick) when empty, or all CPUs if none is.
 	CPUs string `json:"cpus,omitempty"`
+	// Policy of the measuring threads: fifo (SCHED_FIFO at Priority, the
+	// default) or deadline (SCHED_DEADLINE, a reservation of
+	// RuntimeMicroseconds every IntervalMicroseconds, each measured CPU made
+	// a scheduling domain of its own for the test's length).
+	Policy string `json:"policy,omitempty"`
 	// Priority of the measuring threads, SCHED_FIFO; 95 when 0.
 	Priority int32 `json:"priority,omitempty"`
-	// IntervalMicroseconds between wake-ups; 1000 when 0.
+	// IntervalMicroseconds between wake-ups; 1000 when 0. Under deadline,
+	// the period and the deadline.
 	IntervalMicroseconds int32 `json:"intervalMicroseconds,omitempty"`
+	// RuntimeMicroseconds the deadline threads reserve every period; a
+	// tenth of the interval when 0.
+	RuntimeMicroseconds int32 `json:"runtimeMicroseconds,omitempty"`
 }
 
 type LatencyTestStatus struct {
