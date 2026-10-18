@@ -36,7 +36,9 @@ func onProbation() bool {
 	}
 	for _, e := range entries {
 		if e.Booted {
-			return e.State == upgrade.StateTrying
+			// Bad: systemd-boot spent the last attempt on this boot. It is
+			// still on probation, and the reboot lands on the other slot.
+			return e.State != upgrade.StateGood
 		}
 	}
 	return false

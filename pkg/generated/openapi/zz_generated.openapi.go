@@ -41,9 +41,17 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskList":              schema_pkg_apis_node_v1alpha1_DiskList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskPartition":         schema_pkg_apis_node_v1alpha1_DiskPartition(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskStatus":            schema_pkg_apis_node_v1alpha1_DiskStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificate":       schema_pkg_apis_node_v1alpha1_EtcdCertificate(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificateList":   schema_pkg_apis_node_v1alpha1_EtcdCertificateList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificateStatus": schema_pkg_apis_node_v1alpha1_EtcdCertificateStatus(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMember":            schema_pkg_apis_node_v1alpha1_EtcdMember(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberList":        schema_pkg_apis_node_v1alpha1_EtcdMemberList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdMemberStatus":      schema_pkg_apis_node_v1alpha1_EtcdMemberStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotation":          schema_pkg_apis_node_v1alpha1_EtcdRotation(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationList":      schema_pkg_apis_node_v1alpha1_EtcdRotationList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationMember":    schema_pkg_apis_node_v1alpha1_EtcdRotationMember(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationSpec":      schema_pkg_apis_node_v1alpha1_EtcdRotationSpec(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationStatus":    schema_pkg_apis_node_v1alpha1_EtcdRotationStatus(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.FleetEnrollment":       schema_pkg_apis_node_v1alpha1_FleetEnrollment(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.FleetEnrollmentList":   schema_pkg_apis_node_v1alpha1_FleetEnrollmentList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.FleetEnrollmentSpec":   schema_pkg_apis_node_v1alpha1_FleetEnrollmentSpec(ref),
@@ -634,6 +642,158 @@ func schema_pkg_apis_node_v1alpha1_DiskStatus(ref common.ReferenceCallback) comm
 	}
 }
 
+func schema_pkg_apis_node_v1alpha1_EtcdCertificate(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EtcdCertificate is one of this control plane's credentials for the cluster store: the authority, or a certificate it issued.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificateStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificateStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdCertificateList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificate"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdCertificate", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdCertificateStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"subject": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"issuer": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"notBefore": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"notAfter": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"renewAfter": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RenewAfter: from then on, a third of its validity is left, and the control plane starts a rotation.",
+							Ref:         ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"trusted": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Trusted are the authorities trusted beside the one that signs, while a rotation replaces it (the authority only).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"subject", "issuer", "notBefore", "notAfter", "renewAfter"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
 func schema_pkg_apis_node_v1alpha1_EtcdMember(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -791,6 +951,202 @@ func schema_pkg_apis_node_v1alpha1_EtcdMemberStatus(ref common.ReferenceCallback
 				Required: []string{"id"},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdRotation(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EtcdRotation replaces the certificates of the cluster store's members, and with spec.authority the store's authority too, one control plane at a time, so the store keeps its majority throughout. A rotation of the authority makes every member trust the new one before any presents a certificate it issued, and drops the old one only once none does. The store keeps the rotation, so every control plane serves the same one; one runs at a time. Control planes also start one themselves when a third of a certificate's validity is left.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationSpec", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdRotationList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotation"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotation", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdRotationMember(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"completed": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Completed is the last phase the member completed.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message says why the member has not completed the current phase.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdRotationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"authority": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Authority: replace the store's authority as well, not only the certificates it issued.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_EtcdRotationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase: Trusting (members trust the new authority beside the old), Reissuing (members take new certificates), Dropping (members stop trusting the old authority), Done.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"members": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Members are the store's members and the phase each has completed.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationMember"),
+									},
+								},
+							},
+						},
+					},
+					"startedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"completedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.EtcdRotationMember", v1.Time{}.OpenAPIModelName()},
 	}
 }
 

@@ -225,7 +225,10 @@ func Run(ctx context.Context, o Options) error {
 			// The store's members are the cluster's, the same seen from any
 			// control plane: served as they are, not node by node.
 			resources["etcdmembers"] = etcdMemberStorage{}
+			resources["etcdrotations"] = etcdRotationStorage{}
+			resources["etcdcertificates"] = etcdCertificateStorage{}
 			go promoteLearners(ctx)
+			go (&etcdRotator{name: o.NodeName, kinit: kinit, admin: admin}).run(ctx)
 		}
 		var reserved []*net.IPNet
 		for _, c := range []string{o.PodCIDR, o.ServiceCIDR} {

@@ -276,6 +276,12 @@ func (s *joinTicketStorage) addMember(ctx context.Context, name, addr string) (*
 	defer c.Close()
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	// A member joining halfway would hold the authority of the phase it
+	// joined in and miss the steps the others took before.
+	if rot, _, err := etcdstore.LoadRotation(ctx, c); err == nil && rot.Active() {
+		return nil, apierrors.NewConflict(node.Resource("jointickets"), name,
+			fmt.Errorf("the store's certificates are being rotated (etcdrotations/%s, phase %s); join control planes once it is done", rot.Name, rot.Phase))
+	}
 	peer := etcdstore.PeerURL(addr)
 	list, err := c.MemberList(ctx)
 	if err != nil {

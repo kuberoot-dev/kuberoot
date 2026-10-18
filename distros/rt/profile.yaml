@@ -123,6 +123,9 @@ spec:
       - name: kube-apiserver
         args:
         - /usr/bin/kube-apiserver
+        # On SIGTERM, leave the kubernetes Service and keep serving a while,
+        # so that clients move to the other control planes before it stops.
+        - --shutdown-delay-duration=5s
         - --etcd-servers={{.Store.Servers}}
         - '{{if eq .Store.Kind "etcd"}}--etcd-cafile={{pki "etcd-ca.crt"}}{{end}}'
         - '{{if eq .Store.Kind "etcd"}}--etcd-certfile={{pki "apiserver-etcd-client.crt"}}{{end}}'
