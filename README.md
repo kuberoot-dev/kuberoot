@@ -8,6 +8,10 @@ The repository builds eight distributions: `edge`, a general-purpose cluster for
 
 > Status: experimental. The `edge` distribution passes the Kubernetes conformance suite (462 of 462 on a three-node cluster, Kubernetes 1.37.1), but the API of the node and the layout of the state may still change.
 
+## Background
+
+kuberoot puts into practice the essay [The Inevitable Future of Kubernetes: why the orchestrator should follow the path of Linux](https://blog.aenix.io/the-inevitable-future-of-kubernetes-why-the-orchestrator-should-follow-the-path-of-the-linux-367f49916712) by Timur Tukaev. Kubernetes has grown into a platform for everything, and every team that adopts it assembles its own; like Linux, it needs distributions built for particular needs. The essay was [discussed on r/kubernetes](https://www.reddit.com/r/kubernetes/comments/1hnb6fr/the_inevitable_future_of_kubernetes_why_the/), with a comment from Tim Hockin, and Matt Duggan answered it with a post of his own, [Kubernetes as a Distro](https://matduggan.com/kubernetes-as-a-distro/).
+
 ## What a node is
 
 - **Kernel**: Linux 6.18 built for the distribution, with every driver built in, for amd64 and arm64. The only modules a node loads are the ones its profile names (DRBD for replicated storage), signed with the build's key; after them, loading modules is switched off.
