@@ -8,6 +8,10 @@ kuberoot собирает дистрибутивы Kubernetes, которые з
 
 > Статус: эксперимент. Дистрибутив `edge` проходит набор тестов на соответствие Kubernetes (462 из 462 на кластере из трёх нод, Kubernetes 1.37.1), но API ноды и раскладка её состояния ещё могут меняться.
 
+## Откуда это взялось
+
+kuberoot воплощает статью Тимура Тукаева [The Inevitable Future of Kubernetes: why the orchestrator should follow the path of Linux](https://blog.aenix.io/the-inevitable-future-of-kubernetes-why-the-orchestrator-should-follow-the-path-of-the-linux-367f49916712). Kubernetes превратился в платформу для всего, и каждая команда собирает его по-своему; как и Linux, ему нужны дистрибутивы под конкретные задачи. Статью [обсуждали в r/kubernetes](https://www.reddit.com/r/kubernetes/comments/1hnb6fr/the_inevitable_future_of_kubernetes_why_the/), в том числе Тим Хокин, а Мэтт Дагган ответил на неё своим постом [Kubernetes as a Distro](https://matduggan.com/kubernetes-as-a-distro/).
+
 ## Из чего состоит нода
 
 - **Ядро**: Linux 6.18, собранное под дистрибутив, все драйверы встроены; для amd64 и arm64. Нода загружает только модули, которые назвал её профиль (DRBD для реплицируемого хранилища), подписанные ключом сборки; после них загрузка модулей выключается.
