@@ -304,7 +304,13 @@ func TestFailoverToAnotherReplica(t *testing.T) {
 	if _, ok := second.Connected("shop-1"); !ok {
 		t.Fatal("not connected to the second replica")
 	}
-	if a.Status().Server != ln.Addr().String() {
-		t.Errorf("agent %+v", a.Status())
+	// The replica counts the node connected before the agent has written
+	// down where it is connected to.
+	deadline := time.Now().Add(5 * time.Second)
+	for a.Status().Server != ln.Addr().String() {
+		if time.Now().After(deadline) {
+			t.Fatalf("agent %+v", a.Status())
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
