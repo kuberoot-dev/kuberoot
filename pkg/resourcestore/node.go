@@ -64,6 +64,10 @@ type Config struct {
 	CatchUpEntries uint64
 	// RequestTimeout bounds a write's wait for its entry to be applied.
 	RequestTimeout time.Duration
+	// KeepHistory: compactions this member proposes move what they drop
+	// to the tape (tape.go) instead of deleting it. Give every member the
+	// same.
+	KeepHistory bool
 }
 
 func (c *Config) defaults() {
@@ -688,6 +692,9 @@ func (n *Node) propose(ctx context.Context, r *request) (applyResult, error) {
 		return applyResult{}, err
 	}
 	r.From, r.ID = n.id, n.nextID()
+	if r.At == 0 {
+		r.At = time.Now().UnixMilli()
+	}
 	data, err := json.Marshal(r)
 	if err != nil {
 		return applyResult{}, err

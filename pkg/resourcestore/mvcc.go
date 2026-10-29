@@ -36,10 +36,20 @@ var (
 	// requests: proposer ++ request ID -> the index it was applied at, so
 	// that a request proposed again after a change of leader applies once.
 	requestsBucket = []byte("requests")
+	// The tape (tape.go): archived versions, keyed as in versions; deleted
+	// keys and the revision of their deletion; the time of each revision,
+	// both ways.
+	archiveBucket   = []byte("archive")
+	graveyardBucket = []byte("graveyard")
+	revTimesBucket  = []byte("revtimes")
+	timeRevsBucket  = []byte("timerevs")
 
 	currentKey = []byte("current")
 	compactKey = []byte("compacted")
 	appliedKey = []byte("applied")
+	// tapeFrom is the oldest revision the tape holds every version after:
+	// the compacted revision when compaction first archived.
+	tapeFromKey = []byte("tapefrom")
 )
 
 // Errors as etcd reports them.
@@ -121,7 +131,8 @@ func openDB(path string) (*bolt.DB, error) {
 	// with its backend. One sync per round of Raft instead of two.
 	db.NoSync = true
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{versionsBucket, latestBucket, metaBucket, leasesBucket, leaseKeysBucket, membersBucket, removedBucket, requestsBucket} {
+		for _, b := range [][]byte{versionsBucket, latestBucket, metaBucket, leasesBucket, leaseKeysBucket, membersBucket, removedBucket, requestsBucket,
+			archiveBucket, graveyardBucket, revTimesBucket, timeRevsBucket} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -403,8 +414,11 @@ type writer struct {
 	meta, versions    *bolt.Bucket
 	latest, leaseKeys *bolt.Bucket
 	current, rev      int64
-	wrote             bool
-	events            []Event
+	// at is when the entry was proposed, in Unix milliseconds; 0 when
+	// unknown (entries from before the tape).
+	at     int64
+	wrote  bool
+	events []Event
 }
 
 func newWriter(tx *bolt.Tx) *writer {
@@ -436,6 +450,9 @@ func (w *writer) put(key []byte, ver Version, prev *Version) error {
 		}
 	}
 	w.wrote = true
+	if err := markGrave(w.tx, key, ver.Deleted, w.rev); err != nil {
+		return err
+	}
 	return putInt(w.latest, key, w.rev)
 }
 
@@ -473,6 +490,9 @@ func (w *writer) del(key, end []byte) ([]*KV, error) {
 func (w *writer) finish() (int64, error) {
 	if !w.wrote {
 		return w.current, nil
+	}
+	if err := recordTime(w.tx, w.rev, w.at); err != nil {
+		return 0, err
 	}
 	return w.rev, putInt(w.meta, currentKey, w.rev)
 }
@@ -561,8 +581,9 @@ func txn(w *writer, r *TxnRequest) (TxnResult, error) {
 }
 
 // compact drops every version older than the newest one each key had at
-// rev, and deletions at or before rev.
-func compact(tx *bolt.Tx, rev int64) error {
+// rev, and deletions at or before rev. With archive, what it drops moves
+// to the tape instead of going.
+func compact(tx *bolt.Tx, rev int64, archive bool) error {
 	m := tx.Bucket(metaBucket)
 	current, compacted := getInt(m, currentKey), getInt(m, compactKey)
 	if rev > current {
@@ -596,7 +617,18 @@ func compact(tx *bolt.Tx, rev int64) error {
 			keep = nil
 		}
 	}
+	if archive {
+		if err := startTape(m, compacted); err != nil {
+			return err
+		}
+	}
+	arch := tx.Bucket(archiveBucket)
 	for _, k := range drop {
+		if archive {
+			if err := arch.Put(k, versions.Get(k)); err != nil {
+				return err
+			}
+		}
 		if err := versions.Delete(k); err != nil {
 			return err
 		}
@@ -604,6 +636,11 @@ func compact(tx *bolt.Tx, rev int64) error {
 	for _, k := range gone {
 		if err := latest.Delete(k); err != nil {
 			return err
+		}
+		if !archive {
+			if err := tx.Bucket(graveyardBucket).Delete(k); err != nil {
+				return err
+			}
 		}
 	}
 	return putInt(m, compactKey, rev)

@@ -123,6 +123,16 @@ func TestResourceStoreLabRunsInPlaceOfEtcd(t *testing.T) {
 		if !strings.Contains(lab["kube-apiserver"], "--etcd-servers=https://127.0.0.1:2379") || !strings.Contains(lab["kuberoot-node"], "--etcd") {
 			t.Errorf("%s: the lab store is not reached as etcd is", distro)
 		}
+		if strings.Contains(e, "--keep-history") {
+			t.Errorf("%s: the tape without kuberoot.store-tape: %s", distro, e)
+		}
+		f.Etcd.KeepHistory, f.Etcd.ListenTape = "--keep-history", "--listen-tape-urls=http://127.0.0.1:2382"
+		if e := servicesOf(t, distro, roleControlPlane, f)["etcd"]; !strings.Contains(e, "--keep-history --listen-tape-urls=http://127.0.0.1:2382") {
+			t.Errorf("%s: lab store with the tape: %s", distro, e)
+		}
+	}
+	if !parseCmdline("kuberoot.datastore=kuberoot-store kuberoot.store-tape").storeTape || parseCmdline("").storeTape {
+		t.Error("kuberoot.store-tape")
 	}
 }
 

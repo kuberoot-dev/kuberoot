@@ -88,6 +88,8 @@ spec:
         - --peer-client-cert-auth
         - --peer-trusted-ca-file={{pki "etcd-ca.crt"}}
         - --listen-metrics-urls=http://127.0.0.1:2381
+        - '{{.Etcd.KeepHistory}}'
+        - '{{.Etcd.ListenTape}}'
       - name: kube-apiserver
         args:
         - /usr/bin/kube-apiserver
