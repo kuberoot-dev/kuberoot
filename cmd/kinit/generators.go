@@ -128,7 +128,8 @@ var generators = map[string]func(roleContext) error{
 			files["/etc/crio/crio.conf.d/10-kuberoot.conf"] = crioConfig
 			files["/etc/containers/policy.json"] = containersPolicy
 			files["/etc/containers/registries.conf"] = containersRegistries
-			dirs = append(dirs, "/var/lib/containers", "/var/lib/crio")
+			// Image pulls stage layers under /var/tmp.
+			dirs = append(dirs, "/var/lib/containers", "/var/lib/crio", "/var/tmp")
 		default:
 			files["/etc/containerd/config.toml"] = containerdConfig
 			if podNetworkMode == "none" {
