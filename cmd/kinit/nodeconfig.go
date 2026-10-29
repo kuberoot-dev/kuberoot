@@ -184,11 +184,14 @@ conmon_cgroup = "pod"
 conmon = "/usr/bin/conmon"
 pinns_path = "/usr/bin/pinns"
 default_runtime = "runc"
-enable_criu_support = true
 
 [crio.runtime.runtimes.runc]
 runtime_path = "/usr/bin/runc"
 runtime_root = "/run/runc"
+
+[crio.checkpoint_restore]
+# Restoring is off by default: only checkpoints are taken.
+container_level_enabled = "checkpoint_restore"
 
 [crio.network]
 network_dir = "/etc/cni/net.d"

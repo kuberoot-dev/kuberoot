@@ -168,7 +168,7 @@ func TestRuntimeEndpoint(t *testing.T) {
 	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/crio/crio.sock") {
 		t.Fatal("cri-o when the profile says so")
 	}
-	if !strings.Contains(crioConfig, "enable_criu_support = true") {
+	if !strings.Contains(crioConfig, `container_level_enabled = "checkpoint_restore"`) {
 		t.Fatal("cri-o restores from checkpoints")
 	}
 }
