@@ -172,3 +172,19 @@ func TestRuntimeEndpoint(t *testing.T) {
 		t.Fatal("cri-o restores from checkpoints")
 	}
 }
+
+func TestLinkVarRun(t *testing.T) {
+	root := t.TempDir()
+	// A previous boot's run time on the state partition.
+	if err := os.MkdirAll(root+"/var/run/crio/exits", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := linkVarRun(root); err != nil {
+			t.Fatal(err)
+		}
+		if l, err := os.Readlink(root + "/var/run"); err != nil || l != "../run" {
+			t.Fatalf("/var/run -> %q, %v", l, err)
+		}
+	}
+}
