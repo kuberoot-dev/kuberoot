@@ -17,10 +17,15 @@ type request struct {
 	From uint64 `json:"from"`
 	ID   uint64 `json:"id"`
 
-	Txn         *TxnRequest `json:"txn,omitempty"`
-	Compact     int64       `json:"compact,omitempty"`
-	LeaseGrant  *Lease      `json:"grant,omitempty"`
-	LeaseRevoke int64       `json:"revoke,omitempty"`
+	// At is when it was proposed, in Unix milliseconds: the tape's clock.
+	At int64 `json:"at,omitempty"`
+
+	Txn     *TxnRequest `json:"txn,omitempty"`
+	Compact int64       `json:"compact,omitempty"`
+	// Archive: the compaction moves what it drops to the tape.
+	Archive     bool   `json:"archive,omitempty"`
+	LeaseGrant  *Lease `json:"grant,omitempty"`
+	LeaseRevoke int64  `json:"revoke,omitempty"`
 	// Attributes: a member, once started, publishes its name and client URLs.
 	Attributes *Member `json:"attrs,omitempty"`
 }
@@ -172,6 +177,7 @@ func applyOne(tx *bolt.Tx, e logEntry, pub *published) (applyResult, error) {
 			return res, nil
 		}
 		w := newWriter(tx)
+		w.at = r.At
 		tr, err := txn(w, r.Txn)
 		if err == ErrLeaseNotFound || err == errKeyNotFound {
 			res.Err = err
@@ -183,7 +189,7 @@ func applyOne(tx *bolt.Tx, e logEntry, pub *published) (applyResult, error) {
 		res.Txn, res.Revision = tr, tr.Revision
 		pub.events = append(pub.events, w.events...)
 	case r.Compact != 0:
-		res.Err = compact(tx, r.Compact)
+		res.Err = compact(tx, r.Compact, r.Archive)
 		if res.Err != nil && res.Err != ErrCompacted && res.Err != ErrFutureRev {
 			return res, res.Err
 		}
@@ -198,6 +204,7 @@ func applyOne(tx *bolt.Tx, e logEntry, pub *published) (applyResult, error) {
 		res.Revision = getInt(tx.Bucket(metaBucket), currentKey)
 	case r.LeaseRevoke != 0:
 		w := newWriter(tx)
+		w.at = r.At
 		rev, err := leaseRevoke(w, r.LeaseRevoke)
 		if err == ErrLeaseNotFound {
 			res.Err = err

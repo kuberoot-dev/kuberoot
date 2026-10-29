@@ -278,7 +278,7 @@ func (s *Server) Txn(ctx context.Context, r *etcdserverpb.TxnRequest) (*etcdserv
 }
 
 func (s *Server) Compact(ctx context.Context, r *etcdserverpb.CompactionRequest) (*etcdserverpb.CompactionResponse, error) {
-	res, err := s.Node.propose(ctx, &request{Compact: r.Revision})
+	res, err := s.Node.propose(ctx, &request{Compact: r.Revision, Archive: s.Node.cfg.KeepHistory})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
