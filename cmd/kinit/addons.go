@@ -165,9 +165,29 @@ func applyAddons(ctx context.Context, cfg bootConfig, node nodeInfo) {
 		return
 	}
 	log.Printf("add-ons applied")
+	labelControlPlane(ctx, node)
 	if activeRole.Packages {
 		installDistro(ctx, cfg)
 	}
+}
+
+// labelControlPlane marks the node as one running the control plane. The
+// kubelet cannot write this label itself: NodeRestriction refuses labels in
+// the node-role.kubernetes.io namespace from a node's own credentials, so it
+// is written here, where the admin credentials are. The value is empty, as
+// kubeadm writes it and as the convention has it -- the label means its own
+// presence, and anything selecting on it should ask whether it exists rather
+// than what it says.
+//
+// It is what `kubectl get nodes` prints under ROLES, and what a workload that
+// wants to sit with the control plane matches on.
+func labelControlPlane(ctx context.Context, node nodeInfo) {
+	args := []string{"/usr/bin/kubectl", "--kubeconfig", kubeDir + "/admin.kubeconfig",
+		"label", "--overwrite", "node", node.name, "node-role.kubernetes.io/control-plane="}
+	if !runUntilSuccess(ctx, args, nil, 5*time.Second) {
+		return
+	}
+	log.Printf("node %s labelled as control plane", node.name)
 }
 
 // runUntilSuccess runs a tool until it exits 0, each run capped at two minutes,
