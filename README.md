@@ -18,6 +18,7 @@ kuberoot puts into practice the essay [The Inevitable Future of Kubernetes: why 
 - **kinit**: PID 1. It mounts the read-only root and the state partition, brings up the network, issues the node's certificates and runs the services of the node's role: containerd, kubelet and kube-proxy everywhere, plus kine (the cluster store on SQLite), the API server, the controller manager and the scheduler on the control plane.
 - **Node API**: every node serves `node.kuberoot.dev`, aggregated into the cluster API, so `kubectl get disks`, `kubectl get bootentries` or `kubectl create upgrade` act on a node. It works before a cluster exists, which is how a node is installed.
 - **Pod network**: VXLAN between nodes, or plain routes on a flat network, or none, for a CNI package such as Cilium.
+- **Container runtime**: containerd, or CRI-O for a distribution whose profile says `runtime: cri-o` and whose image carries it: CRI-O restores containers from checkpoints, which containerd's CRI does not.
 - **Packages**: the kubepkg operator runs on the control plane and installs the distribution's packages; the `edge` meta package and the platform packages live in [kubepkg-recipes](https://github.com/kuberoot-dev/kubepkg-recipes).
 
 ## The router distribution

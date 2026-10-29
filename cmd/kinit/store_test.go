@@ -154,3 +154,21 @@ func TestStoreKindOfTheLabStore(t *testing.T) {
 		t.Fatalf("with the binary: %s %v", k, err)
 	}
 }
+
+func TestRuntimeEndpoint(t *testing.T) {
+	saved := activeProfile
+	defer func() { activeProfile = saved }()
+	activeProfile = nil
+	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/containerd/containerd.sock") {
+		t.Fatal("containerd by default")
+	}
+	p := &profile{}
+	p.Spec.Runtime = RuntimeCRIO
+	activeProfile = p
+	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/crio/crio.sock") {
+		t.Fatal("cri-o when the profile says so")
+	}
+	if !strings.Contains(crioConfig, "enable_criu_support = true") {
+		t.Fatal("cri-o restores from checkpoints")
+	}
+}
