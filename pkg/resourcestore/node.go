@@ -68,6 +68,8 @@ type Config struct {
 	// to the tape (tape.go) instead of deleting it. Give every member the
 	// same.
 	KeepHistory bool
+	// HistoryRetention: how long the tape keeps history; 0 is forever.
+	HistoryRetention time.Duration
 }
 
 func (c *Config) defaults() {

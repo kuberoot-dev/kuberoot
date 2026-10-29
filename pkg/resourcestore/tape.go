@@ -295,3 +295,103 @@ func (s *Store) Graveyard(key, end []byte) []Grave {
 	})
 	return out
 }
+
+// pruneTape forgets the tape before the newest revision written at or
+// before the moment before (Unix milliseconds), as a compaction of the
+// archive at that revision: each key keeps its version at the cut, unless
+// a live version already holds it or it was deleted; deletions before the
+// cut leave the graveyard. The tape then starts at the cut.
+func pruneTape(tx *bolt.Tx, before int64) error {
+	m := tx.Bucket(metaBucket)
+	from, started := tapeFrom(m)
+	if !started {
+		return nil
+	}
+	cut := int64(0)
+	c := tx.Bucket(timeRevsBucket).Cursor()
+	k, _ := c.Seek(idKey(uint64(before + 1)))
+	if k == nil {
+		k, _ = c.Last()
+	} else {
+		k, _ = c.Prev()
+	}
+	if len(k) == 16 {
+		cut = int64(binary.BigEndian.Uint64(k[8:]))
+	}
+	// The archive holds nothing after the compacted revision.
+	cut = min(cut, getInt(m, compactKey))
+	if cut <= from {
+		return nil
+	}
+	arch, versions := tx.Bucket(archiveBucket), tx.Bucket(versionsBucket)
+	var drop [][]byte
+	var prevKey, keep []byte
+	keepDeleted := false
+	settle := func() {
+		// The version a key had at the cut stays, unless the live
+		// versions hold one at or before the cut, or it is a deletion.
+		if keep == nil {
+			return
+		}
+		if _, r := newestIn(versions, prevKey, cut); r != 0 || keepDeleted {
+			drop = append(drop, keep)
+		}
+	}
+	ac := arch.Cursor()
+	for k, v := ac.First(); k != nil; k, v = ac.Next() {
+		key, r := splitVersionKey(k)
+		if !bytes.Equal(key, prevKey) {
+			settle()
+			prevKey, keep = append([]byte(nil), key...), nil
+		}
+		if r > cut {
+			continue
+		}
+		if keep != nil {
+			drop = append(drop, keep)
+		}
+		keep = append([]byte(nil), k...)
+		var ver Version
+		keepDeleted = json.Unmarshal(v, &ver) == nil && ver.Deleted
+	}
+	settle()
+	for _, k := range drop {
+		if err := arch.Delete(k); err != nil {
+			return err
+		}
+	}
+	if err := deleteWhere(tx.Bucket(graveyardBucket), func(k, v []byte) bool {
+		return len(v) == 8 && int64(binary.BigEndian.Uint64(v)) <= cut
+	}); err != nil {
+		return err
+	}
+	cutTime := timeOf(tx, cut)
+	if err := deleteWhere(tx.Bucket(revTimesBucket), func(k, _ []byte) bool {
+		return int64(binary.BigEndian.Uint64(k)) < cut
+	}); err != nil {
+		return err
+	}
+	if err := deleteWhere(tx.Bucket(timeRevsBucket), func(k, _ []byte) bool {
+		return len(k) == 16 && int64(binary.BigEndian.Uint64(k[:8])) < cutTime
+	}); err != nil {
+		return err
+	}
+	return putInt(m, tapeFromKey, cut)
+}
+
+// deleteWhere deletes the entries of b that gone says are gone.
+func deleteWhere(b *bolt.Bucket, gone func(k, v []byte) bool) error {
+	var keys [][]byte
+	_ = b.ForEach(func(k, v []byte) error {
+		if gone(k, v) {
+			keys = append(keys, append([]byte(nil), k...))
+		}
+		return nil
+	})
+	for _, k := range keys {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}

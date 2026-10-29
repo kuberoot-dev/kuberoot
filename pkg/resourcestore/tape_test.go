@@ -156,3 +156,54 @@ func TestTapeHTTP(t *testing.T) {
 		t.Fatalf("a future revision: %d", code)
 	}
 }
+
+// Retention cuts the tape at the revision written at the moment it keeps
+// from: each key keeps its version at the cut, deletions before the cut
+// leave the graveyard.
+func TestTapeRetentionCutsTheOldestHistory(t *testing.T) {
+	s := openStore(t)
+	retain := func(i uint64, rev, at, keep int64) logEntry {
+		e := compactEntry(i, rev, true)
+		e.Req.At, e.Req.Retain = at, keep
+		return e
+	}
+	put := putEntry(7, 1, 7, "/c", "1")
+	put.Req.At = 6000
+	// The cut: the revision written at or before 8000-4500 = 3500 ms,
+	// revision 4 (/b written at 3000 ms).
+	if _, err := s.Apply(append(tapeEntries(), compactEntry(6, 5, true), put, retain(8, 7, 8000, 4500))); err != nil {
+		t.Fatal(err)
+	}
+	if info := s.Tape(); info.From != 4 {
+		t.Fatalf("tape from %d, want 4", info.From)
+	}
+	if _, err := s.TapeRange([]byte("/"), []byte{0}, 3, 0); err != ErrBeforeTape {
+		t.Fatalf("before the cut: %v", err)
+	}
+	rr, err := s.TapeRange([]byte("/"), []byte{0}, 4, 0)
+	if err != nil || len(rr.KVs) != 2 || string(rr.KVs[0].Value) != "2" || string(rr.KVs[1].Value) != "x" {
+		t.Fatalf("at the cut: %+v %v", rr.KVs, err)
+	}
+	if h := s.History([]byte("/a")); len(h) != 2 || h[0].ModRevision != 3 {
+		t.Fatalf("history of /a after the cut: %+v", h)
+	}
+	if g := s.Graveyard([]byte("/"), []byte{0}); len(g) != 1 {
+		t.Fatalf("a deletion after the cut stays in the graveyard: %+v", g)
+	}
+	// Cut past the deletion of /b (revision 5, at 4000 ms): /b is gone
+	// from the tape and the graveyard.
+	put2 := putEntry(9, 1, 9, "/c", "2")
+	put2.Req.At = 9000
+	if _, err := s.Apply([]logEntry{put2, retain(10, 8, 10000, 6000)}); err != nil {
+		t.Fatal(err)
+	}
+	if h := s.History([]byte("/b")); len(h) != 0 {
+		t.Fatalf("history of /b: %+v", h)
+	}
+	if g := s.Graveyard([]byte("/"), []byte{0}); len(g) != 0 {
+		t.Fatalf("graveyard: %+v", g)
+	}
+	if r := s.RevisionAt(1500); r != 0 {
+		t.Fatalf("times before the cut stay: revision %d at 1.5 s", r)
+	}
+}

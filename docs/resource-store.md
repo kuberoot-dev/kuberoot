@@ -293,8 +293,14 @@ address. kinit runs it with `kuberoot.store-tape` next to
 `kuberoot.datastore=kuberoot-store`: the tape on `http://127.0.0.1:2382`,
 for the control plane's own node.
 
-The archive grows without bound: there is no retention and no moving of old
-segments to object storage yet.
+`--history-retention` (720h, say) bounds the tape: each compaction cuts the
+archive at the revision written that long ago, keeping every key as it was at
+the cut, and deletions before it leave the graveyard. Unset, the tape keeps
+everything. Old segments are not moved to object storage yet.
+
+A snapshot ends with the SHA-256 of the state, as etcd's does, so
+`etcdctl snapshot save` takes it; the restore checks the sum and refuses a
+damaged copy.
 
 ## Measurements
 
