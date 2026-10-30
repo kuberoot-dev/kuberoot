@@ -46,8 +46,20 @@ make -s ARCH=$KARCH O="$O" olddefconfig
 # build as a module is built in, as it was with modules off.
 sed -i 's/=m$/=y/' "$O/.config"
 make -s ARCH=$KARCH O="$O" olddefconfig
+# olddefconfig drops an option whose dependencies the fragments did not also
+# ask for, and says nothing. For most options the loss shows up as a kernel
+# that misbehaves; for these it shows up much later, as a CNI that refuses to
+# load on a cluster that is already built, so check them here instead.
+for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM; do
+  grep -qx "$opt=y" "$O/.config" || {
+    echo "$opt was asked for in the fragments and is not in the resulting config: a dependency of it is unmet" >&2
+    exit 1
+  }
+done
+
 make -s ARCH=$KARCH O="$O" -j"${JOBS:-$(nproc)}" "$(basename $IMAGE)" modules
 grep -q "=m$" "$O/.config" && { echo "modules left in the kernel config:" >&2; grep "=m$" "$O/.config" >&2; exit 1; }
+
 cp "$O/$IMAGE" "$OUT/vmlinuz.efi"
 cp "$O/.config" "$OUT/kernel.config"
 echo "${KFLAVOUR:-base}" > "$OUT/kernel.flavour"
