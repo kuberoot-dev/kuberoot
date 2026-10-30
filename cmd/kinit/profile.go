@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"github.com/kuberoot-dev/kuberoot/pkg/etcdstore"
 	"log"
 	"net"
 	"path/filepath"
@@ -87,6 +88,9 @@ type facts struct {
 func roleFacts(r roleContext, cfg bootConfig) facts {
 	var f facts
 	f.Store, f.Etcd = newStoreFacts(r.store, r.node)
+	if cfg.storeTape && r.store == etcdstore.KuberootStore {
+		f.Etcd.KeepHistory, f.Etcd.ListenTape = "--keep-history", "--listen-tape-urls=http://127.0.0.1:2382"
+	}
 	if r.member != nil {
 		f.Member.Servers = strings.Join(r.member.Servers, ",")
 	}

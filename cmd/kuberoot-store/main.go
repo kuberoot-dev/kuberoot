@@ -38,6 +38,9 @@ type flags struct {
 	peerCertFile, peerKeyFile, peerTrustedCA string
 	peerClientCertAuth                       bool
 	listenMetrics                            string
+	keepHistory                              bool
+	historyRetention                         time.Duration
+	listenTape                               string
 	snapshotCount, catchUpEntries            uint64
 	heartbeatMs, electionMs                  int
 }
@@ -70,6 +73,9 @@ func main() {
 	flag.StringVar(&f.peerTrustedCA, "peer-trusted-ca-file", "", "the authority of members' certificates")
 	flag.BoolVar(&f.peerClientCertAuth, "peer-client-cert-auth", false, "require members' certificates")
 	flag.StringVar(&f.listenMetrics, "listen-metrics-urls", "", "URLs /health and /metrics are served on, plain HTTP")
+	flag.BoolVar(&f.keepHistory, "keep-history", false, "compaction moves old versions to the tape instead of deleting them")
+	flag.DurationVar(&f.historyRetention, "history-retention", 0, "how long the tape keeps history, such as 720h; 0 keeps everything")
+	flag.StringVar(&f.listenTape, "listen-tape-urls", "", "URLs the tape is read on (/tape/v1), with the client API's TLS; https requires --client-cert-auth")
 	flag.Uint64Var(&f.snapshotCount, "snapshot-count", 10000, "entries applied between snapshots of the state")
 	flag.Uint64Var(&f.catchUpEntries, "snapshot-catchup-entries", 5000, "entries kept before a snapshot for members a little behind")
 	flag.IntVar(&f.heartbeatMs, "heartbeat-interval", 100, "milliseconds between the leader's heartbeats")
@@ -216,6 +222,7 @@ func run(f flags) error {
 		Name: f.name, DataDir: f.dataDir, InitialCluster: cluster, InitialClusterState: f.initialState,
 		ClusterToken: f.token, PeerURLs: advPeer, ClientURLs: advClient, PeerClientTLS: peerClientTLS,
 		SnapshotCount: f.snapshotCount, CatchUpEntries: f.catchUpEntries, TickMs: f.heartbeatMs, ElectionTicks: ticks,
+		KeepHistory: f.keepHistory, HistoryRetention: f.historyRetention,
 	})
 	if err != nil {
 		return err
@@ -262,6 +269,31 @@ func run(f flags) error {
 				return fmt.Errorf("metrics listener: %w", err)
 			}
 			go func() { _ = http.Serve(l, metrics(n)) }()
+		}
+	}
+	if f.listenTape != "" {
+		urls, err := splitURLs(f.listenTape)
+		if err != nil {
+			return err
+		}
+		for _, u := range urls {
+			// The tape holds every value the store ever did, Secrets
+			// included: over the network, only to clients the store's
+			// authority vouches for.
+			if strings.HasPrefix(u, "https://") && !f.clientCertAuth {
+				return fmt.Errorf("--listen-tape-urls %s: requires --client-cert-auth", u)
+			}
+			if p, _ := url.Parse(u); p.Scheme == "http" {
+				if ip := net.ParseIP(p.Hostname()); ip == nil || !ip.IsLoopback() {
+					return fmt.Errorf("--listen-tape-urls %s: plain HTTP only on a loopback address", u)
+				}
+			}
+			l, err := listen(u, clientTLS, "http/1.1")
+			if err != nil {
+				return fmt.Errorf("tape listener: %w", err)
+			}
+			srv := &http.Server{Handler: n.Store().TapeHandler(), ReadHeaderTimeout: 10 * time.Second}
+			go func() { _ = srv.Serve(l) }()
 		}
 	}
 	klog.Infof("member %s (%x) of store %x: clients on %v, peers on %v, data in %s",

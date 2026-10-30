@@ -262,6 +262,46 @@ backups restored with the store's own restore. A node asked for the lab store
 on an image without it creates its cluster on kine. The choice stays with the
 cluster, as with etcd.
 
+### The tape
+
+The API server compacts the store every five minutes, and what it compacts
+is gone: the cluster as it was an hour ago, an object deleted by mistake.
+A member started with `--keep-history` moves what a compaction drops to an
+archive instead of deleting it. The etcd API does not change: a read or a
+watch before the compacted revision fails as with etcd, which the API server
+and conformance rely on. The tape is a separate, read-only API over the
+archive and the live versions together:
+
+| Request | Answer |
+|---|---|
+| `GET /tape/v1/info` | the current and compacted revisions, where the tape starts, their times |
+| `GET /tape/v1/range?key=K&end=E&rev=R` (or `&at=RFC3339`) | the keys of `[K, E)` as they were at a revision or a moment |
+| `GET /tape/v1/history?key=K` | every version of a key, deletions included |
+| `GET /tape/v1/graveyard?key=K&end=E` | the keys deleted and not written since, with what they last held |
+
+The tape is replicated state like the rest: compactions reach every member
+through the log with the archiving flag of the member that proposed them,
+and every entry carries the time it was proposed, kept per revision, so
+every member reads the same tape and answers "at 13:00" the same way. It
+starts at the first compaction that archives; deletions before it are not
+in the graveyard. A snapshot and a restore carry it.
+
+Values are what the API server stored, Secrets included (encrypted when the
+API server encrypts them). `--listen-tape-urls` takes the client API's TLS
+and refuses https without `--client-cert-auth` and plain HTTP off a loopback
+address. kinit runs it with `kuberoot.store-tape` next to
+`kuberoot.datastore=kuberoot-store`: the tape on `http://127.0.0.1:2382`,
+for the control plane's own node.
+
+`--history-retention` (720h, say) bounds the tape: each compaction cuts the
+archive at the revision written that long ago, keeping every key as it was at
+the cut, and deletions before it leave the graveyard. Unset, the tape keeps
+everything. Old segments are not moved to object storage yet.
+
+A snapshot ends with the SHA-256 of the state, as etcd's does, so
+`etcdctl snapshot save` takes it; the restore checks the sum and refuses a
+damaged copy.
+
 ## Measurements
 
 ### Unit tests

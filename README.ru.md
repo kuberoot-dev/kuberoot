@@ -18,6 +18,7 @@ kuberoot воплощает статью Тимура Тукаева [The Inevit
 - **kinit**: PID 1. Монтирует корень только для чтения и раздел состояния, поднимает сеть, выпускает сертификаты ноды и запускает службы её роли: containerd, kubelet и kube-proxy на всех нодах, а на control plane ещё kine (хранилище кластера на SQLite), API-сервер, controller manager и планировщик.
 - **API ноды**: каждая нода обслуживает `node.kuberoot.dev`, подключённый к API кластера, поэтому `kubectl get disks`, `kubectl get bootentries` или `kubectl create upgrade` действуют на ноду. Он работает и до того, как появится кластер, — так ноду и устанавливают.
 - **Сеть подов**: VXLAN между нодами, или обычные маршруты в плоской сети, или никакой — для CNI-пакета вроде Cilium.
+- **Container runtime**: containerd, или CRI-O для дистрибутива, чей профиль говорит `runtime: cri-o` и чей образ его несёт: CRI-O восстанавливает контейнеры из чекпойнтов, а CRI containerd — нет.
 - **Пакеты**: оператор kubepkg работает на control plane и ставит пакеты дистрибутива; метапакет `edge` и пакеты платформы лежат в [kubepkg-recipes](https://github.com/kuberoot-dev/kubepkg-recipes).
 
 ## Дистрибутив router
