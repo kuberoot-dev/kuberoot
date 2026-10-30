@@ -1,6 +1,8 @@
 package resourcestore
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -53,7 +55,7 @@ func Restore(snapshot, dataDir, name string, initialCluster map[string][]string,
 	// The log's snapshot is at index 1, of term 1; the state has applied it.
 	const index, term = 1, 1
 	tmp := filepath.Join(dataDir, "state.db.restore")
-	if err := copyFile(snapshot, tmp); err != nil {
+	if err := copySnapshot(snapshot, tmp); err != nil {
 		return err
 	}
 	db, err := bolt.Open(tmp, 0o600, nil)
@@ -117,6 +119,49 @@ func writeRaftStart(path string, self, cluster, index, term uint64, voters []uin
 		Index: proto.Uint64(index), Term: proto.Uint64(term), ConfState: &raftpb.ConfState{Voters: voters}}}
 	hs := &raftpb.HardState{Term: proto.Uint64(term), Vote: proto.Uint64(0), Commit: proto.Uint64(index)}
 	return l.save(hs, nil, snap)
+}
+
+// copySnapshot copies a snapshot's state to dst. A snapshot from the
+// Maintenance API ends with the state's SHA-256, as etcd's does: it is
+// checked and left out. bbolt's pages are multiples of 512 bytes, so a
+// size 32 bytes past one says the sum is there, as etcdutl reads it.
+func copySnapshot(src, dst string) error {
+	fi, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if (fi.Size()-sha256.Size)%512 != 0 {
+		return copyFile(src, dst)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, sum), io.LimitReader(in, fi.Size()-sha256.Size)); err != nil {
+		out.Close()
+		return err
+	}
+	want := make([]byte, sha256.Size)
+	if _, err := io.ReadFull(in, want); err != nil {
+		out.Close()
+		return err
+	}
+	if !bytes.Equal(sum.Sum(nil), want) {
+		out.Close()
+		os.Remove(dst)
+		return fmt.Errorf("%s: the checksum does not match: the snapshot is damaged", src)
+	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func copyFile(src, dst string) error {

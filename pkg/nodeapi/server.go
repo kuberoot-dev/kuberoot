@@ -76,7 +76,11 @@ type Options struct {
 	PodCIDR string
 	// PodNetwork is how pod traffic crosses between nodes: PodNetworkVXLAN
 	// or PodNetworkHostGW.
-	PodNetwork  string
+	PodNetwork string
+	// CNITemplate, when set, is the pod network's CNI configuration with
+	// {{.PodCIDR}} in it: the node writes it out for its own subnet, for a
+	// runtime that does not fill in templates (CRI-O).
+	CNITemplate string
 	ServiceCIDR string
 
 	// Resources the distribution serves; empty serves all.
@@ -287,7 +291,7 @@ func Run(ctx context.Context, o Options) error {
 	if o.RoutesKubeconfig != "" {
 		_, podRange, _ := net.ParseCIDR(o.PodCIDR)
 		if o.PodNetwork != PodNetworkNone {
-			go syncRoutes(ctx, o.RoutesKubeconfig, o.NodeName, podRange, o.PodNetwork)
+			go syncRoutes(ctx, o.RoutesKubeconfig, o.NodeName, podRange, o.PodNetwork, o.CNITemplate)
 		}
 	}
 	return server.PrepareRun().RunWithContext(ctx)

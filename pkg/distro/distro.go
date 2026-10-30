@@ -40,7 +40,11 @@ type Spec struct {
 	Modules []Module `json:"modules,omitempty"`
 	// Kubelet holds fields of the KubeletConfiguration the distribution sets
 	// on top of the image's own, such as how the kubelet hands out CPUs.
-	Kubelet map[string]any  `json:"kubelet,omitempty"`
+	Kubelet map[string]any `json:"kubelet,omitempty"`
+	// Runtime is the container runtime the kubelet talks to: containerd,
+	// the default, or cri-o, which can restore containers from checkpoints.
+	// The image must carry it.
+	Runtime string          `json:"runtime,omitempty"`
 	Roles   map[string]Role `json:"roles"`
 	NodeAPI NodeAPI         `json:"nodeAPI,omitempty"`
 }

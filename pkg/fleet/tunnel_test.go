@@ -271,6 +271,12 @@ func TestFailoverToAnotherReplica(t *testing.T) {
 	}
 	go a.Run(ctx)
 	waitConnected(t, f, "shop-1")
+	// Save leaves a live connection alone only when the agent's own status
+	// already names the server it is on, and that status is written just after
+	// the dial returns -- after the replica accepted. Waiting on the replica
+	// alone would let the save land in between, where it finds no connection to
+	// spare and pokes the agent into reconnecting.
+	waitAgentServer(t, a, first)
 
 	// The second replica: the same authority and pins, as replicas share them.
 	second := &Hub{Cert: f.hub.Cert, Identity: f.hub.Identity, Enroll: f.hub.Enroll, Changed: f.hub.Changed}
@@ -304,7 +310,28 @@ func TestFailoverToAnotherReplica(t *testing.T) {
 	if _, ok := second.Connected("shop-1"); !ok {
 		t.Fatal("not connected to the second replica")
 	}
-	if a.Status().Server != ln.Addr().String() {
-		t.Errorf("agent %+v", a.Status())
+	waitAgentServer(t, a, ln.Addr().String())
+}
+
+// waitAgentServer waits for the agent to name this server as the one it is
+// connected to. The replica learns of the connection as it accepts it, while
+// the agent records it just after the dial returns, so the two are not
+// simultaneous: between losing a replica and reaching the next one the agent
+// passes through Disconnected and a backoff, and reading its status once on
+// the strength of an event from the other side catches that gap on a machine
+// slow enough to lose the race.
+func waitAgentServer(t *testing.T, a *Agent, server string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		st := a.Status()
+		if st.Phase == AgentConnected && st.Server == server {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("agent did not report %s as its server: %+v", server, st)
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
