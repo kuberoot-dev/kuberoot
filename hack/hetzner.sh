@@ -10,6 +10,7 @@
 #                                        kernel arguments; served as <arch>/media.img
 #   hack/hetzner.sh repo <recipe-dir>... build kubepkg recipes into the builder's
 #                                        registry and a signed test index at repo/index.yaml
+#   hack/hetzner.sh builder              the builder pod itself (hetzner/builder.yaml)
 #   hack/hetzner.sh node <name> <arch>   a VM booting the current media (hetzner/node.yaml)
 #   hack/hetzner.sh console <name>       serial console of a node
 #   hack/hetzner.sh kp <cluster> args    kubepkg CLI in the builder against a cluster whose
@@ -17,12 +18,18 @@
 #   hack/hetzner.sh kc <cluster> args    kubectl in the builder against /work/kube/<cluster>.conf
 #   hack/hetzner.sh test                 sync, then go test ./... in the builder
 #   hack/hetzner.sh sh [cmd...]          a shell (or a command) in the builder
+#
+# KUBEROOT_NS names the tenant everything lives in (default tenant-kuberoot),
+# so a second stand can run beside the first, or beside one left in a bad state.
+
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export KUBECONFIG=${KUBECONFIG_WORKSHOP:-$HOME/workshop.txt}
 CTX=${KUBE_CONTEXT:-admin@workshop}
-NS=tenant-kuberoot
+# The tenant the builder and the stand nodes live in. Overridable so a second
+# stand can run beside the first, or beside a tenant left in a bad state.
+NS=${KUBEROOT_NS:-tenant-kuberoot}
 k() { kubectl --context "$CTX" -n "$NS" "$@"; }
 tools() { k exec -i builder -c tools -- "$@"; }
 alpine() { k exec -i builder -c alpine -- "$@"; }
@@ -82,8 +89,14 @@ case "${1:-}" in
       KUBEPKG_SIGNING_KEY=\$(cat /work/keys/repo.key) /work/bin/kubepkg repo index /work/dist --sign-key-env KUBEPKG_SIGNING_KEY -o /work/out/repo/index.yaml --plain-http | tail -1
       cp /work/keys/repo.pub /work/out/repo/index.pub
       echo index: http://$ip:8080/repo/index.yaml" ;;
+  builder)
+    sed "s/tenant-kuberoot/$NS/g" "$ROOT/hack/hetzner/builder.yaml" | kubectl --context "$CTX" apply -f - ;;
   node)
-    sed "s/NODE/${2:?name required}/g; s/ARCH/${3:?arch required}/g" "$ROOT/hack/hetzner/node.yaml" | kubectl --context "$CTX" apply -f - ;;
+    # The templates name the default tenant in their own metadata and in the
+    # builder's Service address, so the namespace is substituted here too --
+    # otherwise KUBEROOT_NS moves the kubectl calls and leaves the objects
+    # pointing at a tenant that may not exist.
+    sed "s/NODE/${2:?name required}/g; s/ARCH/${3:?arch required}/g; s/tenant-kuberoot/$NS/g" "$ROOT/hack/hetzner/node.yaml" | kubectl --context "$CTX" apply -f - ;;
   console)
     virtctl --context "$CTX" -n "$NS" console "vm-instance-${2:?name required}" ;;
   kp)
@@ -98,5 +111,7 @@ case "${1:-}" in
   sh)
     shift
     if [ $# -eq 0 ]; then k exec -it builder -c tools -- bash; else tools sh -c "$*"; fi ;;
-  *) sed -n '2,12p' "$0"; exit 1 ;;
+  # Print the header block, whatever length it has grown to, rather than a
+  # line range that silently stops listing commands added after it.
+  *) awk 'NR>1 && /^#/ {print; next} NR>1 {exit}' "$0"; exit 1 ;;
 esac
