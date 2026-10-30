@@ -92,6 +92,13 @@ state = "/run/containerd"
   conf_template = "/etc/cni/kuberoot.conflist.tmpl"
 
 
+# A container that asks for a device through its security context gets the
+# device node owned by the user it runs as. Storage that hands a replicated
+# block device to an unprivileged container needs this; without it the device
+# node stays owned by root and the container cannot open it.
+[plugins.'io.containerd.cri.v1.runtime']
+  device_ownership_from_security_context = true
+
 [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
   runtime_type = "io.containerd.runc.v2"
 

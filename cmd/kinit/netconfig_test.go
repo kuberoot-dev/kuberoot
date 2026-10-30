@@ -81,6 +81,12 @@ func TestNoPodNetworkLeavesTheCNITemplateOut(t *testing.T) {
 	}
 }
 
+func TestContainerdHandsDeviceNodesToTheUserAContainerRunsAs(t *testing.T) {
+	if !strings.Contains(containerdConfig, "device_ownership_from_security_context = true") {
+		t.Error("containerd does not take device ownership from the security context, so a container asking for a device through it cannot open the device node")
+	}
+}
+
 func TestNodeKeepsTheNameItFirstBootedWith(t *testing.T) {
 	saved := nodeNameFile
 	nodeNameFile = filepath.Join(t.TempDir(), "kuberoot", "node-name")
