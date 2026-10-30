@@ -63,6 +63,7 @@ func main() {
 	flag.BoolVar(&o.LatencyTests, "latency-tests", false, "measure real-time latency: the latencytests resource")
 	flag.BoolVar(&o.DeadlinePods, "deadline-pods", false, "run containers that ask for it under SCHED_DEADLINE (deadline.rt.kuberoot.dev/<container>)")
 	flag.StringVar(&o.PodCIDR, "pod-cidr", "", "pod address range of the cluster (control plane node)")
+	flag.StringVar(&o.CNITemplate, "cni-template", "", "write the pod network's CNI configuration from this template for the node's subnet (for CRI-O)")
 	flag.StringVar(&o.PodNetwork, "pod-network", nodeapi.PodNetworkVXLAN, "how pod traffic crosses between nodes: vxlan, host-gw on a plain layer-2 network, or none when a CNI package provides it")
 	flag.StringVar(&o.ServiceCIDR, "service-cidr", "", "service address range of the cluster (control plane node)")
 	profilePath := flag.String("profile", distro.Path, "distribution profile: which node resources to serve")

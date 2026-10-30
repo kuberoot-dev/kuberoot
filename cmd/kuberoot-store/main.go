@@ -39,6 +39,7 @@ type flags struct {
 	peerClientCertAuth                       bool
 	listenMetrics                            string
 	keepHistory                              bool
+	historyRetention                         time.Duration
 	listenTape                               string
 	snapshotCount, catchUpEntries            uint64
 	heartbeatMs, electionMs                  int
@@ -73,6 +74,7 @@ func main() {
 	flag.BoolVar(&f.peerClientCertAuth, "peer-client-cert-auth", false, "require members' certificates")
 	flag.StringVar(&f.listenMetrics, "listen-metrics-urls", "", "URLs /health and /metrics are served on, plain HTTP")
 	flag.BoolVar(&f.keepHistory, "keep-history", false, "compaction moves old versions to the tape instead of deleting them")
+	flag.DurationVar(&f.historyRetention, "history-retention", 0, "how long the tape keeps history, such as 720h; 0 keeps everything")
 	flag.StringVar(&f.listenTape, "listen-tape-urls", "", "URLs the tape is read on (/tape/v1), with the client API's TLS; https requires --client-cert-auth")
 	flag.Uint64Var(&f.snapshotCount, "snapshot-count", 10000, "entries applied between snapshots of the state")
 	flag.Uint64Var(&f.catchUpEntries, "snapshot-catchup-entries", 5000, "entries kept before a snapshot for members a little behind")
@@ -220,7 +222,7 @@ func run(f flags) error {
 		Name: f.name, DataDir: f.dataDir, InitialCluster: cluster, InitialClusterState: f.initialState,
 		ClusterToken: f.token, PeerURLs: advPeer, ClientURLs: advClient, PeerClientTLS: peerClientTLS,
 		SnapshotCount: f.snapshotCount, CatchUpEntries: f.catchUpEntries, TickMs: f.heartbeatMs, ElectionTicks: ticks,
-		KeepHistory: f.keepHistory,
+		KeepHistory: f.keepHistory, HistoryRetention: f.historyRetention,
 	})
 	if err != nil {
 		return err

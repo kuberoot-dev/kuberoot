@@ -154,3 +154,37 @@ func TestStoreKindOfTheLabStore(t *testing.T) {
 		t.Fatalf("with the binary: %s %v", k, err)
 	}
 }
+
+func TestRuntimeEndpoint(t *testing.T) {
+	saved := activeProfile
+	defer func() { activeProfile = saved }()
+	activeProfile = nil
+	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/containerd/containerd.sock") {
+		t.Fatal("containerd by default")
+	}
+	p := &profile{}
+	p.Spec.Runtime = RuntimeCRIO
+	activeProfile = p
+	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/crio/crio.sock") {
+		t.Fatal("cri-o when the profile says so")
+	}
+	if !strings.Contains(crioConfig, `container_level_enabled = "checkpoint_restore"`) {
+		t.Fatal("cri-o restores from checkpoints")
+	}
+}
+
+func TestLinkVarRun(t *testing.T) {
+	root := t.TempDir()
+	// A previous boot's run time on the state partition.
+	if err := os.MkdirAll(root+"/var/run/crio/exits", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := linkVarRun(root); err != nil {
+			t.Fatal(err)
+		}
+		if l, err := os.Readlink(root + "/var/run"); err != nil || l != "../run" {
+			t.Fatalf("/var/run -> %q, %v", l, err)
+		}
+	}
+}
