@@ -23,7 +23,10 @@ type request struct {
 	Txn     *TxnRequest `json:"txn,omitempty"`
 	Compact int64       `json:"compact,omitempty"`
 	// Archive: the compaction moves what it drops to the tape.
-	Archive     bool   `json:"archive,omitempty"`
+	Archive bool `json:"archive,omitempty"`
+	// Retain: with Archive, the tape keeps this many milliseconds of
+	// history before At; 0 keeps everything.
+	Retain      int64  `json:"retain,omitempty"`
 	LeaseGrant  *Lease `json:"grant,omitempty"`
 	LeaseRevoke int64  `json:"revoke,omitempty"`
 	// Attributes: a member, once started, publishes its name and client URLs.
@@ -192,6 +195,11 @@ func applyOne(tx *bolt.Tx, e logEntry, pub *published) (applyResult, error) {
 		res.Err = compact(tx, r.Compact, r.Archive)
 		if res.Err != nil && res.Err != ErrCompacted && res.Err != ErrFutureRev {
 			return res, res.Err
+		}
+		if res.Err == nil && r.Archive && r.Retain > 0 && r.At > r.Retain {
+			if err := pruneTape(tx, r.At-r.Retain); err != nil {
+				return res, err
+			}
 		}
 		res.Revision = getInt(tx.Bucket(metaBucket), currentKey)
 	case r.LeaseGrant != nil:

@@ -2,6 +2,7 @@ package resourcestore
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"sync"
@@ -278,7 +279,8 @@ func (s *Server) Txn(ctx context.Context, r *etcdserverpb.TxnRequest) (*etcdserv
 }
 
 func (s *Server) Compact(ctx context.Context, r *etcdserverpb.CompactionRequest) (*etcdserverpb.CompactionResponse, error) {
-	res, err := s.Node.propose(ctx, &request{Compact: r.Revision, Archive: s.Node.cfg.KeepHistory})
+	res, err := s.Node.propose(ctx, &request{Compact: r.Revision, Archive: s.Node.cfg.KeepHistory,
+		Retain: s.Node.cfg.HistoryRetention.Milliseconds()})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -539,15 +541,19 @@ func (s *Server) Snapshot(_ *etcdserverpb.SnapshotRequest, stream grpc.ServerStr
 		pw.CloseWithError(err)
 	}()
 	buf := make([]byte, 1<<20)
+	// As etcd: the stream ends with the SHA-256 of the state, which
+	// etcdctl snapshot save checks and the restore verifies.
+	sum := sha256.New()
 	for {
 		n, err := io.ReadFull(pr, buf)
 		if n > 0 {
+			sum.Write(buf[:n])
 			if serr := stream.Send(&etcdserverpb.SnapshotResponse{Header: s.header(0), Blob: append([]byte(nil), buf[:n]...)}); serr != nil {
 				return serr
 			}
 		}
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			return nil
+			return stream.Send(&etcdserverpb.SnapshotResponse{Header: s.header(0), Blob: sum.Sum(nil)})
 		}
 		if err != nil {
 			return status.Error(codes.Internal, err.Error())
