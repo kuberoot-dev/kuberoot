@@ -123,6 +123,16 @@ func TestResourceStoreLabRunsInPlaceOfEtcd(t *testing.T) {
 		if !strings.Contains(lab["kube-apiserver"], "--etcd-servers=https://127.0.0.1:2379") || !strings.Contains(lab["kuberoot-node"], "--etcd") {
 			t.Errorf("%s: the lab store is not reached as etcd is", distro)
 		}
+		if strings.Contains(e, "--keep-history") {
+			t.Errorf("%s: the tape without kuberoot.store-tape: %s", distro, e)
+		}
+		f.Etcd.KeepHistory, f.Etcd.ListenTape = "--keep-history", "--listen-tape-urls=http://127.0.0.1:2382"
+		if e := servicesOf(t, distro, roleControlPlane, f)["etcd"]; !strings.Contains(e, "--keep-history --listen-tape-urls=http://127.0.0.1:2382") {
+			t.Errorf("%s: lab store with the tape: %s", distro, e)
+		}
+	}
+	if !parseCmdline("kuberoot.datastore=kuberoot-store kuberoot.store-tape").storeTape || parseCmdline("").storeTape {
+		t.Error("kuberoot.store-tape")
 	}
 }
 
@@ -142,5 +152,39 @@ func TestStoreKindOfTheLabStore(t *testing.T) {
 	}
 	if k, err := storeKind(bootConfig{datastore: etcdstore.KuberootStore}); err != nil || k != etcdstore.KuberootStore {
 		t.Fatalf("with the binary: %s %v", k, err)
+	}
+}
+
+func TestRuntimeEndpoint(t *testing.T) {
+	saved := activeProfile
+	defer func() { activeProfile = saved }()
+	activeProfile = nil
+	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/containerd/containerd.sock") {
+		t.Fatal("containerd by default")
+	}
+	p := &profile{}
+	p.Spec.Runtime = RuntimeCRIO
+	activeProfile = p
+	if !strings.Contains(withRuntime(kubeletConfig), "unix:///run/crio/crio.sock") {
+		t.Fatal("cri-o when the profile says so")
+	}
+	if !strings.Contains(crioConfig, `container_level_enabled = "checkpoint_restore"`) {
+		t.Fatal("cri-o restores from checkpoints")
+	}
+}
+
+func TestLinkVarRun(t *testing.T) {
+	root := t.TempDir()
+	// A previous boot's run time on the state partition.
+	if err := os.MkdirAll(root+"/var/run/crio/exits", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := linkVarRun(root); err != nil {
+			t.Fatal(err)
+		}
+		if l, err := os.Readlink(root + "/var/run"); err != nil || l != "../run" {
+			t.Fatalf("/var/run -> %q, %v", l, err)
+		}
 	}
 }

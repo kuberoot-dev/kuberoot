@@ -31,6 +31,11 @@ O=$(kernel_build_dir "$WORK" "$KARCH")
 kernel_cross "$KARCH"
 # The arm64 EFI image pads the kernel to its size in memory, read with hexdump.
 [ "$ARCH" != arm64 ] || command -v hexdump >/dev/null || { apt-get -qq update && apt-get -qq install -y bsdextrautils >/dev/null; }
+# CONFIG_DEBUG_INFO_BTF turns the kernel's debug information into the type
+# information eBPF programs read at load time, and pahole is what does the
+# turning. Without it the build stops at the BTF step rather than quietly
+# producing a kernel Cilium cannot load.
+command -v pahole >/dev/null || { apt-get -qq update && apt-get -qq install -y dwarves >/dev/null; }
 make -s ARCH=$KARCH O="$O" defconfig
 frags="$ROOT/kernel/base.config"
 for f in "$ARCH.config" "$@"; do [ -f "$ROOT/kernel/$f" ] && frags="$frags $ROOT/kernel/$f"; done

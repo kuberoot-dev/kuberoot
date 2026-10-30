@@ -150,7 +150,7 @@ authentication:
 authorization:
   mode: Webhook
 cgroupDriver: cgroupfs
-containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
+containerRuntimeEndpoint: __RUNTIME_ENDPOINT__
 clusterDomain: cluster.local
 clusterDNS:
 - %s
@@ -159,3 +159,75 @@ tlsPrivateKeyFile: %s
 failSwapOn: false
 resolvConf: /etc/resolv.conf
 `
+
+// Container runtimes a profile may choose.
+const (
+	RuntimeContainerd = "containerd"
+	RuntimeCRIO       = "cri-o"
+)
+
+// runtimeEndpoint is where the kubelet reaches the runtime.
+func runtimeEndpoint(runtime string) string {
+	if runtime == RuntimeCRIO {
+		return "unix:///run/crio/crio.sock"
+	}
+	return "unix:///run/containerd/containerd.sock"
+}
+
+// crioConfig runs containers with runc, the pod network from the CNI
+// configuration kuberoot-node writes for the node's subnet, and checkpoint
+// and restore through CRIU.
+const crioConfig = `[crio]
+root = "/var/lib/containers/storage"
+runroot = "/run/containers/storage"
+storage_driver = "overlay"
+
+[crio.api]
+listen = "/run/crio/crio.sock"
+
+[crio.runtime]
+cgroup_manager = "cgroupfs"
+conmon_cgroup = "pod"
+conmon = "/usr/bin/conmon"
+pinns_path = "/usr/bin/pinns"
+default_runtime = "runc"
+
+[crio.runtime.runtimes.runc]
+runtime_path = "/usr/bin/runc"
+runtime_root = "/run/runc"
+
+[crio.checkpoint_restore]
+# Restoring is off by default: only checkpoints are taken.
+container_level_enabled = "checkpoint_restore"
+
+[crio.network]
+network_dir = "/etc/cni/net.d"
+plugin_dirs = ["/usr/libexec/cni", "/opt/cni/bin"]
+`
+
+// containersPolicy accepts any image: what may run is the cluster's
+// admission's to say, as with containerd.
+const containersPolicy = `{"default":[{"type":"insecureAcceptAnything"}]}
+`
+
+// containersRegistries: short names are Docker Hub's, as with containerd;
+// the node's own registry on the loopback is plain HTTP.
+const containersRegistries = `unqualified-search-registries = ["docker.io"]
+
+[[registry]]
+location = "localhost:5001"
+insecure = true
+`
+
+// profileRuntime is the active profile's container runtime.
+func profileRuntime() string {
+	if activeProfile != nil && activeProfile.Spec.Runtime == RuntimeCRIO {
+		return RuntimeCRIO
+	}
+	return RuntimeContainerd
+}
+
+// withRuntime points a kubelet configuration at the profile's runtime.
+func withRuntime(cfg string) string {
+	return strings.Replace(cfg, "__RUNTIME_ENDPOINT__", runtimeEndpoint(profileRuntime()), 1)
+}

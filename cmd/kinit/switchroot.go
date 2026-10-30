@@ -60,6 +60,12 @@ func switchRoot() error {
 			return fmt.Errorf("mount state: %w", err)
 		}
 	}
+	// /var/run is /run, as the FHS has it: what looks for a socket there,
+	// such as the kubelet's cAdvisor for CRI-O's, finds it, and nothing of
+	// a previous boot's run time stays on the state partition.
+	if err := linkVarRun(newRoot); err != nil {
+		return err
+	}
 	// Boot media stays reachable from the running system, for the installer.
 	if isMountpoint(media) {
 		target := newRoot + "/run/kuberoot/media"
@@ -156,4 +162,18 @@ func attachLoop(image string) (string, error) {
 		return "", fmt.Errorf("configure %s: %w", dev, err)
 	}
 	return dev, nil
+}
+
+func linkVarRun(root string) error {
+	p := root + "/var/run"
+	if t, err := os.Readlink(p); err == nil && t == "../run" {
+		return nil
+	}
+	if err := os.RemoveAll(p); err != nil {
+		return fmt.Errorf("clear /var/run: %w", err)
+	}
+	if err := os.Symlink("../run", p); err != nil {
+		return fmt.Errorf("link /var/run: %w", err)
+	}
+	return nil
 }

@@ -3,8 +3,11 @@ package resourcestore
 import (
 	"context"
 	"fmt"
+	"go.etcd.io/etcd/client/v3/snapshot"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -454,5 +457,36 @@ func TestLeasesAreReplicated(t *testing.T) {
 	ttl, err := f.client.TimeToLive(ctx, l.ID)
 	if err != nil || ttl.TTL != -1 {
 		t.Fatalf("time to live of an expired lease: %v %v", ttl, err)
+	}
+}
+
+// etcdctl snapshot save takes the store's snapshot, which ends with the
+// state's checksum as etcd's does; the restore checks it and refuses a
+// damaged copy.
+func TestEtcdctlSnapshotRestores(t *testing.T) {
+	ms := newCluster(t, 1, nil)
+	ctx := context.Background()
+	if _, err := ms[0].client.Put(ctx, "/k", "v"); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "snapshot.db")
+	if _, err := snapshot.SaveWithVersion(ctx, zap.NewNop(), clientv3.Config{Endpoints: []string{ms[0].clientAddr}}, file); err != nil {
+		t.Fatalf("etcdctl's snapshot save: %v", err)
+	}
+	m := newMember(t, "restored", nil)
+	if err := Restore(file, m.dir, m.name, map[string][]string{m.name: {m.peerURL}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[100] ^= 0xff
+	if err := os.WriteFile(file, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d := newMember(t, "damaged", nil)
+	if err := Restore(file, d.dir, d.name, map[string][]string{d.name: {d.peerURL}}, ""); err == nil || !strings.Contains(err.Error(), "checksum") {
+		t.Fatalf("a damaged snapshot: %v", err)
 	}
 }

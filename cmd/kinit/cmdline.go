@@ -42,6 +42,9 @@ type bootConfig struct {
 	// kuberoot-fleet, which nodes behind NAT call. Its value is where the
 	// nodes reach it, host:port, comma separated; bare, the node's address.
 	fleetCenter string
+	// storeTape: the resource store lab keeps its history past compaction
+	// and serves it to this node alone (see docs/resource-store.md).
+	storeTape bool
 }
 
 // fleetCenterSelf: the fleet center is reached at the node's own address.
@@ -66,6 +69,8 @@ func parseCmdline(cmdline string) bootConfig {
 			cfg.repoPlainHTTP = true
 		case "kuberoot.fleet-center":
 			cfg.fleetCenter = fleetCenterSelf
+		case "kuberoot.store-tape":
+			cfg.storeTape = true
 		default:
 			if v, ok := strings.CutPrefix(f, "kuberoot.nameserver="); ok {
 				cfg.nameservers = append(cfg.nameservers, strings.Split(v, ",")...)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/vishvananda/netlink"
@@ -47,7 +49,7 @@ type peer struct {
 // which the control plane assigns and a node cannot change; only subnets inside
 // the cluster's pod range, claimed by exactly one node, are routed. Routes into
 // the pod range that no node claims any more are removed.
-func syncRoutes(ctx context.Context, kubeconfig, self string, podRange *net.IPNet, mode string) {
+func syncRoutes(ctx context.Context, kubeconfig, self string, podRange *net.IPNet, mode, cniTemplate string) {
 	if podRange != nil && podRange.IP.To4() == nil {
 		klog.Errorf("pod network %s: only an IPv4 pod range is routed between nodes; use a CNI package", podRange)
 		return
@@ -68,6 +70,11 @@ func syncRoutes(ctx context.Context, kubeconfig, self string, podRange *net.IPNe
 				}
 				if err != nil {
 					klog.Errorf("pod network: %v", err)
+				}
+				if cniTemplate != "" && own != nil {
+					if err := writeCNIConfig(cniTemplate, cniConfigPath, own.subnet); err != nil {
+						klog.Errorf("pod network: CNI configuration: %v", err)
+					}
 				}
 			}
 		}
@@ -286,4 +293,28 @@ func clientFrom(kubeconfig string) kubernetes.Interface {
 		return nil
 	}
 	return client
+}
+
+// cniConfigPath is where the runtime reads the pod network's configuration.
+const cniConfigPath = "/etc/cni/net.d/10-kuberoot.conflist"
+
+// writeCNIConfig fills the node's subnet into the CNI template and writes
+// it where the runtime reads it, when it changed.
+func writeCNIConfig(template, path string, subnet *net.IPNet) error {
+	raw, err := os.ReadFile(template)
+	if err != nil {
+		return err
+	}
+	want := strings.ReplaceAll(string(raw), "{{.PodCIDR}}", subnet.String())
+	if cur, err := os.ReadFile(path); err == nil && string(cur) == want {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".new"
+	if err := os.WriteFile(tmp, []byte(want), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

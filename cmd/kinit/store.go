@@ -119,6 +119,9 @@ type etcdFacts struct {
 	Binary                                        string
 	Name, PeerURL, ClientURLs, AdvertiseClientURL string
 	InitialCluster, State                         string
+	// KeepHistory and ListenTape are the lab store's tape flags; empty
+	// for etcd and without kuberoot.store-tape.
+	KeepHistory, ListenTape string
 }
 
 func newStoreFacts(kind string, node nodeInfo) (storeFacts, etcdFacts) {
