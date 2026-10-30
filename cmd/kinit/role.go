@@ -122,7 +122,7 @@ func kubeletCertIssued() bool {
 }
 
 func workerKubeletConfig(clientCA string, cn clusterNet) string {
-	cfg := fmt.Sprintf(kubeletConfig, clientCA, cn.dnsIP(), "", "")
+	cfg := fmt.Sprintf(withRuntime(kubeletConfig), clientCA, cn.dnsIP(), "", "")
 	var kept []string
 	for _, line := range strings.Split(cfg, "\n") {
 		// No serving certificate files: the kubelet requests one from the cluster.

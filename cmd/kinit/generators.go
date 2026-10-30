@@ -119,18 +119,33 @@ var generators = map[string]func(roleContext) error{
 	"containers": func(r roleContext) error {
 		// A configuration left from a previous role or cluster has the wrong subnet.
 		_ = os.RemoveAll("/etc/cni/net.d")
-		files := map[string]string{"/etc/containerd/config.toml": containerdConfig}
-		if podNetworkMode == "none" {
-			files["/etc/containerd/config.toml"] = strings.Replace(containerdConfig, cniTemplateLine, "", 1)
-		} else {
+		files := map[string]string{}
+		dirs := []string{"/etc/cni/net.d"}
+		switch profileRuntime() {
+		case RuntimeCRIO:
+			// CRI-O fills in no template: kuberoot-node writes the
+			// configuration once the node has its subnet.
+			files["/etc/crio/crio.conf.d/10-kuberoot.conf"] = crioConfig
+			files["/etc/containers/policy.json"] = containersPolicy
+			files["/etc/containers/registries.conf"] = containersRegistries
+			// Image pulls stage layers under /var/tmp.
+			dirs = append(dirs, "/var/lib/containers", "/var/lib/crio", "/var/tmp")
+		default:
+			files["/etc/containerd/config.toml"] = containerdConfig
+			if podNetworkMode == "none" {
+				files["/etc/containerd/config.toml"] = strings.Replace(containerdConfig, cniTemplateLine, "", 1)
+			}
+			dirs = append(dirs, "/var/lib/containerd")
+		}
+		if podNetworkMode != "none" {
 			files["/etc/cni/kuberoot.conflist.tmpl"] = strings.Replace(cniConfig, "__MTU__", strconv.Itoa(podMTU(r.node.ip)), 1)
 		}
-		return writeFiles(files, "/var/lib/containerd", "/etc/cni/net.d")
+		return writeFiles(files, dirs...)
 	},
 	// kubelet: its configuration, with serving certificates from the cluster CA
 	// on the control plane and requested through the CSR API on members.
 	"kubelet": func(r roleContext) error {
-		cfg := fmt.Sprintf(kubeletConfig, pkiPath("ca.crt"), r.net.dnsIP(), pkiPath("kubelet-server.crt"), pkiPath("kubelet-server.key"))
+		cfg := fmt.Sprintf(withRuntime(kubeletConfig), pkiPath("ca.crt"), r.net.dnsIP(), pkiPath("kubelet-server.crt"), pkiPath("kubelet-server.key"))
 		if r.member != nil {
 			cfg = workerKubeletConfig(filepath.Join(clusterDir, "ca.crt"), r.net)
 		}
