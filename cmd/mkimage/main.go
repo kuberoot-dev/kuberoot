@@ -68,6 +68,18 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 	if _, err := os.Stat(a.Dir + "/" + bootdisk.KernelArgsFile); err == nil {
 		files["/kuberoot/"+bootdisk.KernelArgsFile] = a.Dir + "/" + bootdisk.KernelArgsFile
 	}
+	// arm64 media carry the Raspberry Pi boot files too, always rather than on
+	// request: a medium that boots a virtual machine but silently not a board
+	// is the one that gets written to a card and tried on the hardware.
+	if a.Arch == "arm64" {
+		rpi, err := rpiFiles(a.Dir)
+		if err != nil {
+			return err
+		}
+		for dst, src := range rpi {
+			files[dst] = src
+		}
+	}
 	var content int64
 	for _, src := range files {
 		st, err := os.Stat(src)
@@ -111,6 +123,17 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 	}
 	if err := bootdisk.WriteFile(fs, "/loader/loader.conf", strings.NewReader(bootdisk.LoaderConf)); err != nil {
 		return err
+	}
+	// The same installer, described the way the Pi firmware expects: it has no
+	// boot entries, only these two files. Built from install.Options so the
+	// two descriptions cannot say different things about what to boot.
+	if a.Arch == "arm64" {
+		if err := bootdisk.WriteFile(fs, "/config.txt", strings.NewReader(rpiConfig())); err != nil {
+			return err
+		}
+		if err := bootdisk.WriteFile(fs, "/cmdline.txt", strings.NewReader(rpiCmdline(install.Options))); err != nil {
+			return err
+		}
 	}
 	if t != nil {
 		if err := t.install(fs); err != nil {
