@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	diskfs "github.com/diskfs/go-diskfs"
+
+	"github.com/kuberoot-dev/kuberoot/pkg/bootdisk"
 )
 
 // The Pi firmware hands cmdline.txt to the kernel as written. A second line is
@@ -99,4 +103,77 @@ func keys(m map[string]string) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// Builds a whole medium and reads it back. This is the only end-to-end check
+// available without a board: that one image really does carry both ways of
+// starting, each loader can reach what it needs, and neither of them pays for
+// the other by carrying a second copy of the same file.
+func TestMediumCarriesBothLoadersAndOneInitramfs(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel string, size int) {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, make([]byte, size), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"systemd-boot.efi", "vmlinuz.efi", "Image", "rootfs.squashfs"} {
+		write(f, 4096)
+	}
+	// Big enough that a second copy would be unmistakable in the total.
+	write("initrd.cpio", 3<<20)
+	for _, d := range rpiDevicetrees {
+		write("dtb/"+d, 1024)
+	}
+	for _, f := range rpiFirmware {
+		write("firmware/"+f, 1024)
+	}
+
+	out := filepath.Join(t.TempDir(), "media.img")
+	a := bootdisk.Artifacts{Dir: dir, Arch: "arm64", Version: "0.0.0-test", ConsoleArg: consoleFor("arm64")}
+	if err := build(a, out, nil); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	d, err := diskfs.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	fs, err := d.GetFilesystem(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// What the Pi firmware opens, and what systemd-boot opens. Neither reads
+	// the other's files, so both sets have to be there.
+	for _, want := range []string{"/config.txt", "/cmdline.txt", "/Image", "/initrd.cpio", "/loader/loader.conf", "/loader/entries/kuberoot-install.conf"} {
+		if _, err := fs.OpenFile(want, os.O_RDONLY); err != nil {
+			t.Errorf("%s is missing from the medium: %v", want, err)
+		}
+	}
+	for _, dtb := range rpiDevicetrees {
+		if _, err := fs.OpenFile("/"+dtb, os.O_RDONLY); err != nil {
+			t.Errorf("%s is missing from the root of the medium: %v", dtb, err)
+		}
+	}
+
+	// One initramfs, shared. It used to be written twice -- once where the
+	// firmware looks and once where the boot entry pointed -- which cost 22 MB
+	// on a real medium and nothing told anyone.
+	if _, err := fs.OpenFile("/kuberoot/initrd.cpio", os.O_RDONLY); err == nil {
+		t.Error("the initramfs is on the medium twice: /initrd.cpio and /kuberoot/initrd.cpio")
+	}
+	entry, err := fs.OpenFile("/loader/entries/kuberoot-install.conf", os.O_RDONLY)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 4096)
+	n, _ := entry.Read(buf)
+	if !strings.Contains(string(buf[:n]), "initrd /initrd.cpio") {
+		t.Errorf("the boot entry must point at the shared initramfs:\n%s", buf[:n])
+	}
 }

@@ -36,12 +36,13 @@ var rpiDevicetrees = []string{"bcm2711-rpi-4-b.dtb", "bcm2712-rpi-5-b.dtb"}
 // anything missing rather than producing a medium that looks complete and
 // stops on the board with no console output to explain it.
 func rpiFiles(dir string) (map[string]string, error) {
+	// The initramfs is not here: it is already written at the root for both
+	// loaders to share, by the caller.
 	files := map[string]string{
 		// The firmware loads the kernel by the name config.txt gives, and that
 		// kernel is a plain Image: the firmware knows nothing of the EFI zboot
 		// wrapper vmlinuz.efi carries for the virtual machines.
-		"/Image":       dir + "/Image",
-		"/initrd.cpio": dir + "/initrd.cpio",
+		"/Image": dir + "/Image",
 	}
 	for _, dtb := range rpiDevicetrees {
 		files["/"+dtb] = dir + "/dtb/" + dtb

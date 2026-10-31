@@ -60,9 +60,14 @@ func consoleFor(arch string) string {
 
 func build(a bootdisk.Artifacts, out string, t *trust) error {
 	files := map[string]string{
-		a.RemovableBootPath():       a.Dir + "/systemd-boot.efi",
-		"/kuberoot/vmlinuz.efi":     a.Dir + "/vmlinuz.efi",
-		"/kuberoot/initrd.cpio":     a.Dir + "/initrd.cpio",
+		a.RemovableBootPath():   a.Dir + "/systemd-boot.efi",
+		"/kuberoot/vmlinuz.efi": a.Dir + "/vmlinuz.efi",
+		// At the root, not under /kuberoot: the Pi firmware reads initramfs
+		// paths relative to the partition and subdirectories are not reliably
+		// supported there, while systemd-boot takes any path on the partition.
+		// So the one place both can reach it is the root, and keeping it there
+		// is what stops the medium carrying two copies of the same 22 MB.
+		"/initrd.cpio":              a.Dir + "/initrd.cpio",
 		"/kuberoot/rootfs.squashfs": a.Dir + "/rootfs.squashfs",
 	}
 	if _, err := os.Stat(a.Dir + "/" + bootdisk.KernelArgsFile); err == nil {
@@ -112,7 +117,7 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 		Title:   "kuberoot " + a.Version + " installer",
 		Version: a.Version,
 		Kernel:  "/kuberoot/vmlinuz.efi",
-		Initrd:  "/kuberoot/initrd.cpio",
+		Initrd:  "/initrd.cpio",
 		Options: strings.Join([]string{
 			"kuberoot.root=PARTLABEL=" + bootdisk.MediaLabel + ":/kuberoot/rootfs.squashfs",
 			"kuberoot.mode=install", "quiet", a.BootArgs(),
