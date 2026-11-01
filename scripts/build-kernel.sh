@@ -38,6 +38,13 @@ kernel_cross "$KARCH"
 command -v pahole >/dev/null || { apt-get -qq update && apt-get -qq install -y dwarves >/dev/null; }
 make -s ARCH=$KARCH O="$O" defconfig
 frags="$ROOT/kernel/base.config"
+# rpi.config rides with arm64 rather than being asked for: one arm64 kernel
+# that boots a virtual machine and a board alike cannot drift from itself, and
+# the board drivers cost a fraction of an image already measured in tens of
+# megabytes. The alternative -- two arm64 kernels -- means every later change
+# has to be made twice and verified twice, and the one nobody tested is the one
+# that ends up on the hardware.
+if [ "$ARCH" = arm64 ]; then set -- "$@" rpi.config; fi
 for f in "$ARCH.config" "$@"; do [ -f "$ROOT/kernel/$f" ] && frags="$frags $ROOT/kernel/$f"; done
 [ -z "$KFLAVOUR" ] || frags="$frags $ROOT/distros/$KFLAVOUR/kernel.config"
 KCONFIG_CONFIG="$O/.config" scripts/kconfig/merge_config.sh -m -O "$O" "$O/.config" $frags >/dev/null
@@ -57,11 +64,31 @@ for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM; do
   }
 done
 
-make -s ARCH=$KARCH O="$O" -j"${JOBS:-$(nproc)}" "$(basename $IMAGE)" modules
+# A Raspberry Pi is described by a devicetree, not by ACPI, and its firmware
+# loads a plain Image -- it knows nothing of the EFI zboot wrapper the virtual
+# machines boot from. Both are asked for here rather than in a second pass, so
+# one kernel serves both ways of starting and the two can never drift apart.
+targets="$(basename $IMAGE) modules"
+[ "$ARCH" = arm64 ] && targets="$targets Image dtbs"
+# shellcheck disable=SC2086 # deliberately word-split: these are make targets
+make -s ARCH=$KARCH O="$O" -j"${JOBS:-$(nproc)}" $targets
 grep -q "=m$" "$O/.config" && { echo "modules left in the kernel config:" >&2; grep "=m$" "$O/.config" >&2; exit 1; }
 
 cp "$O/$IMAGE" "$OUT/vmlinuz.efi"
 cp "$O/.config" "$OUT/kernel.config"
+# The boards this tree is built for, by the name their firmware looks for. A
+# missing one fails here rather than on the board, where the only symptom is a
+# rainbow screen and no console output at all.
+if [ "$ARCH" = arm64 ]; then
+  cp "$O/arch/arm64/boot/Image" "$OUT/Image"
+  mkdir -p "$OUT/dtb"
+  for dtb in bcm2711-rpi-4-b bcm2712-rpi-5-b; do
+    src="$O/arch/arm64/boot/dts/broadcom/$dtb.dtb"
+    [ -f "$src" ] || { echo "devicetree $dtb.dtb was not built" >&2; exit 1; }
+    cp "$src" "$OUT/dtb/$dtb.dtb"
+  done
+  echo "devicetrees: $(ls "$OUT/dtb" | tr '\n' ' ')"
+fi
 echo "${KFLAVOUR:-base}" > "$OUT/kernel.flavour"
 # An arm64 kernel takes either the boot loader's arguments or its own, never
 # both: the flavour's own arguments travel next to the kernel instead, as

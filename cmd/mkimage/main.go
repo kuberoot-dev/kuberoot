@@ -60,19 +60,45 @@ func consoleFor(arch string) string {
 
 func build(a bootdisk.Artifacts, out string, t *trust) error {
 	files := map[string]string{
-		a.RemovableBootPath():       a.Dir + "/systemd-boot.efi",
-		"/kuberoot/vmlinuz.efi":     a.Dir + "/vmlinuz.efi",
-		"/kuberoot/initrd.cpio":     a.Dir + "/initrd.cpio",
+		a.RemovableBootPath():   a.Dir + "/systemd-boot.efi",
+		"/kuberoot/vmlinuz.efi": a.Dir + "/vmlinuz.efi",
+		// At the root, not under /kuberoot: the Pi firmware reads initramfs
+		// paths relative to the partition and subdirectories are not reliably
+		// supported there, while systemd-boot takes any path on the partition.
+		// So the one place both can reach it is the root, and keeping it there
+		// is what stops the medium carrying two copies of the same 22 MB.
+		"/initrd.cpio":              a.Dir + "/initrd.cpio",
 		"/kuberoot/rootfs.squashfs": a.Dir + "/rootfs.squashfs",
 	}
 	if _, err := os.Stat(a.Dir + "/" + bootdisk.KernelArgsFile); err == nil {
 		files["/kuberoot/"+bootdisk.KernelArgsFile] = a.Dir + "/" + bootdisk.KernelArgsFile
 	}
+	// arm64 media carry the Raspberry Pi boot files too, always rather than on
+	// request: a medium that boots a virtual machine but silently not a board
+	// is the one that gets written to a card and tried on the hardware.
+	if a.Arch == "arm64" {
+		rpi, err := rpiFiles(a.Dir)
+		if err != nil {
+			return err
+		}
+		for dst, src := range rpi {
+			files[dst] = src
+		}
+	}
 	var content int64
-	for _, src := range files {
+	for dst, src := range files {
 		st, err := os.Stat(src)
 		if err != nil {
 			return err
+		}
+		// An empty artifact is a build step that failed and was not noticed:
+		// the file is created, then the tool that fills it is missing. It
+		// copies onto the medium without complaint and the medium looks
+		// right -- the size is off by the size of one file, which nobody
+		// measures. What it costs is found much later: an install that runs
+		// for a minute and stops, or a board that does not come up.
+		if st.Size() == 0 {
+			return fmt.Errorf("%s is empty, so %s would be too: the build step that writes it did not finish", src, dst)
 		}
 		content += st.Size()
 	}
@@ -100,7 +126,7 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 		Title:   "kuberoot " + a.Version + " installer",
 		Version: a.Version,
 		Kernel:  "/kuberoot/vmlinuz.efi",
-		Initrd:  "/kuberoot/initrd.cpio",
+		Initrd:  "/initrd.cpio",
 		Options: strings.Join([]string{
 			"kuberoot.root=PARTLABEL=" + bootdisk.MediaLabel + ":/kuberoot/rootfs.squashfs",
 			"kuberoot.mode=install", "quiet", a.BootArgs(),
@@ -111,6 +137,17 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 	}
 	if err := bootdisk.WriteFile(fs, "/loader/loader.conf", strings.NewReader(bootdisk.LoaderConf)); err != nil {
 		return err
+	}
+	// The same installer, described the way the Pi firmware expects: it has no
+	// boot entries, only these two files. Built from install.Options so the
+	// two descriptions cannot say different things about what to boot.
+	if a.Arch == "arm64" {
+		if err := bootdisk.WriteFile(fs, "/config.txt", strings.NewReader(rpiConfig())); err != nil {
+			return err
+		}
+		if err := bootdisk.WriteFile(fs, "/cmdline.txt", strings.NewReader(rpiCmdline(install.Options))); err != nil {
+			return err
+		}
 	}
 	if t != nil {
 		if err := t.install(fs); err != nil {

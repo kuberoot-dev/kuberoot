@@ -29,3 +29,36 @@ func TestRemovableBootPath(t *testing.T) {
 		}
 	}
 }
+
+// The initramfs is not always beside the other artifacts: on boot media it is
+// at the root of the partition, the one place both systemd-boot and a
+// Raspberry Pi's firmware can read it. An installer that looks only beside
+// them installs the bootloader, then stops partway with a path nobody
+// recognises -- which is exactly how this was found.
+func TestInitrdPathFallsBackToTheMediumRoot(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "kuberoot")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := Artifacts{Dir: dir}
+
+	// On a medium: one copy, at the root.
+	atRoot := filepath.Join(root, "initrd.cpio")
+	if err := os.WriteFile(atRoot, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.InitrdPath(); got != atRoot {
+		t.Errorf("expected the root copy %q, got %q", atRoot, got)
+	}
+
+	// Anywhere else, including an installed system: beside the rest, and that
+	// one wins even when a stray copy exists further up.
+	beside := filepath.Join(dir, "initrd.cpio")
+	if err := os.WriteFile(beside, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.InitrdPath(); got != beside {
+		t.Errorf("expected the copy beside the artifacts %q, got %q", beside, got)
+	}
+}
