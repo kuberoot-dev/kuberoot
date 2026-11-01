@@ -86,10 +86,19 @@ func build(a bootdisk.Artifacts, out string, t *trust) error {
 		}
 	}
 	var content int64
-	for _, src := range files {
+	for dst, src := range files {
 		st, err := os.Stat(src)
 		if err != nil {
 			return err
+		}
+		// An empty artifact is a build step that failed and was not noticed:
+		// the file is created, then the tool that fills it is missing. It
+		// copies onto the medium without complaint and the medium looks
+		// right -- the size is off by the size of one file, which nobody
+		// measures. What it costs is found much later: an install that runs
+		// for a minute and stops, or a board that does not come up.
+		if st.Size() == 0 {
+			return fmt.Errorf("%s is empty, so %s would be too: the build step that writes it did not finish", src, dst)
 		}
 		content += st.Size()
 	}

@@ -177,3 +177,42 @@ func TestMediumCarriesBothLoadersAndOneInitramfs(t *testing.T) {
 		t.Errorf("the boot entry must point at the shared initramfs:\n%s", buf[:n])
 	}
 }
+
+// A build step that fails after creating its output leaves a zero-length file
+// behind. It copies onto the medium without complaint, the medium looks right,
+// and the cost shows up much later -- an install that stops partway, or a
+// board that never comes up. That happened here with the initramfs.
+func TestEmptyArtifactIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"systemd-boot.efi", "vmlinuz.efi", "Image", "rootfs.squashfs", "initrd.cpio"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, sub := range []struct {
+		d     string
+		names []string
+	}{{"dtb", rpiDevicetrees}, {"firmware", rpiFirmware}} {
+		if err := os.MkdirAll(filepath.Join(dir, sub.d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range sub.names {
+			if err := os.WriteFile(filepath.Join(dir, sub.d, n), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// Truncate the one that actually went missing.
+	if err := os.WriteFile(filepath.Join(dir, "initrd.cpio"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := bootdisk.Artifacts{Dir: dir, Arch: "arm64", Version: "0.0.0-test", ConsoleArg: consoleFor("arm64")}
+	err := build(a, filepath.Join(t.TempDir(), "media.img"), nil)
+	if err == nil {
+		t.Fatal("an empty artifact must not reach the medium")
+	}
+	if !strings.Contains(err.Error(), "initrd.cpio") || !strings.Contains(err.Error(), "empty") {
+		t.Errorf("the error should name the empty file, got: %v", err)
+	}
+}
