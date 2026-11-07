@@ -60,7 +60,7 @@ func TestCAPIRealAdmissionContracts(t *testing.T) {
 		if err = yaml.Unmarshal(raw, &object.Object); err != nil {
 			t.Fatal(err)
 		}
-		if object.GetLabels()["cluster.x-k8s.io/v1beta1"] != "v1alpha1" {
+		if object.GetLabels()["cluster.x-k8s.io/v1beta2"] != "v1alpha1" {
 			t.Fatalf("missing CAPI contract label in %s", file)
 		}
 		created, err := dyn.Resource(crds).Create(ctx, object, metav1.CreateOptions{})

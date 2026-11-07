@@ -1,4 +1,4 @@
-// Package capikuberoot implements the CAPI v1beta1 infrastructure contract
+// Package capikuberoot implements the CAPI v1beta2 infrastructure contract
 // without importing a second, older Kubernetes SDK through the CAPI module.
 package capikuberoot
 
@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,7 +51,13 @@ func paused(object metav1.Object) bool {
 func capiOwner(object metav1.Object, kind string) (metav1.OwnerReference, error) {
 	var match *metav1.OwnerReference
 	for _, owner := range object.GetOwnerReferences() {
-		if owner.APIVersion == "cluster.x-k8s.io/v1beta1" && owner.Kind == kind {
+		// By group, not by group and version. Cluster API writes the owner
+		// reference in whichever version it currently serves, so pinning the
+		// version here means that the day core moves on, no owner is ever
+		// found: every machine waits for an owner that is already there, and
+		// the reconciler reports waiting rather than anything being wrong.
+		group, _, found := strings.Cut(owner.APIVersion, "/")
+		if found && group == "cluster.x-k8s.io" && owner.Kind == kind {
 			if match != nil || owner.Name == "" || owner.UID == "" {
 				return metav1.OwnerReference{}, fmt.Errorf("invalid or ambiguous CAPI %s owner", kind)
 			}

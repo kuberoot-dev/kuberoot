@@ -47,7 +47,7 @@ type APIEndpoint struct {
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name=Ready,type=boolean,JSONPath=`.status.ready`
-// +kubebuilder:metadata:labels="cluster.x-k8s.io/v1beta1=v1alpha1"
+// +kubebuilder:metadata:labels="cluster.x-k8s.io/v1beta2=v1alpha1"
 // +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
 type KuberootCluster struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -66,7 +66,19 @@ type KuberootClusterSpec struct {
 	ControlPlaneEndpoint *APIEndpoint `json:"controlPlaneEndpoint,omitempty"`
 }
 
+// Initialization is where the v1beta2 contract has infrastructure report that
+// it finished provisioning. The older contract read status.ready for this, and
+// Cluster API still accepts it until that compatibility ends in April 2027, so
+// both are written and kept equal; only this one is the contract.
+type Initialization struct {
+	// +optional
+	Provisioned bool `json:"provisioned,omitempty"`
+}
+
 type KuberootClusterStatus struct {
+	// +optional
+	Initialization *Initialization `json:"initialization,omitempty"`
+	// Deprecated: the v1beta1 contract's name for Initialization.Provisioned.
 	Ready              bool  `json:"ready"`
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +listType=map
@@ -89,7 +101,7 @@ type KuberootClusterList struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name=Ready,type=boolean,JSONPath=`.status.ready`
 // +kubebuilder:printcolumn:name=ProviderID,type=string,JSONPath=`.spec.providerID`
-// +kubebuilder:metadata:labels="cluster.x-k8s.io/v1beta1=v1alpha1"
+// +kubebuilder:metadata:labels="cluster.x-k8s.io/v1beta2=v1alpha1"
 // +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
 type KuberootMachine struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -130,6 +142,9 @@ type KuberootMachineSpec struct {
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.vmRef) || (has(self.vmRef) && self.vmRef == oldSelf.vmRef)",message="vmRef cannot be removed or changed"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.nodeRef) || (has(self.nodeRef) && self.nodeRef == oldSelf.nodeRef)",message="nodeRef cannot be removed or changed"
 type KuberootMachineStatus struct {
+	// +optional
+	Initialization *Initialization `json:"initialization,omitempty"`
+	// Deprecated: the v1beta1 contract's name for Initialization.Provisioned.
 	Ready              bool                 `json:"ready"`
 	ObservedGeneration int64                `json:"observedGeneration,omitempty"`
 	Addresses          []corev1.NodeAddress `json:"addresses,omitempty"`
@@ -158,7 +173,7 @@ type TemplateMetadata struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
-// +kubebuilder:metadata:labels="cluster.x-k8s.io/v1beta1=v1alpha1"
+// +kubebuilder:metadata:labels="cluster.x-k8s.io/v1beta2=v1alpha1"
 // +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
 type KuberootMachineTemplate struct {
 	metav1.TypeMeta   `json:",inline"`

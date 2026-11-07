@@ -6,7 +6,7 @@ metadata:
     api-approved.kubernetes.io: unapproved, experimental-only
     controller-gen.kubebuilder.io/version: v0.22.0
   labels:
-    cluster.x-k8s.io/v1beta1: v1alpha1
+    cluster.x-k8s.io/v1beta2: v1alpha1
   name: kuberootmachines.infrastructure.cluster.x-k8s.io
 spec:
   group: infrastructure.cluster.x-k8s.io
@@ -178,6 +178,16 @@ spec:
                 type: string
               failureReason:
                 type: string
+              initialization:
+                description: |-
+                  Initialization is where the v1beta2 contract has infrastructure report that
+                  it finished provisioning. The older contract read status.ready for this, and
+                  Cluster API still accepts it until that compatibility ends in April 2027, so
+                  both are written and kept equal; only this one is the contract.
+                properties:
+                  provisioned:
+                    type: boolean
+                type: object
               nodeRef:
                 description: |-
                   NodeRef binds the workload Node incarnation before its providerID is set.
@@ -227,6 +237,7 @@ spec:
                 format: int64
                 type: integer
               ready:
+                description: 'Deprecated: the v1beta1 contract''s name for Initialization.Provisioned.'
                 type: boolean
               vmRef:
                 description: ObjectReference contains enough information to let you

@@ -115,7 +115,7 @@ func (c *Controller) ReconcileCluster(ctx context.Context, namespace, name strin
 	if managed || !cluster.Spec.ExternalManagedControlPlane {
 		err = fmt.Errorf("KuberootCluster requires externalManagedControlPlane=true and no managed-by annotation")
 	}
-	cluster.Status.Ready = err == nil && cluster.DeletionTimestamp == nil
+	setClusterProvisioned(&cluster.Status, err == nil && cluster.DeletionTimestamp == nil)
 	if cluster.Status.Ready {
 		setCondition(&cluster.Status.Conditions, "Ready", corev1.ConditionTrue, "InfrastructureReady", "", "")
 	} else {
@@ -296,7 +296,7 @@ func (c *Controller) ReconcileMachine(ctx context.Context, namespace, name strin
 	if vm.Status.Phase != "Running" || parseErr != nil || !address.IsGlobalUnicast() || address.IsLoopback() {
 		return c.machineError(ctx, &machine, previous, waiting{"VMProvisioning", "waiting for a running VM and its unicast address"})
 	}
-	machine.Status.Ready = true
+	setMachineProvisioned(&machine.Status, true)
 	machine.Status.ObservedGeneration = machine.Generation
 	machine.Status.FailureReason, machine.Status.FailureMessage = nil, nil
 	machine.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: address.String()}, {Type: corev1.NodeHostName, Address: vm.Name}}
@@ -445,7 +445,7 @@ func setCondition(conditions *[]infra.Condition, kind string, status corev1.Cond
 }
 
 func (c *Controller) machineError(ctx context.Context, machine *infra.KuberootMachine, previous infra.KuberootMachineStatus, err error) error {
-	machine.Status.Ready = false
+	setMachineProvisioned(&machine.Status, false)
 	machine.Status.ObservedGeneration = machine.Generation
 	reason, message, severity := conditionError(err)
 	setCondition(&machine.Status.Conditions, "Ready", corev1.ConditionFalse, reason, message, severity)
@@ -462,4 +462,19 @@ func (c *Controller) writeMachineStatus(ctx context.Context, machine *infra.Kube
 	}
 	_, err = c.Dynamic.Resource(InfraMachines).Namespace(machine.Namespace).UpdateStatus(ctx, object, metav1.UpdateOptions{})
 	return err
+}
+
+// The v1beta2 contract reads status.initialization.provisioned; the older one
+// read status.ready, and Cluster API accepts it until that compatibility ends
+// in April 2027. Writing both through one place is what stops them drifting
+// apart, which would leave core and this provider disagreeing about whether a
+// machine exists -- a disagreement nothing would report.
+func setClusterProvisioned(status *infra.KuberootClusterStatus, provisioned bool) {
+	status.Ready = provisioned
+	status.Initialization = &infra.Initialization{Provisioned: provisioned}
+}
+
+func setMachineProvisioned(status *infra.KuberootMachineStatus, provisioned bool) {
+	status.Ready = provisioned
+	status.Initialization = &infra.Initialization{Provisioned: provisioned}
 }
