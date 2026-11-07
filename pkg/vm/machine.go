@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,14 @@ var Firmware = "/usr/share/kuberoot/CLOUDHV.fd"
 // Machines runs the virtual machines of a node.
 type Machines struct {
 	Volumes *Volumes
+	// MemoryBudgetMiB limits guest RAM; the distribution reserves additional
+	// memory outside pod allocatable for the OS and monitor processes.
+	MemoryBudgetMiB   int64
+	budgetMu          sync.Mutex
+	pendingMemory     map[string]int64
+	remote            func(context.Context, string, ...string) ([]byte, error)
+	arch              string
+	probeCapabilities func(context.Context) ([]byte, error)
 }
 
 func (m *Machines) dir() string              { return filepath.Join(StateDir, "machines") }
@@ -46,6 +55,27 @@ func (m *Machines) consoleLog(n string) string {
 
 // Save keeps a machine's spec; Apply then makes the node match it.
 func (m *Machines) Save(name string, s node.MachineSpec) error {
+	m.budgetMu.Lock()
+	defer m.budgetMu.Unlock()
+	if err := validateCeilings(s); err != nil {
+		return err
+	}
+	if s.Running && s.SendTo != "" && (s.MaxCPUs > 0 || s.MaxMemoryMiB > 0) {
+		return ErrMigrationCeilings
+	}
+	old, err := m.Load(name)
+	if err == nil && (old.MaxCPUs != s.MaxCPUs || old.MaxMemoryMiB != s.MaxMemoryMiB) {
+		return fmt.Errorf("%w: maxCPUs and maxMemoryMiB are immutable; create a new machine to change its ceilings", ErrMachineSpec)
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if s.Running && s.Receive != "" && (m.MemoryBudgetMiB > 0 || s.MaxCPUs > 0 || s.MaxMemoryMiB > 0) {
+		return ErrMigrationMemory
+	}
+	if err := m.checkMemoryBudget(name, s); err != nil && (s.Running || !errors.Is(err, ErrMemoryBudget)) {
+		return err
+	}
 	if err := os.MkdirAll(m.dir(), 0o700); err != nil {
 		return err
 	}
@@ -86,13 +116,30 @@ func TapName(machine string) string {
 
 // Args are cloud-hypervisor's arguments for a machine with these disks.
 func (m *Machines) Args(name string, s node.MachineSpec, disks []string) []string {
+	return m.launchArgs(name, s, disks, false)
+}
+
+func (m *Machines) launchArgs(name string, s node.MachineSpec, disks []string, armCPUHotplug bool) []string {
+	cpus := fmt.Sprintf("boot=%d", s.CPUs)
+	if s.MaxCPUs > 0 {
+		cpus += fmt.Sprintf(",max=%d", s.MaxCPUs)
+	}
+	if armCPUHotplug {
+		cpus += ",acpi_hotplug=on"
+	}
+	memory := fmt.Sprintf("size=%dM", s.MemoryMiB)
+	if s.MaxMemoryMiB > s.MemoryMiB {
+		memory += fmt.Sprintf(",hotplug_method=virtio-mem,hotplug_size=%dM", s.MaxMemoryMiB-s.MemoryMiB)
+	}
 	args := []string{"--api-socket", "path=" + m.socket(name),
-		"--cpus", fmt.Sprintf("boot=%d", s.CPUs),
-		"--memory", fmt.Sprintf("size=%dM", s.MemoryMiB),
+		"--cpus", cpus,
+		"--memory", memory,
 		"--firmware", Firmware,
 		"--serial", "file=" + m.consoleLog(name), "--console", "off"}
 	for _, d := range disks {
-		args = append(args, "--disk", "path="+d)
+		// Volumes expose raw block devices. Format autodetection disables
+		// sector-zero writes, preventing the guest from growing partitions.
+		args = append(args, "--disk", "path="+d+",image_type=raw")
 	}
 	if s.MAC != "" {
 		args = append(args, "--net", fmt.Sprintf("tap=%s,mac=%s", TapName(name), s.MAC))
@@ -104,8 +151,22 @@ func (m *Machines) Args(name string, s node.MachineSpec, disks []string) []strin
 }
 
 // Apply starts a machine meant to run and stops one that is not; one that
-// runs with other CPUs, memory, disks or network than asked is restarted.
+// changes its size live only within explicit ceilings. A smaller size or a
+// changed launch configuration needs a restart; legacy sizes still do too.
 func (m *Machines) Apply(ctx context.Context, name string, s node.MachineSpec) error {
+	if s.Running {
+		if s.SendTo != "" && (s.MaxCPUs > 0 || s.MaxMemoryMiB > 0) {
+			return ErrMigrationCeilings
+		}
+		if err := validateCeilings(s); err != nil {
+			return err
+		}
+	}
+	release, err := m.reserveMemory(name, s)
+	if err != nil {
+		return err
+	}
+	defer release()
 	pid := m.pid(name)
 	switch {
 	case exists(m.mark(name, "sent")):
@@ -117,17 +178,55 @@ func (m *Machines) Apply(ctx context.Context, name string, s node.MachineSpec) e
 	case s.Running && pid == 0 && s.Receive != "":
 		return m.receive(name, s)
 	case s.Running && pid == 0:
-		return m.start(name, s)
+		plan, err := m.prepareLaunch(ctx, s)
+		if err != nil {
+			return err
+		}
+		defer plan.close()
+		return m.start(name, s, plan)
 	case !s.Running && pid != 0:
 		return m.stop(ctx, name, pid)
 	case s.Running && s.SendTo != "":
+		if err := m.checkSendConfig(name, s); err != nil {
+			return err
+		}
 		return m.send(ctx, name, pid, s.SendTo)
 	case s.Running && m.startedWith(name) != configKey(s):
+		plan, err := m.prepareLaunch(ctx, s)
+		if err != nil {
+			return m.launchPreflightFailed(ctx, name, pid, err)
+		}
+		defer plan.close()
 		if err := m.stop(ctx, name, pid); err != nil {
 			return err
 		}
-		return m.start(name, s)
+		return m.start(name, s, plan)
+	case s.Running && (s.MaxCPUs > 0 || s.MaxMemoryMiB > 0):
+		restart, err := m.reconcileResources(ctx, name, pid, s)
+		if err != nil || !restart {
+			return err
+		}
+		plan, err := m.prepareLaunch(ctx, s)
+		if err != nil {
+			return m.launchPreflightFailed(ctx, name, pid, err)
+		}
+		defer plan.close()
+		if err := m.stop(ctx, name, pid); err != nil {
+			return err
+		}
+		return m.start(name, s, plan)
 	}
+	return nil
+}
+
+func (m *Machines) checkSendConfig(name string, s node.MachineSpec) error {
+	if s.MaxCPUs > 0 || s.MaxMemoryMiB > 0 {
+		return ErrMigrationCeilings
+	}
+	if m.startedWith(name) != configKey(s) {
+		return fmt.Errorf("cannot migrate machine %s while its requested CPU, memory, disk or network configuration differs from the running guest", name)
+	}
+
 	return nil
 }
 
@@ -188,9 +287,22 @@ func (m *Machines) send(ctx context.Context, name string, pid int, url string) e
 	return nil
 }
 
-// configKey is what a running machine was started with.
+// configKey identifies the immutable launch shape. Preserve the exact legacy
+// encoding when no ceiling was requested, so upgrading does not reboot guests.
+// An unbounded axis still includes its size because changing it needs a restart.
 func configKey(s node.MachineSpec) string {
-	return fmt.Sprintf("%d/%d/%s/%s/%s", s.CPUs, s.MemoryMiB, strings.Join(s.Volumes, ","), s.MAC, s.SystemSerial)
+	cpus, memory := s.CPUs, s.MemoryMiB
+	if s.MaxCPUs > 0 {
+		cpus = 0
+	}
+	if s.MaxMemoryMiB > 0 {
+		memory = 0
+	}
+	key := fmt.Sprintf("%d/%d/%s/%s/%s", cpus, memory, strings.Join(s.Volumes, ","), s.MAC, s.SystemSerial)
+	if s.MaxCPUs > 0 || s.MaxMemoryMiB > 0 {
+		key += fmt.Sprintf("/ceilings=%d,%d", s.MaxCPUs, s.MaxMemoryMiB)
+	}
+	return key
 }
 
 func (m *Machines) startedWith(name string) string {
@@ -201,7 +313,7 @@ func (m *Machines) startedWith(name string) string {
 	return string(raw)
 }
 
-func (m *Machines) start(name string, s node.MachineSpec) error {
+func (m *Machines) start(name string, s node.MachineSpec, plan *launchPlan) error {
 	disks, err := m.disks(s)
 	if err != nil {
 		return err
@@ -211,7 +323,7 @@ func (m *Machines) start(name string, s node.MachineSpec) error {
 			return err
 		}
 	}
-	return m.launch(name, m.Args(name, s, disks), s)
+	return m.launchPinned(name, m.launchArgs(name, s, disks, plan.armCPUHotplug), s, plan.executable)
 }
 
 // disks are a machine's volumes as devices, once they are ready here.
@@ -235,29 +347,80 @@ func (m *Machines) disks(s node.MachineSpec) ([]string, error) {
 
 // launch runs cloud-hypervisor for a machine, in a session of its own.
 func (m *Machines) launch(name string, args []string, s node.MachineSpec) error {
+	return m.launchPinned(name, args, s, nil)
+}
+
+func (m *Machines) launchPinned(name string, args []string, s node.MachineSpec, executable *os.File) error {
 	for _, d := range []string{RunDir, filepath.Dir(m.consoleLog(name))} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
 	}
 	_ = os.Remove(m.socket(name))
+	_ = os.Remove(m.mark(name, "resources"))
 	log, err := os.OpenFile(m.consoleLog(name)+".vmm", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer log.Close()
-	cmd := exec.Command("/usr/bin/cloud-hypervisor", args...)
+	clearLaunch, err := m.beginLaunch(name, memoryReservation(s))
+	if err != nil {
+		return err
+	}
+	cmd := monitorCommand(nil, executable, args...)
 	cmd.Stdout, cmd.Stderr = log, log
 	// A session of its own: the machine outlives the node API.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
+		clearLaunch()
 		return fmt.Errorf("start cloud-hypervisor: %w", err)
 	}
-	go func() { _ = cmd.Wait() }()
-	if err := os.WriteFile(m.pidFile(name)+".config", []byte(configKey(s)), 0o600); err != nil {
+	// A monitor outlives the API process, so publish its allocation together
+	// with its PID. Failed bookkeeping must not leave an unaccounted guest.
+	rollback := func(err error) error {
+		_ = cmd.Process.Kill()
+		waitErr := cmd.Wait()
+		if cmd.ProcessState == nil {
+			return fmt.Errorf("%w; monitor exit was not confirmed: %v", err, waitErr)
+		}
+		clearLaunch()
 		return err
 	}
-	return os.WriteFile(m.pidFile(name), []byte(strconv.Itoa(cmd.Process.Pid)), 0o600)
+	if err := os.WriteFile(m.pidFile(name)+".config", []byte(configKey(s)), 0o600); err != nil {
+		return rollback(err)
+	}
+	if err := os.WriteFile(m.mark(name, "memory-mib"), []byte(strconv.FormatInt(memoryReservation(s), 10)), 0o600); err != nil {
+		return rollback(err)
+	}
+	if err := os.WriteFile(m.pidFile(name), []byte(strconv.Itoa(cmd.Process.Pid)), 0o600); err != nil {
+		return rollback(err)
+	}
+	ready, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.finishLaunch(ready, name, cmd.Process.Pid, clearLaunch); err != nil {
+		return rollback(err)
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// finishLaunch keeps the starting reservation until accounting can recognize
+// the exact monitor. Start's close-on-exec handshake can finish before Linux
+// publishes the new process's cmdline in /proc.
+func (m *Machines) finishLaunch(ctx context.Context, name string, pid int, clearLaunch func()) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if pid > 0 && m.pid(name) == pid {
+			clearLaunch()
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("monitor %s pid %d was not recognized: %w", name, pid, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 // stop presses the power button, and after a minute stops the monitor.
@@ -329,6 +492,9 @@ func (m *Machines) Status(name string, s node.MachineSpec) node.MachineStatus {
 		return st
 	}
 	st := node.MachineStatus{Phase: "Running", PID: int32(pid)}
+	if s.MaxCPUs > 0 || s.MaxMemoryMiB > 0 {
+		m.resourceStatus(name, pid, s, &st)
+	}
 	switch {
 	case exists(m.mark(name, "receiving")):
 		st.Phase = "Receiving"
@@ -356,6 +522,9 @@ func (m *Machines) Deleting(name string) bool {
 
 // Delete stops a machine and forgets it.
 func (m *Machines) Delete(ctx context.Context, name string) error {
+	if exists(m.mark(name, "starting")) && m.pid(name) == 0 {
+		return fmt.Errorf("machine %s has an interrupted launch; recover its monitor before deleting its reservation", name)
+	}
 	if pid := m.pid(name); pid != 0 {
 		if err := m.stop(ctx, name, pid); err != nil {
 			return err
@@ -366,7 +535,7 @@ func (m *Machines) Delete(ctx context.Context, name string) error {
 	}
 	_ = os.Remove(m.specFile(name))
 	_ = os.Remove(m.specFile(name) + ".deleting")
-	for _, f := range []string{"config", "sent", "receiving", "failed"} {
+	for _, f := range []string{"config", "memory-mib", "starting", "resources", "sent", "receiving", "failed"} {
 		_ = os.Remove(m.mark(name, f))
 	}
 	return nil

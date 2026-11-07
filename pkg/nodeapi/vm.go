@@ -2,8 +2,10 @@ package nodeapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,9 +29,9 @@ type vmHost struct {
 	machines *vm.Machines
 }
 
-func newVMHost(nodeName, address string) *vmHost {
+func newVMHost(nodeName, address string, memoryBudgetMiB int64) *vmHost {
 	v := &vm.Volumes{Node: nodeName, Address: address}
-	return &vmHost{objects: newObjects(), volumes: v, machines: &vm.Machines{Volumes: v}}
+	return &vmHost{objects: newObjects(), volumes: v, machines: &vm.Machines{Volumes: v, MemoryBudgetMiB: memoryBudgetMiB}}
 }
 
 // run applies every volume and every machine, each on its own, skipping
@@ -108,8 +110,11 @@ func (volumeStorage) GetSingularName() string { return "volume" }
 
 func (s volumeStorage) object(ctx context.Context, name string) (*node.Volume, error) {
 	spec, err := s.h.volumes.Load(name)
-	if err != nil {
+	if os.IsNotExist(err) {
 		return nil, apierrors.NewNotFound(node.Resource("volumes"), name)
+	}
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
 	}
 	v := &node.Volume{ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(string(nodeUID()) + "-volume-" + name)}, Spec: spec,
 		Status: s.h.volumes.Status(ctx, name)}
@@ -130,20 +135,38 @@ func (s volumeStorage) Get(ctx context.Context, name string, _ *metav1.GetOption
 
 func (s volumeStorage) List(ctx context.Context, _ *metainternalversion.ListOptions) (runtime.Object, error) {
 	list := &node.VolumeList{}
-	for _, n := range s.h.volumes.Names() {
-		if v, err := s.object(ctx, n); err == nil {
-			list.Items = append(list.Items, *v)
+	names, err := s.h.volumes.NamesChecked()
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
+	}
+	for _, n := range names {
+		v, err := s.object(ctx, n)
+		if apierrors.IsNotFound(err) {
+			continue
 		}
+		if err != nil {
+			return nil, err
+		}
+		list.Items = append(list.Items, *v)
 	}
 	return list, nil
 }
 
 func (s volumeStorage) snapshot(ctx context.Context) (map[string]runtime.Object, error) {
 	out := map[string]runtime.Object{}
-	for _, n := range s.h.volumes.Names() {
-		if v, err := s.object(ctx, n); err == nil {
-			out[n] = v
+	names, err := s.h.volumes.NamesChecked()
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
+	}
+	for _, n := range names {
+		v, err := s.object(ctx, n)
+		if apierrors.IsNotFound(err) {
+			continue
 		}
+		if err != nil {
+			return nil, err
+		}
+		out[n] = v
 	}
 	return out, nil
 }
@@ -251,13 +274,19 @@ func (machineStorage) GetSingularName() string { return "machine" }
 
 func (s machineStorage) object(name string) (*node.Machine, error) {
 	spec, err := s.h.machines.Load(name)
-	if err != nil {
+	if os.IsNotExist(err) {
 		return nil, apierrors.NewNotFound(node.Resource("machines"), name)
+	}
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
 	}
 	m := &node.Machine{ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(string(nodeUID()) + "-machine-" + name)}, Spec: spec,
 		Status: s.h.machines.Status(name, spec)}
-	if e := s.h.errOf("machine/" + name); e != "" && m.Status.Phase != "Running" {
-		m.Status.Phase, m.Status.Message = "Failed", e
+	if e := s.h.errOf("machine/" + name); e != "" {
+		m.Status.Message = e
+		if m.Status.Phase != "Running" {
+			m.Status.Phase = "Failed"
+		}
 	}
 	if s.h.machines.Deleting(name) {
 		m.Status.Phase = "Deleting"
@@ -272,20 +301,38 @@ func (s machineStorage) Get(_ context.Context, name string, _ *metav1.GetOptions
 
 func (s machineStorage) List(context.Context, *metainternalversion.ListOptions) (runtime.Object, error) {
 	list := &node.MachineList{}
-	for _, n := range s.h.machines.Names() {
-		if m, err := s.object(n); err == nil {
-			list.Items = append(list.Items, *m)
+	names, err := s.h.machines.NamesChecked()
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
+	}
+	for _, n := range names {
+		m, err := s.object(n)
+		if apierrors.IsNotFound(err) {
+			continue
 		}
+		if err != nil {
+			return nil, err
+		}
+		list.Items = append(list.Items, *m)
 	}
 	return list, nil
 }
 
 func (s machineStorage) snapshot(context.Context) (map[string]runtime.Object, error) {
 	out := map[string]runtime.Object{}
-	for _, n := range s.h.machines.Names() {
-		if m, err := s.object(n); err == nil {
-			out[n] = m
+	names, err := s.h.machines.NamesChecked()
+	if err != nil {
+		return nil, apierrors.NewInternalError(err)
+	}
+	for _, n := range names {
+		m, err := s.object(n)
+		if apierrors.IsNotFound(err) {
+			continue
 		}
+		if err != nil {
+			return nil, err
+		}
+		out[n] = m
 	}
 	return out, nil
 }
@@ -299,11 +346,16 @@ func (s machineStorage) Create(_ context.Context, obj runtime.Object, _ rest.Val
 	if m.Name == "" || m.Spec.CPUs <= 0 || m.Spec.MemoryMiB <= 0 || len(m.Spec.Volumes) == 0 {
 		return nil, apierrors.NewBadRequest("a machine needs a name, cpus, memoryMiB and volumes")
 	}
+	l := s.h.lock("machine/" + m.Name)
+	l.Lock()
+	defer l.Unlock()
 	if _, err := s.h.machines.Load(m.Name); err == nil {
 		return nil, apierrors.NewAlreadyExists(node.Resource("machines"), m.Name)
+	} else if !os.IsNotExist(err) {
+		return nil, apierrors.NewInternalError(err)
 	}
 	if err := s.h.machines.Save(m.Name, m.Spec); err != nil {
-		return nil, apierrors.NewInternalError(err)
+		return nil, machineSaveError(m.Name, err)
 	}
 	s.h.changed()
 	return s.object(m.Name)
@@ -311,6 +363,9 @@ func (s machineStorage) Create(_ context.Context, obj runtime.Object, _ rest.Val
 
 func (s machineStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo,
 	_ rest.ValidateObjectFunc, _ rest.ValidateObjectUpdateFunc, _ bool, _ *metav1.UpdateOptions) (runtime.Object, bool, error) {
+	l := s.h.lock("machine/" + name)
+	l.Lock()
+	defer l.Unlock()
 	current, err := s.object(name)
 	if err != nil {
 		return nil, false, err
@@ -319,8 +374,12 @@ func (s machineStorage) Update(ctx context.Context, name string, objInfo rest.Up
 	if err != nil {
 		return nil, false, err
 	}
-	if err := s.h.machines.Save(name, updated.(*node.Machine).Spec); err != nil {
-		return nil, false, apierrors.NewInternalError(err)
+	spec := updated.(*node.Machine).Spec
+	if spec.CPUs <= 0 || spec.MemoryMiB <= 0 || len(spec.Volumes) == 0 {
+		return nil, false, apierrors.NewBadRequest("a machine needs cpus, memoryMiB and volumes")
+	}
+	if err := s.h.machines.Save(name, spec); err != nil {
+		return nil, false, machineSaveError(name, err)
 	}
 	s.h.changed()
 	obj, err := s.object(name)
@@ -328,6 +387,9 @@ func (s machineStorage) Update(ctx context.Context, name string, objInfo rest.Up
 }
 
 func (s machineStorage) Delete(ctx context.Context, name string, _ rest.ValidateObjectFunc, _ *metav1.DeleteOptions) (runtime.Object, bool, error) {
+	l := s.h.lock("machine/" + name)
+	l.Lock()
+	defer l.Unlock()
 	obj, err := s.object(name)
 	if err != nil {
 		return nil, false, err
@@ -338,6 +400,16 @@ func (s machineStorage) Delete(ctx context.Context, name string, _ rest.Validate
 	}
 	s.h.changed()
 	return obj, false, nil
+}
+
+func machineSaveError(name string, err error) error {
+	if errors.Is(err, vm.ErrMachineSpec) {
+		return apierrors.NewBadRequest(err.Error())
+	}
+	if errors.Is(err, vm.ErrMemoryBudget) || errors.Is(err, vm.ErrMigrationMemory) || errors.Is(err, vm.ErrMigrationCeilings) {
+		return apierrors.NewForbidden(node.Resource("machines"), name, err)
+	}
+	return apierrors.NewInternalError(err)
 }
 
 func (machineStorage) ConvertToTable(_ context.Context, obj runtime.Object, _ runtime.Object) (*metav1.Table, error) {

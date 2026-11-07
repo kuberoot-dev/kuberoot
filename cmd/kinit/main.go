@@ -49,6 +49,7 @@ func boot() error {
 	var uts unix.Utsname
 	_ = unix.Uname(&uts)
 	log.Printf("kuberoot booting, kernel %s, uptime %s", unix.ByteSliceToString(uts.Release[:]), uptime())
+	go watchCPUHotplug()
 
 	waitForEntropy()
 	cfg := loadCmdline()

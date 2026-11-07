@@ -37,6 +37,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.BootEntryStatus":       schema_pkg_apis_node_v1alpha1_BootEntryStatus(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.CPULatency":            schema_pkg_apis_node_v1alpha1_CPULatency(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControlPlaneShare":     schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControllerProcess":     schema_pkg_apis_node_v1alpha1_ControllerProcess(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Disk":                  schema_pkg_apis_node_v1alpha1_Disk(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskList":              schema_pkg_apis_node_v1alpha1_DiskList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.DiskPartition":         schema_pkg_apis_node_v1alpha1_DiskPartition(ref),
@@ -461,6 +462,48 @@ func schema_pkg_apis_node_v1alpha1_ControlPlaneShare(ref common.ReferenceCallbac
 					},
 				},
 				Required: []string{"clusterCAKey", "frontProxyCAKey", "serviceAccountKey", "serviceAccountPub", "encryptionKey", "etcdCA", "etcdCAKey", "etcdInitialCluster"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_ControllerProcess(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ControllerProcess identifies one process incarnation without exposing its argument list, environment or credentials.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"pid": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+					"executable": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"startTicks": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int64",
+						},
+					},
+					"bootID": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"pid", "executable", "startTicks", "bootID"},
 			},
 		},
 	}
@@ -2144,6 +2187,20 @@ func schema_pkg_apis_node_v1alpha1_MachineSpec(ref common.ReferenceCallback) com
 							Format:  "int64",
 						},
 					},
+					"maxCPUs": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxCPUs is the immutable CPU ceiling. Zero keeps the legacy behavior: any CPU change restarts the guest. Growth within a ceiling is live; shrinking always restarts it.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxMemoryMiB": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxMemoryMiB is the immutable, fully reserved RAM ceiling. With a ceiling, both memory values must be multiples of 128 MiB. Zero keeps legacy restart-on-change behavior. Shrinking always restarts the guest.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
 					"volumes": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Volumes on this node, by name, as the machine's disks in order.",
@@ -2231,11 +2288,45 @@ func schema_pkg_apis_node_v1alpha1_MachineStatus(ref common.ReferenceCallback) c
 							Ref: ref(v1.Time{}.OpenAPIModelName()),
 						},
 					},
+					"cpus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CPUs and MemoryMiB are the VMM's applied configuration, not guest online CPUs or memory_actual_size. A guest may online hotplug later.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"memoryMiB": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int64",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourcesReady reports whether the VMM accepted the requested size. Guest online resources require observation inside the guest.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(v1.Condition{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			v1.Time{}.OpenAPIModelName()},
+			v1.Condition{}.OpenAPIModelName(), v1.Time{}.OpenAPIModelName()},
 	}
 }
 
@@ -2930,12 +3021,42 @@ func schema_pkg_apis_node_v1alpha1_NodeServiceStatus(ref common.ReferenceCallbac
 							Format: "int64",
 						},
 					},
+					"controllerProcesses": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ControllerProcesses is a read-only /proc inventory for vmctl/wsctl. It includes orphaned matching executables, not only the supervised PID. InventoryError means no migration barrier may trust this observation.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControllerProcess"),
+									},
+								},
+							},
+						},
+					},
+					"controllerInventoryObserved": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
+					"controllerInventoryError": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
 				Required: []string{"restarts"},
 			},
 		},
 		Dependencies: []string{
-			v1.Time{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.ControllerProcess", v1.Time{}.OpenAPIModelName()},
 	}
 }
 
