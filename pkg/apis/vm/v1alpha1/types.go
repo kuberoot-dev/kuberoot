@@ -42,13 +42,28 @@ type VirtualMachine struct {
 	Status VirtualMachineStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.maxCPUs) || self.maxCPUs >= self.cpus",message="maxCPUs must be at least cpus"
+// +kubebuilder:validation:XValidation:rule="has(self.maxCPUs) == has(oldSelf.maxCPUs) && (!has(self.maxCPUs) || self.maxCPUs == oldSelf.maxCPUs)",message="maxCPUs is immutable; create a new machine to change its ceiling"
+// +kubebuilder:validation:XValidation:rule="has(self.maxMemory) == has(oldSelf.maxMemory) && (!has(self.maxMemory) || quantity(string(self.maxMemory)).compareTo(quantity(string(oldSelf.maxMemory))) == 0)",message="maxMemory is immutable; create a new machine to change its ceiling"
+// +kubebuilder:validation:XValidation:rule="!has(self.maxMemory) || quantity(string(self.maxMemory)).compareTo(quantity(string(self.memory))) >= 0",message="maxMemory must be at least memory"
+// +kubebuilder:validation:XValidation:rule="!has(self.maxMemory) || (quantity(string(self.memory)).isInteger() && quantity(string(self.maxMemory)).isInteger() && quantity(string(self.memory)).asInteger() > 0 && quantity(string(self.memory)).asInteger() % 134217728 == 0 && quantity(string(self.maxMemory)).asInteger() % 134217728 == 0)",message="memory and maxMemory must be positive multiples of 128Mi when maxMemory is set"
 type VirtualMachineSpec struct {
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=1
 	CPUs int32 `json:"cpus,omitempty"`
+	// MaxCPUs is fixed at creation. Growth within it does not reboot the
+	// guest; shrinking does. Omit it to restart on every CPU change.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxCPUs int32 `json:"maxCPUs,omitempty"`
 	// +kubebuilder:default="512Mi"
 	Memory resource.Quantity `json:"memory,omitempty"`
-	Disk   Disk              `json:"disk"`
+	// MaxMemory is fixed at creation and reserved in full on the host.
+	// With it, memory and maxMemory use 128Mi steps. Growth is live;
+	// shrinking restarts the guest. Omit it for restart-on-change behavior.
+	// +optional
+	MaxMemory *resource.Quantity `json:"maxMemory,omitempty"`
+	Disk      Disk               `json:"disk"`
 	// Running: the machine runs; false shuts it down and keeps its disk.
 	// +kubebuilder:default=true
 	Running *bool `json:"running,omitempty"`

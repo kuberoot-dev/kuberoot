@@ -134,6 +134,11 @@ func (in *VirtualMachineList) DeepCopyObject() runtime.Object {
 func (in *VirtualMachineSpec) DeepCopyInto(out *VirtualMachineSpec) {
 	*out = *in
 	out.Memory = in.Memory.DeepCopy()
+	if in.MaxMemory != nil {
+		in, out := &in.MaxMemory, &out.MaxMemory
+		x := (*in).DeepCopy()
+		*out = &x
+	}
 	in.Disk.DeepCopyInto(&out.Disk)
 	if in.Running != nil {
 		in, out := &in.Running, &out.Running
