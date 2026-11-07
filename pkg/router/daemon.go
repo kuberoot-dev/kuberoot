@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -18,6 +19,10 @@ import (
 type Daemon struct {
 	Name string
 	Args []string
+	// StopWithParent kills the child if this process dies, including by
+	// SIGKILL. Use for exclusive services such as an elected gateway's
+	// DHCP server, which must not survive its controller.
+	StopWithParent bool
 
 	mu      sync.Mutex
 	cancel  context.CancelFunc
@@ -82,9 +87,19 @@ func (d *Daemon) Running() bool {
 
 func (d *Daemon) loop(ctx context.Context, done chan struct{}) {
 	defer close(done)
+	if d.StopWithParent {
+		// Linux attaches Pdeathsig to the creating OS thread. Keep that
+		// thread alive until every child has been waited for, otherwise
+		// Go retiring the thread could kill a healthy daemon.
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
 	backoff := time.Second
 	for ctx.Err() == nil {
 		cmd := exec.CommandContext(ctx, d.Args[0], d.Args[1:]...)
+		if d.StopWithParent {
+			cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+		}
 		var tail lastLine
 		cmd.Stdout, cmd.Stderr = os.Stdout, io.MultiWriter(os.Stderr, &tail)
 		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
