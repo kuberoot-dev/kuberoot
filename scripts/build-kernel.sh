@@ -55,9 +55,12 @@ sed -i 's/=m$/=y/' "$O/.config"
 make -s ARCH=$KARCH O="$O" olddefconfig
 # olddefconfig drops an option whose dependencies the fragments did not also
 # ask for, and says nothing. For most options the loss shows up as a kernel
-# that misbehaves; for these it shows up much later, as a CNI that refuses to
-# load on a cluster that is already built, so check them here instead.
-for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM; do
+# that misbehaves; these break networking, storage or guest resource growth
+# long after the image was built, so check their final values here instead.
+for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM CONFIG_HOTPLUG_CPU \
+  CONFIG_ACPI_PROCESSOR CONFIG_ACPI_HOTPLUG_CPU CONFIG_MEMORY_HOTPLUG \
+  CONFIG_MEMORY_HOTREMOVE CONFIG_CONTIG_ALLOC CONFIG_EXCLUSIVE_SYSTEM_RAM \
+  CONFIG_VIRTIO_MEM CONFIG_MHP_DEFAULT_ONLINE_TYPE_ONLINE_AUTO; do
   grep -qx "$opt=y" "$O/.config" || {
     echo "$opt was asked for in the fragments and is not in the resulting config: a dependency of it is unmet" >&2
     exit 1

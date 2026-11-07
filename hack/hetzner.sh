@@ -46,12 +46,16 @@ sync() {
 }
 
 SRC=/work/src/kuberoot
-ENV="KUBEROOT_OUT=/work/out WORK=/work"
+# nproc sees the host's CPUs, while the builder has a much smaller quota.
+# Bound compilation by default and forward an explicit override remotely.
+VM_API_TRANSITION=${KUBEROOT_VM_API_TRANSITION:-0}
+case "$VM_API_TRANSITION" in 0|1) ;; *) echo "KUBEROOT_VM_API_TRANSITION must be 0 or 1" >&2; exit 1 ;; esac
+ENV="KUBEROOT_OUT=/work/out WORK=/work JOBS=${JOBS:-4} GOMAXPROCS=${GOMAXPROCS:-4} KUBEROOT_VM_API_TRANSITION=$VM_API_TRANSITION"
 case "${1:-}" in
   sync) sync ;;
   kernel)
     prepare; sync
-    tools sh -c "$ENV $SRC/scripts/build-kernel.sh $2 && $ENV $SRC/scripts/build-drbd.sh $2" ;;
+    tools sh -c "$ENV KUBEROOT_DISTRO=${KUBEROOT_DISTRO:-edge} $SRC/scripts/build-kernel.sh $2 && $ENV KUBEROOT_DISTRO=${KUBEROOT_DISTRO:-edge} $SRC/scripts/build-drbd.sh $2" ;;
   build)
     arch=${2:?arch required}
     prepare; sync
@@ -61,6 +65,10 @@ case "${1:-}" in
     tools sh -c "[ -f /work/out/$arch/vmlinuz.efi ] && [ \"\$(cat /work/out/$arch/kernel.flavour 2>/dev/null || echo base)\" = $flavour ] || { $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-kernel.sh $arch && $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-drbd.sh $arch; }"
     tools sh -c "cd $SRC && $ENV KUBEROOT_STORE_LAB=${KUBEROOT_STORE_LAB:-} scripts/build-binaries.sh $arch"
     case "$distro" in
+      cloud|hypervisor|workstation)
+        if [ "$arch" = arm64 ]; then
+          tools sh -c "$ENV $SRC/scripts/build-vmm.sh arm64"
+        fi ;;
       ai) tools sh -c "$ENV $SRC/scripts/build-llama.sh $arch && $ENV $SRC/scripts/build-nvidia.sh $arch && $ENV $SRC/scripts/build-llama-cuda.sh $arch" ;;
       rt) tools sh -c "$ENV $SRC/scripts/build-rt-tests.sh $arch" ;;
     esac
@@ -113,7 +121,9 @@ case "${1:-}" in
     tools sh -c "KUBECONFIG=/work/kube/$c.conf /work/bin/kubectl $*" ;;
   test)
     sync
-    tools sh -c "cd $SRC && go test ./... 2>&1 | grep -v 'no test files'" ;;
+    # A filtering pipeline in /bin/sh returned grep's status and hid failing
+    # tests. Return the Go command's status directly to the caller.
+    tools sh -c "cd $SRC && GOMAXPROCS=${GOMAXPROCS:-4} go test -p ${JOBS:-4} ./..." ;;
   sh)
     shift
     if [ $# -eq 0 ]; then k exec -it builder -c tools -- bash; else tools sh -c "$*"; fi ;;

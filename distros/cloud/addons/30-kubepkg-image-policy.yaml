@@ -1,0 +1,24 @@
+# The package manager's image policy: pods in namespaces the operator labels
+# are checked against the images their packages pin. The operator fills in
+# the CA bundle with the certificate it issues; its endpoint is the node
+# (kubepkg-webhook, generated at boot).
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kubepkg-images
+webhooks:
+  - name: pods.images.kubepkg.dev
+    clientConfig:
+      service: {name: kubepkg-webhook, namespace: kube-system, path: /mutate-pods, port: 443}
+    rules:
+      - {apiGroups: [""], apiVersions: [v1], operations: [CREATE], resources: [pods], scope: Namespaced}
+    namespaceSelector:
+      matchExpressions:
+        - {key: kubepkg.dev/image-policy, operator: In, values: [warn, enforce]}
+    # enforce: no pod there starts without the webhook's say. The operator
+    # runs on the control plane node, as the API server does.
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions: [v1]
+    timeoutSeconds: 10
+    reinvocationPolicy: IfNeeded

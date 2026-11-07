@@ -1,0 +1,85 @@
+# Apply only to a separate installed stage1 cloud lab, not the accepted stage0 node.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloud-resize
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: observer
+  namespace: cloud-resize
+spec:
+  containers:
+  - name: alpine
+    image: docker.io/library/alpine:3.22.2
+    command: [/bin/sh, -c]
+    args: ['trap "exit 0" TERM INT; while :; do sleep 3600 & wait $!; done']
+    resources:
+      requests: {cpu: 10m, memory: 16Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+---
+apiVersion: vm.kuberoot.dev/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: cloud-resize-vm
+spec:
+  cpus: 1
+  maxCPUs: 4
+  memory: 1Gi
+  maxMemory: 4Gi
+  replicas: 1
+  running: true
+  disk:
+    size: 4Gi
+    image: https://cloud.debian.org/cdimage/cloud/trixie/20261001-2618/debian-13-genericcloud-amd64-20261001-2618.qcow2
+  userData: |
+    #cloud-config
+    package_update: false
+    write_files:
+    - path: /etc/udev/rules.d/99-cpu-online.rules
+      content: 'SUBSYSTEM=="cpu", ACTION=="add", TEST=="online", ATTR{online}="1"'
+    - path: /usr/local/bin/cloud-resize-observer
+      permissions: '0755'
+      content: |
+        #!/usr/bin/python3
+        import http.server
+        import json
+        import pathlib
+        import subprocess
+        class Observer(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                meminfo = pathlib.Path('/proc/meminfo').read_text()
+                data = dict(nproc=int(subprocess.check_output(['nproc'])),
+                            meminfo=meminfo,
+                            uptime=pathlib.Path('/proc/uptime').read_text().strip(),
+                            boot_id=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                            online_cpus=pathlib.Path('/sys/devices/system/cpu/online').read_text().strip())
+                body = json.dumps(data).encode()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+        http.server.HTTPServer(('0.0.0.0',8080),Observer).serve_forever()
+    - path: /etc/systemd/system/cloud-resize-observer.service
+      content: |
+        [Unit]
+        Description=Guest CPU and RAM observation for cloud stage1
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        ExecStartPre=/bin/sh -ec 'modprobe virtio_mem; echo online_movable > /sys/devices/system/memory/auto_online_blocks'
+        ExecStart=/usr/local/bin/cloud-resize-observer
+        Restart=on-failure
+        [Install]
+        WantedBy=multi-user.target
+    runcmd:
+    - [udevadm, control, --reload-rules]
+    - [systemctl, daemon-reload]
+    - [systemctl, enable, --now, cloud-resize-observer.service]
+    - [sh, -c, 'echo KUBEROOT_STAGE1_READY > /dev/ttyS0']

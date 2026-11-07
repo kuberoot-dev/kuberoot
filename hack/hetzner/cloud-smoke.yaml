@@ -1,0 +1,92 @@
+# Apply to the installed kuberoot cloud guest, never to the outer workshop.
+# Preflight the pinned amd64 image and follow cloud-smoke.md first.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloud-smoke
+  labels:
+    app.kubernetes.io/part-of: kuberoot-cloud-stage0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ordinary-pod
+  namespace: cloud-smoke
+  labels:
+    app.kubernetes.io/part-of: kuberoot-cloud-stage0
+spec:
+  containers:
+  - name: alpine
+    image: docker.io/library/alpine:3.22.2
+    command: [/bin/sh, -c]
+    args:
+    - 'trap "exit 0" TERM INT; while :; do sleep 3600 & wait $!; done'
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+    readinessProbe:
+      exec:
+        command: [/bin/sh, -c, test -r /etc/alpine-release]
+      initialDelaySeconds: 1
+      periodSeconds: 3
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      readOnlyRootFilesystem: true
+---
+apiVersion: vm.kuberoot.dev/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: cloud-smoke-vm
+  labels:
+    app.kubernetes.io/part-of: kuberoot-cloud-stage0
+spec:
+  cpus: 1
+  memory: 768Mi
+  replicas: 1
+  running: true
+  disk:
+    size: 4Gi
+    # Official Debian Cloud Image Finder records this exact download link:
+    # https://cloud-image-finder.debian.net/i/debian-13-genericcloud-amd64-20261001-2618
+    image: https://cloud.debian.org/cdimage/cloud/trixie/20261001-2618/debian-13-genericcloud-amd64-20261001-2618.qcow2
+  userData: |
+    #cloud-config
+    package_update: false
+    write_files:
+    - path: /usr/local/bin/kuberoot-cloud-smoke
+      permissions: '0755'
+      content: |
+        #!/bin/sh
+        set -eu
+        smoke_dir=/var/lib/kuberoot-cloud-smoke
+        mkdir -p "$smoke_dir"
+        if [ ! -s "$smoke_dir/identity" ]; then
+          cat /proc/sys/kernel/random/uuid > "$smoke_dir/identity"
+        fi
+        cat /proc/sys/kernel/random/boot_id > "$smoke_dir/boot-id"
+        printf 'KUBEROOT_CLOUD_SMOKE_READY\n' > /dev/ttyS0
+        exec /usr/bin/python3 -m http.server 8080 --bind 0.0.0.0 --directory "$smoke_dir"
+    - path: /etc/systemd/system/kuberoot-cloud-smoke.service
+      permissions: '0644'
+      content: |
+        [Unit]
+        Description=Kuberoot cloud stage0 guest persistence probe
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        ExecStart=/usr/local/bin/kuberoot-cloud-smoke
+        Restart=on-failure
+        RestartSec=2
+
+        [Install]
+        WantedBy=multi-user.target
+    runcmd:
+    - [systemctl, daemon-reload]
+    - [systemctl, enable, --now, kuberoot-cloud-smoke.service]

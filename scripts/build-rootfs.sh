@@ -15,6 +15,13 @@ set -a; . "$ROOT/build/components.env"; set +a
 VERSION=${KUBEROOT_VERSION:-0.1.0-dev}
 DISTRO=${KUBEROOT_DISTRO:-edge}
 [ -f "$ROOT/distros/$DISTRO/profile.yaml" ] || { echo "no distribution $DISTRO" >&2; exit 1; }
+VM_API_TRANSITION=${KUBEROOT_VM_API_TRANSITION:-0}
+case "$VM_API_TRANSITION:$DISTRO" in
+  0:*) ;;
+  1:cloud|1:hypervisor|1:workstation) ;;
+  *) echo "KUBEROOT_VM_API_TRANSITION must be 0, or 1 for a VM distribution" >&2; exit 1 ;;
+esac
+
 
 apk add --no-cache -q curl squashfs-tools tar
 mkdir -p "$CACHE"
@@ -23,7 +30,10 @@ fetch() { [ -s "$CACHE/$2" ] || curl -fsSL -o "$CACHE/$2" "$1"; }
 # Alpine's packages for the target architecture, which may not be the
 # builder's: apk installs another's, verified with that architecture's keys.
 case "$ARCH" in amd64) APK_ARCH=x86_64 ;; arm64) APK_ARCH=aarch64 ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
-r=$(mktemp -d)
+# The root is several GiB before compression. Keep it on the builder's work
+# volume instead of consuming the container's limited ephemeral storage.
+r=$(mktemp -d "$WORK/rootfs-$ARCH.XXXXXX")
+trap 'rm -rf "$r"; rm -f "$OUT/rootfs.squashfs.new"' EXIT
 mkdir -p $r/etc/apk/keys
 if [ "$(apk --print-arch)" = "$APK_ARCH" ]; then
   cp -r /etc/apk/keys/. $r/etc/apk/keys/
@@ -63,6 +73,12 @@ mkdir -p $r/usr/share/kuberoot/kubepkg/crds
 cp "$OUT"/kubepkg-crds/*.yaml $r/usr/share/kuberoot/kubepkg/crds/
 cp -r "$OUT/glibc/." $r/
 cp -r "$ROOT/rootfs/." $r/
+if [ "$VM_API_TRANSITION" = 1 ]; then
+  printf 'v1alpha1-to-v1alpha2\n' > "$r/usr/share/kuberoot/vm-api-transition"
+else
+  rm -f "$r/usr/share/kuberoot/vm-api-transition"
+fi
+
 install -m 0644 "$ROOT/distros/$DISTRO/profile.yaml" $r/usr/share/kuberoot/profile.yaml
 # The distribution's own add-ons, next to the image's.
 if [ -d "$ROOT/distros/$DISTRO/addons" ]; then cp -r "$ROOT/distros/$DISTRO/addons/." $r/usr/share/kuberoot/addons/; fi
@@ -75,8 +91,10 @@ if [ -f "$ROOT/distros/$DISTRO/extras.sh" ]; then . "$ROOT/distros/$DISTRO/extra
 printf 'NAME="kuberoot"\nID=kuberoot\nPRETTY_NAME="kuberoot %s (%s)"\nVERSION_ID=%s\nHOME_URL="https://github.com/kuberoot-dev/kuberoot"\n' "$VERSION" "$DISTRO" "$VERSION" > $r/etc/os-release
 # /lib/modules: agents (Cilium) mount it from the host, even with no modules.
 mkdir -p $r/dev $r/proc $r/sys $r/run $r/tmp $r/var $r/etc/kubernetes $r/etc/cni/net.d $r/opt/cni/bin $r/lib/modules
-rm -f "$OUT/rootfs.squashfs"
-mksquashfs $r "$OUT/rootfs.squashfs" -comp zstd -all-root -noappend -quiet
-rm -rf $r
+# Host CPU and memory totals exceed the Alpine container's quota. Bound the
+# compressor independently of the larger tools container's build parallelism.
+mksquashfs "$r" "$OUT/rootfs.squashfs.new" -comp zstd -all-root -noappend -quiet \
+  -processors "${SQUASHFS_PROCESSORS:-2}" -mem "${SQUASHFS_MEMORY:-512M}"
+mv "$OUT/rootfs.squashfs.new" "$OUT/rootfs.squashfs"
 echo "$VERSION" > "$OUT/VERSION"
 echo "rootfs: $OUT/rootfs.squashfs ($(du -h "$OUT/rootfs.squashfs" | cut -f1)), $DISTRO $VERSION"
