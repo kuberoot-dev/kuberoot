@@ -5,6 +5,11 @@ kind: Distribution
 metadata:
   name: cloud
 spec:
+  # Cozystack installs Cilium, so this node must not raise a pod tunnel of its
+  # own: kuberoot's overlay takes UDP 8472, which is the port Cilium's own
+  # tunnel needs, and Cilium then never finishes starting -- every pod is
+  # refused an address by the CNI and nothing in the cluster names the reason.
+  podNetwork: none
   # DRBD 9 for replicated volumes (LINSTOR, Piraeus); the operator manages
   # it, so DRBD runs no helper programs of its own.
   modules:
@@ -18,13 +23,16 @@ spec:
     net.bridge.bridge-nf-call-ip6tables: "1"
     fs.inotify.max_user_instances: "8192"
     fs.inotify.max_user_watches: "524288"
-  # Keep the VM pool out of pod allocatable memory. This initial profile
-  # targets nodes with at least 8 GiB: 4 GiB for VM guest RAM and 2 GiB
-  # for native services and VMM overhead. The VM admission budget below
-  # must change with this reservation; neither is the 60% HA usage guard.
+  # Keep the VM pool out of pod allocatable memory. On an 8 GiB board the
+  # platform itself has to fit in what is left, so the pool is 1 GiB and the
+  # native services take 1 GiB: 6 GiB stays for pods. The first split tried
+  # here was 4 GiB of pool and 2 GiB of services, which left 1.6 GiB of
+  # allocatable memory -- not enough to install the platform at all, which is
+  # what this node exists to run. The VM admission budget below must change
+  # with this reservation; neither is the 60% HA usage guard.
   kubelet:
     systemReserved:
-      memory: 6Gi
+      memory: 2Gi
     enforceNodeAllocatable: [pods]
   roles:
     controlPlane:
@@ -55,7 +63,7 @@ spec:
         - --pod-network={{.Net.PodNetwork}}
         - --service-cidr={{.Net.Service}}
         - --machines
-        - --machine-memory-budget-mib=4096
+        - --machine-memory-budget-mib=1024
         - --vm-network-kubeconfig={{kube "admin.kubeconfig"}}
         - '{{if eq .Store.Kind "etcd"}}--etcd{{end}}'
       - name: containerd
@@ -261,7 +269,7 @@ spec:
         - --pod-cidr={{.Net.Pod}}
         - --pod-network={{.Net.PodNetwork}}
         - --machines
-        - --machine-memory-budget-mib=4096
+        - --machine-memory-budget-mib=1024
         - --vm-network-kubeconfig=/var/lib/kubelet/kubeconfig
       - name: containerd
         args: [/usr/bin/containerd, --config, /etc/containerd/config.toml]

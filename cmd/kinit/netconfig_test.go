@@ -59,16 +59,26 @@ func TestParseCmdline(t *testing.T) {
 	}
 }
 
+// What the boot arguments say, and nothing more: an argument that names no
+// known mode leaves the choice open, for the distribution to answer and
+// podNetworkDefault to settle. Resolving it to vxlan here would overrule a
+// distribution that must not raise a tunnel of its own.
 func TestPodNetworkFromCmdline(t *testing.T) {
 	for in, want := range map[string]string{
-		"":                               "vxlan",
+		"":                               "",
 		"kuberoot.pod-network=none":      "none",
 		"kuberoot.pod-network=host-gw":   "host-gw",
-		"kuberoot.pod-network=something": "vxlan",
+		"kuberoot.pod-network=vxlan":     "vxlan",
+		"kuberoot.pod-network=something": "",
 	} {
 		if got := parseCmdline(in).podNetwork; got != want {
 			t.Errorf("%q: pod network %q, want %q", in, got, want)
 		}
+	}
+	// And the old behaviour still holds once the two are put together: a node
+	// whose boot arguments and distribution both say nothing runs vxlan.
+	if got := podNetworkDefault(parseCmdline("").podNetwork, nil); got != "vxlan" {
+		t.Errorf("silence on both sides must still mean vxlan, got %q", got)
 	}
 }
 
