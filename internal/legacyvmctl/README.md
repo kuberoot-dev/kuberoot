@@ -1,0 +1,5 @@
+# Transition-only legacy controller
+
+This package is copied from the accepted immutable `/work/src/kuberoot-stage1` snapshot. `STAGE1-SOURCE.sha256` records the original file hashes before the package rename and guard-only changes. The exported provenance archive SHA256 is `f3c6d1a5fff22ba7eab537c81de5c4192886bc4233ebc7cb21df4c6e3f9bd6b8`; the full stage1 source manifest SHA256 is `d387c0eb4d03bdeda484497cd6f00f376701594b78a42dd8ae0eea605c4f54e0`.
+
+It is selected only when the installed VM CRD stores and serves cluster-scoped v1alpha1. It retains the original backend and Secret semantics solely for the maintenance transition. The shared process guard pauses every reconcile and sweep, and the seed handler drains before acknowledgement. It never handles v1alpha2. After verified import, the normal NodeService restart starts the same installed executable in its alpha2 branch; the helper refuses release while any controller still acknowledges alpha1. Do not extend this package with new features.

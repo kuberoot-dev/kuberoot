@@ -1,0 +1,714 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    api-approved.kubernetes.io: unapproved, experimental-only
+    controller-gen.kubebuilder.io/version: v0.22.0
+  labels:
+    cluster.x-k8s.io/v1beta1: v1alpha1
+  name: kuberootclusters.infrastructure.cluster.x-k8s.io
+spec:
+  group: infrastructure.cluster.x-k8s.io
+  names:
+    kind: KuberootCluster
+    listKind: KuberootClusterList
+    plural: kuberootclusters
+    singular: kuberootcluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KuberootCluster describes infrastructure for a separately managed
+          control plane.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              controlPlaneEndpoint:
+                properties:
+                  host:
+                    type: string
+                  port:
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                required:
+                - host
+                - port
+                type: object
+              externalManagedControlPlane:
+                default: true
+                description: |-
+                  Kamaji owns the control plane endpoint. The infrastructure object has a
+                  real controller and must not use cluster.x-k8s.io/managed-by.
+                enum:
+                - true
+                type: boolean
+            required:
+            - externalManagedControlPlane
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  description: |-
+                    Condition has the legacy CAPI v1beta1 wire shape. It does not introduce a
+                    dependency on a different Kubernetes SDK version into the node repository.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    severity:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                format: int64
+                type: integer
+              ready:
+                type: boolean
+            required:
+            - ready
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    api-approved.kubernetes.io: unapproved, experimental-only
+    controller-gen.kubebuilder.io/version: v0.22.0
+  labels:
+    cluster.x-k8s.io/v1beta1: v1alpha1
+  name: kuberootmachines.infrastructure.cluster.x-k8s.io
+spec:
+  group: infrastructure.cluster.x-k8s.io
+  names:
+    kind: KuberootMachine
+    listKind: KuberootMachineList
+    plural: kuberootmachines
+    singular: kuberootmachine
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    - jsonPath: .spec.providerID
+      name: ProviderID
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KuberootMachine owns one same-namespace native VirtualMachine.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              cpus:
+                format: int32
+                minimum: 1
+                type: integer
+              disk:
+                properties:
+                  image:
+                    description: |-
+                      Image written onto the disk when it is created: a URL of a qcow2 or
+                      raw disk image that boots with UEFI.
+                    type: string
+                  size:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    default: 4Gi
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                required:
+                - image
+                type: object
+              maxCPUs:
+                format: int32
+                minimum: 1
+                type: integer
+              maxMemory:
+                anyOf:
+                - type: integer
+                - type: string
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              memory:
+                anyOf:
+                - type: integer
+                - type: string
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              node:
+                description: Node is an optional placement constraint in the infrastructure
+                  cluster.
+                type: string
+              providerID:
+                description: |-
+                  ProviderID is set by this controller and copied to the CAPI Machine by
+                  the CAPI core controller. It must match the workload Node's providerID.
+                type: string
+                x-kubernetes-validations:
+                - message: providerID is immutable
+                  rule: self == oldSelf
+              replicas:
+                default: 3
+                enum:
+                - 1
+                - 3
+                format: int32
+                type: integer
+            required:
+            - cpus
+            - disk
+            - memory
+            type: object
+            x-kubernetes-validations:
+            - message: cpus exceeds maxCPUs
+              rule: '!has(self.maxCPUs) || self.cpus <= self.maxCPUs'
+            - message: memory exceeds maxMemory
+              rule: '!has(self.maxMemory) || quantity(string(self.memory)).compareTo(quantity(string(self.maxMemory)))
+                <= 0'
+            - message: memory must be positive
+              rule: quantity(string(self.memory)).compareTo(quantity('0')) > 0
+            - message: memory and maxMemory must be multiples of 128Mi when maxMemory
+                is set
+              rule: '!has(self.maxMemory) || (quantity(string(self.memory)).isInteger()
+                && quantity(string(self.maxMemory)).isInteger() && quantity(string(self.memory)).asInteger()
+                % 134217728 == 0 && quantity(string(self.maxMemory)).asInteger() %
+                134217728 == 0)'
+            - message: providerID cannot be removed or changed
+              rule: '!has(oldSelf.providerID) || (has(self.providerID) && self.providerID
+                == oldSelf.providerID)'
+            - message: disk size must be positive
+              rule: quantity(string(self.disk.size)).compareTo(quantity('0')) > 0
+          status:
+            properties:
+              addresses:
+                items:
+                  description: NodeAddress contains information for the node's address.
+                  properties:
+                    address:
+                      description: The node address.
+                      type: string
+                    type:
+                      description: Node address type, one of Hostname, ExternalIP
+                        or InternalIP.
+                      type: string
+                  required:
+                  - address
+                  - type
+                  type: object
+                type: array
+              conditions:
+                items:
+                  description: |-
+                    Condition has the legacy CAPI v1beta1 wire shape. It does not introduce a
+                    dependency on a different Kubernetes SDK version into the node repository.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    severity:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              failureMessage:
+                type: string
+              failureReason:
+                type: string
+              nodeRef:
+                description: |-
+                  NodeRef binds the workload Node incarnation before its providerID is set.
+                  A replacement Node needs reconciliation through a new Machine identity.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              observedGeneration:
+                format: int64
+                type: integer
+              ready:
+                type: boolean
+              vmRef:
+                description: ObjectReference contains enough information to let you
+                  inspect or modify the referred object.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - ready
+            type: object
+            x-kubernetes-validations:
+            - message: vmRef cannot be removed or changed
+              rule: '!has(oldSelf.vmRef) || (has(self.vmRef) && self.vmRef == oldSelf.vmRef)'
+            - message: nodeRef cannot be removed or changed
+              rule: '!has(oldSelf.nodeRef) || (has(self.nodeRef) && self.nodeRef ==
+                oldSelf.nodeRef)'
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: the bound VM identity cannot be removed or changed
+          rule: '!has(oldSelf.status) || !has(oldSelf.status.vmRef) || (has(self.status)
+            && has(self.status.vmRef) && self.status.vmRef == oldSelf.status.vmRef)'
+        - message: the bound Node identity cannot be removed or changed
+          rule: '!has(oldSelf.status) || !has(oldSelf.status.nodeRef) || (has(self.status)
+            && has(self.status.nodeRef) && self.status.nodeRef == oldSelf.status.nodeRef)'
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    api-approved.kubernetes.io: unapproved, experimental-only
+    controller-gen.kubebuilder.io/version: v0.22.0
+  labels:
+    cluster.x-k8s.io/v1beta1: v1alpha1
+  name: kuberootmachinetemplates.infrastructure.cluster.x-k8s.io
+spec:
+  group: infrastructure.cluster.x-k8s.io
+  names:
+    kind: KuberootMachineTemplate
+    listKind: KuberootMachineTemplateList
+    plural: kuberootmachinetemplates
+    singular: kuberootmachinetemplate
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              Template names are derived from their contents by the platform chart; an
+              existing MachineSet must keep referencing the exact template it was given.
+            properties:
+              template:
+                properties:
+                  metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  spec:
+                    properties:
+                      cpus:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      disk:
+                        properties:
+                          image:
+                            description: |-
+                              Image written onto the disk when it is created: a URL of a qcow2 or
+                              raw disk image that boots with UEFI.
+                            type: string
+                          size:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            default: 4Gi
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - image
+                        type: object
+                      maxCPUs:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      maxMemory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      memory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      node:
+                        description: Node is an optional placement constraint in the
+                          infrastructure cluster.
+                        type: string
+                      providerID:
+                        description: |-
+                          ProviderID is set by this controller and copied to the CAPI Machine by
+                          the CAPI core controller. It must match the workload Node's providerID.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: providerID is immutable
+                          rule: self == oldSelf
+                      replicas:
+                        default: 3
+                        enum:
+                        - 1
+                        - 3
+                        format: int32
+                        type: integer
+                    required:
+                    - cpus
+                    - disk
+                    - memory
+                    type: object
+                    x-kubernetes-validations:
+                    - message: cpus exceeds maxCPUs
+                      rule: '!has(self.maxCPUs) || self.cpus <= self.maxCPUs'
+                    - message: memory exceeds maxMemory
+                      rule: '!has(self.maxMemory) || quantity(string(self.memory)).compareTo(quantity(string(self.maxMemory)))
+                        <= 0'
+                    - message: memory must be positive
+                      rule: quantity(string(self.memory)).compareTo(quantity('0'))
+                        > 0
+                    - message: memory and maxMemory must be multiples of 128Mi when
+                        maxMemory is set
+                      rule: '!has(self.maxMemory) || (quantity(string(self.memory)).isInteger()
+                        && quantity(string(self.maxMemory)).isInteger() && quantity(string(self.memory)).asInteger()
+                        % 134217728 == 0 && quantity(string(self.maxMemory)).asInteger()
+                        % 134217728 == 0)'
+                    - message: providerID cannot be removed or changed
+                      rule: '!has(oldSelf.providerID) || (has(self.providerID) &&
+                        self.providerID == oldSelf.providerID)'
+                    - message: disk size must be positive
+                      rule: quantity(string(self.disk.size)).compareTo(quantity('0'))
+                        > 0
+                required:
+                - spec
+                type: object
+            required:
+            - template
+            type: object
+            x-kubernetes-validations:
+            - message: machine template spec is immutable; create a new template name
+              rule: self == oldSelf
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: capkuberoot-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-kuberoot
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: capkuberoot-controller-manager
+  namespace: capkuberoot-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: capkuberoot-manager-role
+rules:
+  - apiGroups: [infrastructure.cluster.x-k8s.io]
+    resources: [kuberootclusters, kuberootmachines, kuberootmachinetemplates]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [infrastructure.cluster.x-k8s.io]
+    resources: [kuberootclusters/status, kuberootclusters/finalizers, kuberootmachines/status, kuberootmachines/finalizers]
+    verbs: [get, update, patch]
+  - apiGroups: [cluster.x-k8s.io]
+    resources: [clusters, machines]
+    verbs: [get, list, watch]
+  - apiGroups: [controlplane.cluster.x-k8s.io]
+    resources: [kamajicontrolplanes]
+    verbs: [get, list, watch]
+  - apiGroups: [vm.kuberoot.dev]
+    resources: [virtualmachines]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: capkuberoot-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: capkuberoot-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: capkuberoot-controller-manager
+    namespace: capkuberoot-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: capkuberoot-leader-election-role
+  namespace: capkuberoot-system
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: capkuberoot-leader-election-rolebinding
+  namespace: capkuberoot-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: capkuberoot-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: capkuberoot-controller-manager
+    namespace: capkuberoot-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capkuberoot-controller-manager
+  namespace: capkuberoot-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-kuberoot
+    control-plane: capkuberoot-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: capkuberoot-controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: capkuberoot-controller-manager
+    spec:
+      serviceAccountName: capkuberoot-controller-manager
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          # CAPI Operator replaces this using deployment.containers[].imageUrl.
+          # The packaged image reference stays outside the compressed manifest.
+          image: controller:unconfigured
+          imagePullPolicy: IfNotPresent
+          command: [/manager]
+          args:
+            - --leader-elect=true
+            - --leader-election-namespace=$(POD_NAMESPACE)
+            - --health-address=:8081
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: health
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: capkuberoot-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-kuberoot
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: capkuberoot-controller-manager
+  namespace: capkuberoot-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: capkuberoot-manager-role
+rules:
+  - apiGroups: [infrastructure.cluster.x-k8s.io]
+    resources: [kuberootclusters, kuberootmachines, kuberootmachinetemplates]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [infrastructure.cluster.x-k8s.io]
+    resources: [kuberootclusters/status, kuberootclusters/finalizers, kuberootmachines/status, kuberootmachines/finalizers]
+    verbs: [get, update, patch]
+  - apiGroups: [cluster.x-k8s.io]
+    resources: [clusters, machines]
+    verbs: [get, list, watch]
+  - apiGroups: [controlplane.cluster.x-k8s.io]
+    resources: [kamajicontrolplanes]
+    verbs: [get, list, watch]
+  - apiGroups: [vm.kuberoot.dev]
+    resources: [virtualmachines]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: capkuberoot-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: capkuberoot-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: capkuberoot-controller-manager
+    namespace: capkuberoot-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: capkuberoot-leader-election-role
+  namespace: capkuberoot-system
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: capkuberoot-leader-election-rolebinding
+  namespace: capkuberoot-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: capkuberoot-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: capkuberoot-controller-manager
+    namespace: capkuberoot-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capkuberoot-controller-manager
+  namespace: capkuberoot-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-kuberoot
+    control-plane: capkuberoot-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: capkuberoot-controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: capkuberoot-controller-manager
+    spec:
+      serviceAccountName: capkuberoot-controller-manager
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          # CAPI Operator replaces this using deployment.containers[].imageUrl.
+          # The packaged image reference stays outside the compressed manifest.
+          image: controller:unconfigured
+          imagePullPolicy: IfNotPresent
+          command: [/manager]
+          args:
+            - --leader-elect=true
+            - --leader-election-namespace=$(POD_NAMESPACE)
+            - --health-address=:8081
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: health
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

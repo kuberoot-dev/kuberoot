@@ -1,0 +1,31 @@
+# Kuberoot infrastructure provider
+
+This provider implements the Cluster API `v1beta1` infrastructure contract used by CAPI core v1.10.1. Its namespaced resources are `KuberootCluster`, `KuberootMachine` and `KuberootMachineTemplate` in `infrastructure.cluster.x-k8s.io/v1alpha1`. It creates native `vm.kuberoot.dev/v1alpha2` VirtualMachines in the infrastructure Machine's namespace, using the same name. The namespaced VM API and its controller must already be installed; existing cluster-scoped VM objects need the supported API migration before this provider can manage new Machines.
+
+`KuberootCluster.spec.externalManagedControlPlane` is true. Kamaji manages the control plane while this provider reconciles the infrastructure object. Do not add `cluster.x-k8s.io/managed-by: kamaji`: CAPI must set its Cluster owner reference so the infrastructure controller can verify ownership. Machine templates are immutable; name them using a hash of their contents and let CAPI roll out a new template when the specification changes.
+
+## Machine lifecycle
+
+The referenced CAPI bootstrap Secret supplies `data.value`. The controller copies it into `data.userData` of an immutable, same-namespace Secret owned by the KuberootMachine, then creates its VM. It never adopts a foreign VM or replaces bootstrap credentials after VM creation. VM and bootstrap finalizers preserve the evidence needed to recover from a controller restart between resource creation and status persistence. Deleting a KuberootMachine waits for native VM/backend cleanup before deleting its bootstrap Secret and completing the infrastructure deletion.
+
+New CAPI VMs explicitly select `spec.seedMode: NoCloudNet`. Talos v1.13.6 requires the `ds=nocloud-net` HTTP selector and a network-config document before it applies NoCloud hostname metadata. Deploy a native VM API/controller that supports this opt-in mode before installing the provider. Ordinary VMs with an unset mode keep their previous serial and seed behavior. The provider refuses to change an existing CAPI VM from the legacy seed mode, because changing its launch configuration would restart it.
+
+`spec.disk.image` must be an HTTP(S) URL for an uncompressed raw or qcow2 disk image that boots through UEFI. The native image writer does not decompress factory `.raw.xz` artifacts; unpack and host the raw image first. For the Talos integration, use a NoCloud image of the correct CPU architecture without the QEMU guest-agent extension: Cloud Hypervisor does not provide its required agent port. The VM's `status.imageWritten` means that its disk has become owned persistent state: the initial image is never written again. Changing the image URL on an existing Machine is therefore rejected; create a new template and Machine instead. `spec.replicas` defaults to three and requires three eligible storage hosts; one replica is supported for a deliberately single-host development fixture.
+
+CPU and memory sizes are explicit. Optional `maxCPUs` and `maxMemory` reserve the hot-add ceiling; memory sizes with a ceiling must be positive multiples of 128Mi. The native VM controller remains responsible for admission, placement, capacity reservation and the architecture-specific hotplug capability. An infrastructure Machine reporting a running VM does not claim that its guest has joined the workload cluster.
+
+## Workload Node identity
+
+The infrastructure Machine's `spec.providerID` is `kuberoot://<machine-name>`; CAPI core copies it to the owning Machine. Native NoCloud metadata currently supplies the VM hostname but not its provider ID. The provider bridges that gap through the standard `<Cluster>-kubeconfig` Secret: it verifies its Cluster or KamajiControlPlane ownership, requires embedded TLS credentials, and locates the workload Node by exact VM name and internal IP. It records the Node UID before modifying providerID and refuses to bind a replacement Node under that identity. It does not remove cloud-provider taints; the Kuberoot Talos configuration must not enable an unrelated external cloud controller.
+
+`status.ready` and the `Ready` condition describe VM infrastructure readiness. `NodeProviderIDReady` separately describes the verified workload Node binding. The workload kubeconfig is neither logged nor executed; file references, exec plugins, auth-provider plugins, insecure TLS and proxy configuration are rejected.
+
+## Build and packaging
+
+Run `hack/build-capi-components.sh` on the build host to regenerate the API code and CRDs and assemble `config/capi/infrastructure-components.yaml`. `config/capi/metadata.yaml` declares the `v1beta1` contract. Build the container with `docker buildx build -f config/capi/Dockerfile` using the Kuberoot repository as its build context. The manager is a static binary in a non-root scratch image; it is not a host-distribution service.
+
+The companion Cozyroot package is `packages/system/capi-providers-infraprovider-kuberoot`. Its `make components` uses this checkout as `KUBEROOT_SOURCE` and compresses the generated manifests with `gzip -9 -n`. Its `make source` exports the minimal provider source tree, license and per-file provenance through `hack/export-capi-source.py`. Ordinary package CI builds that vendored, checksummed snapshot without requiring a sibling checkout or fetching a moving branch. `make image` stamps the resulting image digest into its `.tag` file. Refresh the source archive and components together after a provider change. The initial development tag is an unpublished placeholder until this build has produced an image; it is not evidence that a public release exists.
+
+CAPI Operator selects the package ConfigMap by the distinct `infraprovider-provider: kuberoot` label and replaces the manager image through `spec.deployment.containers[].imageUrl`. Compressed components intentionally contain `controller:unconfigured`, so image promotion and mirroring only need the visible `.tag` reference. Applying the raw components directly requires replacing that placeholder with the built, pinned image first.
+
+Leader election is enabled by default. The Deployment passes its namespace to `--leader-election-namespace`, uses Lease `cluster-api-provider-kuberoot`, and exposes `/healthz` and `/readyz` on port 8081. External kubeconfig use requires an explicit `--context`; production normally uses the Deployment's service account.
