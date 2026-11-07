@@ -71,9 +71,9 @@ Every resource reports in its status whether the node runs it and, if not, why; 
 `hypervisor` runs virtual machines on KVM with cloud-hypervisor: no libvirt, and no pods. A machine is a resource of the cluster:
 
 ```yaml
-apiVersion: vm.kuberoot.dev/v1alpha1
+apiVersion: vm.kuberoot.dev/v1alpha2
 kind: VirtualMachine
-metadata: {name: web}
+metadata: {name: web, namespace: default}
 spec:
   cpus: 2
   memory: 2Gi
@@ -81,11 +81,17 @@ spec:
   disk: {size: 20Gi, image: "https://example.org/images/debian-13-uefi.qcow2"}
 ```
 
+VM names are local to their namespace. The controller records a separate immutable backend identity in status, and `userDataSecret` refers only to a Secret in that VM namespace. Existing cluster-scoped installations require the explicit [VM API migration](docs/vm-api.md); changing the CRD scope in place is not supported.
+
 `kuberoot-vmctl`, on the control plane, places the machine's disk on as many nodes as it has replicas and the machine on one of them. The disk is a DRBD volume: every write reaches the other nodes before it is done, and a node cut off from the majority stops writing. When the machine's node has been down for half a minute, the machine starts on another node holding its disk, with the same disk and address; the node that comes back catches up and drops its copy of the machine. Machines share one network across the nodes (a bridge on each, joined by VXLAN), with a gateway on the control plane for DHCP and the way out.
 
 A running machine moves to another node alive when its `spec.node` changes to another of its replica nodes: the disk is writable on both for the moment of the move, the machine's memory is copied over while it runs, and it goes on there with the same disk and address, without a reboot. A move that does not finish in ten minutes, or loses a node on the way, is called off and the machine stays where it was; `status.failedMigration` names the node until `spec.node` changes again.
 
 Each node serves its part through the node API: `volumes` (the disks on it, with their DRBD role and state), `machines` (the machines it runs) and `machines/console` (a machine's serial console). The kubelet stays for what the cluster knows of its nodes, their registration and heartbeat; no pods run.
+
+## The cloud distribution
+
+The [`cloud` distribution](docs/cloud.md), under development, combines edge's pods and packages with the native VM runtime. Its profile keeps a separate VM memory pool outside kubelet allocatable memory and selects one VM controller as leader across control planes. Physical Raspberry Pi KVM validation and the combined distribution's runtime acceptance remain outstanding.
 
 ## The ai distribution
 
