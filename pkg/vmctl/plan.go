@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha2"
 )
 
 // FailoverAfter is how long a node is down before its machines start on
@@ -45,7 +45,7 @@ func PlanFor(vm v1.VirtualMachine, nodes []Node, used map[int32]bool, load map[s
 	st := vm.Status
 	p := Plan{ReplicaNodes: st.ReplicaNodes, Node: st.Node, Minor: st.Minor, Port: st.Port, MAC: st.MAC}
 	if p.MAC == "" {
-		p.MAC = MAC(vm.Name)
+		p.MAC = MAC(backend(&vm))
 	}
 	if p.Minor == 0 {
 		for m := int32(100); ; m++ {
