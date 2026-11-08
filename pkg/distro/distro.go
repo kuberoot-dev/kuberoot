@@ -5,7 +5,9 @@ package distro
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 )
 
@@ -70,6 +72,78 @@ type Service struct {
 	Env  []string `json:"env,omitempty"`
 	// Args are templates over the role's facts; arguments that render empty are dropped.
 	Args []string `json:"args"`
+	// Alternatives, when set, are interchangeable builds of the service's
+	// program, of which a node runs one.
+	Alternatives *Alternatives `json:"alternatives,omitempty"`
+}
+
+// Alternatives are builds of one service the node chooses between. On its
+// first boot a node picks one at random and keeps it: every later boot runs
+// the same one, so the nodes of a cluster end up running a mix of them.
+type Alternatives struct {
+	// Choices: each replaces the service's program, its first argument, and
+	// adds arguments of its own after the service's.
+	Choices []Alternative `json:"choices"`
+	// Switch, when set, moves a node whose choice keeps crashing to the next
+	// one; without it a node never changes its choice.
+	Switch *AlternativeSwitch `json:"switch,omitempty"`
+}
+
+type Alternative struct {
+	// Name identifies the choice on the node and in its labels: a label value.
+	Name    string   `json:"name"`
+	Program string   `json:"program"`
+	Args    []string `json:"args,omitempty"`
+}
+
+// AlternativeSwitch: after Crashes crashes within Within, the node switches
+// the service to its next choice, at most once per boot and once per
+// Cooldown, and never while the slot it booted is on probation, where a
+// failing release is the upgrade's to roll back. A crash is an exit kinit did
+// not ask for, with an error or a signal, within a minute of starting.
+type AlternativeSwitch struct {
+	Crashes  int    `json:"crashes"`
+	Within   string `json:"within"`
+	Cooldown string `json:"cooldown"`
+}
+
+// Durations returns Within and Cooldown.
+func (s *AlternativeSwitch) Durations() (within, cooldown time.Duration, err error) {
+	if within, err = time.ParseDuration(s.Within); err != nil || within <= 0 {
+		return 0, 0, fmt.Errorf("within %q: want a positive duration", s.Within)
+	}
+	if cooldown, err = time.ParseDuration(s.Cooldown); err != nil || cooldown < 0 {
+		return 0, 0, fmt.Errorf("cooldown %q: want a duration", s.Cooldown)
+	}
+	return within, cooldown, nil
+}
+
+func (a *Alternatives) validate() error {
+	if len(a.Choices) < 2 {
+		return fmt.Errorf("alternatives need at least two choices")
+	}
+	seen := map[string]bool{}
+	for _, c := range a.Choices {
+		if errs := validation.IsValidLabelValue(c.Name); c.Name == "" || len(errs) > 0 {
+			return fmt.Errorf("alternative %q: not a label value", c.Name)
+		}
+		if seen[c.Name] {
+			return fmt.Errorf("alternative %q appears twice", c.Name)
+		}
+		seen[c.Name] = true
+		if c.Program == "" {
+			return fmt.Errorf("alternative %s has no program", c.Name)
+		}
+	}
+	if a.Switch != nil {
+		if a.Switch.Crashes < 1 {
+			return fmt.Errorf("switch: crashes must be at least 1")
+		}
+		if _, _, err := a.Switch.Durations(); err != nil {
+			return fmt.Errorf("switch: %w", err)
+		}
+	}
+	return nil
 }
 
 // NodeAPI picks the resources the node API serves; empty serves them all.
@@ -93,6 +167,16 @@ func Parse(raw []byte, source string) (*Profile, error) {
 	}
 	if p.Kind != "Distribution" {
 		return nil, fmt.Errorf("%s: kind %q, want Distribution", source, p.Kind)
+	}
+	for role, r := range p.Spec.Roles {
+		for _, s := range r.Services {
+			if s.Alternatives == nil {
+				continue
+			}
+			if err := s.Alternatives.validate(); err != nil {
+				return nil, fmt.Errorf("%s: %s/%s: %w", source, role, s.Name, err)
+			}
+		}
 	}
 	return p, nil
 }
