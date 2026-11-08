@@ -83,6 +83,9 @@ type NodeServiceStatus struct {
 	// MemoryBytes and CPUUsageSeconds come from the service cgroup.
 	MemoryBytes     int64 `json:"memoryBytes,omitempty"`
 	CPUUsageSeconds int64 `json:"cpuUsageSeconds,omitempty"`
+	// Alternative is the build of the service this node runs, for a service
+	// the distribution offers in alternative builds.
+	Alternative string `json:"alternative,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

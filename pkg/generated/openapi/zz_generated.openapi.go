@@ -2930,6 +2930,13 @@ func schema_pkg_apis_node_v1alpha1_NodeServiceStatus(ref common.ReferenceCallbac
 							Format: "int64",
 						},
 					},
+					"alternative": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Alternative is the build of the service this node runs, for a service the distribution offers in alternative builds.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"restarts"},
 			},
