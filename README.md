@@ -6,7 +6,7 @@ kuberoot builds Kubernetes distributions that boot straight on hardware. Each on
 
 The repository builds eight distributions: `edge`, a general-purpose cluster for one to a few nodes; `router`, Kubernetes without containers that runs a network router; `hypervisor`, virtual machines on KVM with their disks replicated between nodes, moved off a node that fails; `ai`, language models served as processes of the nodes behind one OpenAI-compatible endpoint, with new versions rolled out and back by the cluster; `rt`, a real-time controller whose pods get whole CPUs with no timer tick on a fully preemptible kernel; `iot`, a gateway with no containers that reads devices over Modbus and sends on what they say, its changes undone by themselves when they cut a device off; `observability`, a monitoring cluster outside what it watches, which reads servers' BMCs, switches, PDUs and probes of services natively and tells the outside world, by its heartbeats, that it still works; and `workstation`, people's desktops as virtual machines of the cluster, opened from a browser or an RDP client.
 
-> Status: experimental. The `edge` distribution passes the Kubernetes conformance suite (462 of 462 on a three-node cluster, Kubernetes 1.37.1), but the API of the node and the layout of the state may still change.
+> Status: experimental. The `edge` distribution passes the Kubernetes conformance suite (462 of 462 on a three-node cluster, Kubernetes 1.37.2), but the API of the node and the layout of the state may still change.
 
 ## Background
 
