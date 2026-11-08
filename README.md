@@ -471,7 +471,7 @@ An `Upgrade` downloads a signed release bundle, writes it to the inactive slot a
 
 ## Backups of the control plane
 
-A control plane keeps its state in one place: the cluster store, its certificate authorities and its identity. The node API archives it every hour, and on request with `kubectl create statebackup`, keeps the latest twelve locally and, when the Secret `kube-system/kuberoot-state-backup` says so, uploads them to S3-compatible storage:
+A control plane keeps its state in one place: the cluster store, its certificate authorities and its identity. The node API archives it every hour, and on request with `kubectl create statebackup`, keeps the latest twelve locally -- within a tenth of the filesystem, whichever bound is reached first -- and, when the Secret `kube-system/kuberoot-state-backup` says so, uploads them to S3-compatible storage:
 
 ```yaml
 apiVersion: v1
@@ -482,6 +482,7 @@ metadata:
 stringData:
   interval: 1h
   keep: "12"
+  maxBytes: "2147483648"    # room the archives may take, a tenth of the filesystem by default
   encryptionRecipient: age1...        # archives are encrypted to this age key
   s3Endpoint: https://s3.example.org
   s3Bucket: backups
