@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func backend(name string) *httptest.Server {
@@ -80,7 +81,16 @@ func TestGatewaySkipsUnreachableReplica(t *testing.T) {
 			t.Fatalf("request %d: %d %q", i, resp.StatusCode, out)
 		}
 	}
-	if n := g.InFlight(deadAddr) + g.InFlight(strings.TrimPrefix(a.URL, "http://")); n != 0 {
+	// The gateway stops counting a request after the proxy has written the
+	// answer, so the client holds a complete response while the handler is
+	// still on its way to done(). Give that moment room rather than read
+	// the counters the instant the body closes.
+	live := func() int { return g.InFlight(deadAddr) + g.InFlight(strings.TrimPrefix(a.URL, "http://")) }
+	deadline := time.Now().Add(2 * time.Second)
+	for live() != 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if n := live(); n != 0 {
 		t.Fatalf("%d requests still counted in flight", n)
 	}
 }
