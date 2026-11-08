@@ -293,3 +293,56 @@ func TestRolloutPicksEnrolledNodes(t *testing.T) {
 		t.Errorf("after enrolling: %v, %+v", got, r.Status.Nodes)
 	}
 }
+
+// With maintenance windows, a wave starts only inside one, and nodes already
+// given the release go on when the window closes.
+func TestRolloutMaintenanceWindows(t *testing.T) {
+	nodes := fleetOf("f1", "f2", "f3")
+	t0 := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
+	win := func(at time.Time, d time.Duration) v1.MaintenanceWindow {
+		return v1.MaintenanceWindow{Start: metav1.NewTime(at), Duration: metav1.Duration{Duration: d}}
+	}
+	r := rollout(v1.FleetRolloutSpec{Release: v2,
+		Waves: []intstr.IntOrString{intstr.FromInt32(1), intstr.FromString("100%")},
+		MaintenanceWindows: []v1.MaintenanceWindow{
+			win(t0.Add(-24*time.Hour), 7*time.Minute), // over long ago
+			win(t0.Add(3*time.Hour), 7*time.Minute),
+			win(t0.Add(time.Hour), 7*time.Minute),
+		}})
+	if got := advance(t, r, nodes, t0); got != nil || r.Status.Phase != v1.RolloutProgressing {
+		t.Fatalf("outside every window: %v, %+v", got, r.Status)
+	}
+	if want := "wave 1 of 2, waits for the maintenance window at 2026-11-08T11:00:00Z"; r.Status.Message != want {
+		t.Errorf("message %q, want %q", r.Status.Message, want)
+	}
+	if got := advance(t, r, nodes, t0.Add(time.Hour+time.Minute)); !reflect.DeepEqual(got, []string{"f1"}) {
+		t.Fatalf("in the window: %v", got)
+	}
+	// The window closes while f1 updates: f1 goes on, wave 2 waits.
+	setPhase(nodes, "f1", v1.UpdateUpdated)
+	if got := advance(t, r, nodes, t0.Add(2*time.Hour)); got != nil || r.Status.Wave != "1/2" {
+		t.Fatalf("wave 2 started outside a window: %v, %+v", got, r.Status)
+	}
+	// The window's end is not in it.
+	if got := advance(t, r, nodes, t0.Add(3*time.Hour+7*time.Minute)); got != nil {
+		t.Fatalf("at the window's end: %v", got)
+	}
+	if want := "wave 2 of 2, waits for a maintenance window: none ahead"; r.Status.Message != want {
+		t.Errorf("message %q, want %q", r.Status.Message, want)
+	}
+	r.Spec.MaintenanceWindows = append(r.Spec.MaintenanceWindows, win(t0.Add(5*time.Hour), time.Hour))
+	if got := advance(t, r, nodes, t0.Add(5*time.Hour)); !reflect.DeepEqual(got, []string{"f2", "f3"}) {
+		t.Fatalf("at the new window's start: %v", got)
+	}
+}
+
+func TestInWindow(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	if open, next := inWindow(nil, now); !open || !next.IsZero() {
+		t.Errorf("no windows: %v, %v", open, next)
+	}
+	ws := []v1.MaintenanceWindow{{Start: metav1.NewTime(now.Add(-time.Minute)), Duration: metav1.Duration{Duration: time.Minute}}}
+	if open, _ := inWindow(ws, now); open {
+		t.Error("a window that just ended is open")
+	}
+}

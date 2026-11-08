@@ -75,6 +75,30 @@ spec:
                 - Join
                 - Ignore
                 type: string
+              maintenanceWindows:
+                description: |-
+                  MaintenanceWindows, when there are any, are the only times the rollout
+                  gives nodes the release: outside them a wave does not start and no
+                  node is given the release, while nodes that already have it go on.
+                  Windows that have ended are ignored, so a list kept filled ahead of
+                  time is enough. None: any time.
+                items:
+                  description: MaintenanceWindow is a time in which a rollout may
+                    give nodes the release.
+                  properties:
+                    duration:
+                      description: Duration is how long it stays open.
+                      type: string
+                    start:
+                      description: Start is when the window opens.
+                      format: date-time
+                      type: string
+                  required:
+                  - duration
+                  - start
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               maxFailures:
                 description: MaxFailures the rollout carries on through; one more
                   stops it.

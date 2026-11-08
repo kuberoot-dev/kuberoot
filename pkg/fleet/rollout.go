@@ -229,6 +229,12 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 	if !allDone || len(assign) > 0 {
 		st.Phase, st.WaveDone = v1.RolloutProgressing, nil
 		st.Message = fmt.Sprintf("wave %d of %d", current, waves)
+		if len(assign) > 0 {
+			if open, next := inWindow(r.Spec.MaintenanceWindows, now); !open {
+				st.Message += ", " + waitingFor(next)
+				return st, nil, nil
+			}
+		}
 		return st, assign, nil
 	}
 	// The next wave with nodes to give the release to.
@@ -257,6 +263,11 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 		st.Message = fmt.Sprintf("wave %d soaks until %s", current, st.WaveDone.Add(r.Spec.Soak.Duration).UTC().Format(time.RFC3339))
 		return st, nil, nil
 	}
+	if open, at := inWindow(r.Spec.MaintenanceWindows, now); !open {
+		st.Phase = v1.RolloutProgressing
+		st.Message = fmt.Sprintf("wave %d of %d, %s", next, waves, waitingFor(at))
+		return st, nil, nil
+	}
 	for _, rn := range st.Nodes {
 		if int(rn.Wave) == next && rn.State == statePending {
 			assign = append(assign, rn.Name)
@@ -266,4 +277,30 @@ func plan(r *v1.FleetRollout, nodes map[string]nodeView, now time.Time) (v1.Flee
 	st.Wave = fmt.Sprintf("%d/%d", next, waves)
 	st.Message = fmt.Sprintf("wave %d of %d", next, waves)
 	return st, assign, nil
+}
+
+// inWindow says whether now is in one of the maintenance windows, which
+// none means it always is; when it is not, next is when the next window
+// opens, zero if none is ahead.
+func inWindow(windows []v1.MaintenanceWindow, now time.Time) (open bool, next time.Time) {
+	if len(windows) == 0 {
+		return true, time.Time{}
+	}
+	for _, w := range windows {
+		start := w.Start.Time
+		if !now.Before(start) && now.Before(start.Add(w.Duration.Duration)) {
+			return true, time.Time{}
+		}
+		if start.After(now) && (next.IsZero() || start.Before(next)) {
+			next = start
+		}
+	}
+	return false, next
+}
+
+func waitingFor(next time.Time) string {
+	if next.IsZero() {
+		return "waits for a maintenance window: none ahead"
+	}
+	return "waits for the maintenance window at " + next.UTC().Format(time.RFC3339)
 }
