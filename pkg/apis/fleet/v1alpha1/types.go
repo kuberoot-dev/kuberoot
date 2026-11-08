@@ -212,6 +212,21 @@ type FleetRolloutSpec struct {
 	// +kubebuilder:validation:Enum=Join;Ignore
 	// +kubebuilder:default=Join
 	LateNodes string `json:"lateNodes,omitempty"`
+	// MaintenanceWindows, when there are any, are the only times the rollout
+	// gives nodes the release: outside them a wave does not start and no
+	// node is given the release, while nodes that already have it go on.
+	// Windows that have ended are ignored, so a list kept filled ahead of
+	// time is enough. None: any time.
+	// +listType=atomic
+	MaintenanceWindows []MaintenanceWindow `json:"maintenanceWindows,omitempty"`
+}
+
+// MaintenanceWindow is a time in which a rollout may give nodes the release.
+type MaintenanceWindow struct {
+	// Start is when the window opens.
+	Start metav1.Time `json:"start"`
+	// Duration is how long it stays open.
+	Duration metav1.Duration `json:"duration"`
 }
 
 // Rollout phases.
