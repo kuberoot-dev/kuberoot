@@ -17,12 +17,14 @@ import (
 
 func TestBackupConfigDefaultsAndChecks(t *testing.T) {
 	c, err := parseBackupConfig(nil, "kr-1")
-	if err != nil || c.interval != time.Hour || c.keep != 12 || c.s3 != nil {
+	if err != nil || c.interval != time.Hour || c.keep != 12 || c.maxBytes != 0 || c.s3 != nil {
 		t.Errorf("defaults = %+v, %v", c, err)
 	}
 	for _, bad := range []map[string][]byte{
 		{"interval": []byte("1m")},
 		{"keep": []byte("0")},
+		{"maxBytes": []byte("0")},
+		{"maxBytes": []byte("1Gi")},
 		{"s3Endpoint": []byte("s3.example.com")},
 		{"s3Endpoint": []byte("https://s3.example.com"), "s3Bucket": []byte("b")},
 	} {
@@ -77,7 +79,7 @@ func TestBackupsAreTakenUploadedAndPruned(t *testing.T) {
 		t.Error("a backup is due right after one was taken")
 	}
 	s.upload(context.Background(), cfg)
-	s.prune(cfg.keep)
+	s.prune(cfg.keep, 0)
 	if got := strings.Join(s.names(), ","); got != "state-2,state-3" {
 		t.Errorf("kept %s, want the newest two", got)
 	}
@@ -126,7 +128,7 @@ func TestBackupsAreOrderedByWhenTheyWereTaken(t *testing.T) {
 		}
 		time.Sleep(1100 * time.Millisecond) // archives are stamped to the second
 	}
-	s.prune(1)
+	s.prune(1, 0)
 	if got := strings.Join(s.names(), ","); got != "aa-second" {
 		t.Errorf("kept %s, want the newest", got)
 	}
@@ -211,5 +213,57 @@ func TestEncryptedBackupRoundTrip(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(dst); string(got) != "plain" {
 		t.Errorf("plain archive became %q", got)
+	}
+}
+
+func TestOldBackupsGoWhenTheyOutgrowTheirBudget(t *testing.T) {
+	s := fakeBackups(t)
+	for _, name := range []string{"state-1", "state-2", "state-3"} {
+		if _, err := s.take(name, nil); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(1100 * time.Millisecond) // archives are stamped to the second
+	}
+	// Room for one archive and its status: the two older ones have to go
+	// although the count allows all three.
+	s.prune(12, s.size("state-3"))
+	if got := strings.Join(s.names(), ","); got != "state-3" {
+		t.Errorf("kept %s, want the newest alone", got)
+	}
+}
+
+func TestTheNewestBackupSurvivesAnImpossibleBudget(t *testing.T) {
+	s := fakeBackups(t)
+	if _, err := s.take("state-1", nil); err != nil {
+		t.Fatal(err)
+	}
+	s.prune(12, 1)
+	if got := strings.Join(s.names(), ","); got != "state-1" {
+		t.Errorf("kept %q, want the newest kept even over budget", got)
+	}
+}
+
+func TestTheBudgetDefaultsToAShareOfTheFilesystem(t *testing.T) {
+	s := fakeBackups(t)
+	got := s.budget(0)
+	if got <= 0 {
+		t.Fatalf("budget = %d, want a share of the filesystem", got)
+	}
+	if asked := s.budget(4096); asked != 4096 {
+		t.Errorf("budget(4096) = %d, want what the Secret asked for", asked)
+	}
+}
+
+func TestABudgetedPruneIsStillBoundedByTheCount(t *testing.T) {
+	s := fakeBackups(t)
+	for _, name := range []string{"state-1", "state-2"} {
+		if _, err := s.take(name, nil); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(1100 * time.Millisecond)
+	}
+	s.prune(1, 1<<40)
+	if got := strings.Join(s.names(), ","); got != "state-2" {
+		t.Errorf("kept %s, want the count honoured under a large budget", got)
 	}
 }

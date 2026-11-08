@@ -18,6 +18,7 @@ import (
 	"time"
 
 	agecrypt "filippo.io/age"
+	"golang.org/x/sys/unix"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +41,9 @@ const stateBackupConfig = "kuberoot-state-backup"
 type backupConfig struct {
 	interval time.Duration
 	keep     int
+	// maxBytes the archives may take on the node, zero for the default
+	// share of the filesystem.
+	maxBytes int64
 	s3       *s3Target
 	// recipients the archives are encrypted to; none: archives in the clear.
 	recipients []agecrypt.Recipient
@@ -54,7 +58,8 @@ func (t *s3Target) location(key string) string { return "s3://" + t.Bucket + "/"
 
 // parseBackupConfig reads the Secret's keys: interval (a duration, at least
 // five minutes; one hour by default), keep (local archives, 12 by default),
-// encryptionRecipient (age public keys, one per line, that archives are
+// maxBytes (the room the archives may take, a tenth of the filesystem by
+// default), encryptionRecipient (age public keys, one per line, that archives are
 // encrypted to) and, to upload, s3Endpoint, s3Bucket, s3AccessKey and
 // s3SecretKey, with optional s3Region and s3Prefix. Archives hold the
 // cluster's certificate authorities and every Secret, so they leave the
@@ -75,6 +80,13 @@ func parseBackupConfig(data map[string][]byte, nodeName string) (backupConfig, e
 			return c, fmt.Errorf("keep %q: a number of archives, at least 1", v)
 		}
 		c.keep = n
+	}
+	if v := get("maxBytes"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 1 {
+			return c, fmt.Errorf("maxBytes %q: a number of bytes, at least 1", v)
+		}
+		c.maxBytes = n
 	}
 	if v := get("encryptionRecipient"); v != "" {
 		r, err := agecrypt.ParseRecipients(strings.NewReader(v))
@@ -353,12 +365,59 @@ func (s *stateBackupStorage) upload(ctx context.Context, cfg backupConfig) {
 // backups back forever.
 var uploadClient = &http.Client{Timeout: 30 * time.Minute, Transport: &http.Transport{ResponseHeaderTimeout: 2 * time.Minute}}
 
-// prune keeps the newest keep archives.
-func (s *stateBackupStorage) prune(keep int) {
+// defaultBudgetShare of the filesystem the archives may take when the Secret
+// names no maxBytes. A node's state grows with the cluster, so a count alone
+// is not a bound: twelve archives of a large state fill a small system disk,
+// the kubelet turns on DiskPressure and starts evicting the platform's own
+// pods, which is the one thing a backup must not cause.
+const defaultBudgetShare = 10
+
+// budget is the room the archives may take: what the Secret asks for, or a
+// share of the filesystem they are on. Zero means no budget, which is what a
+// filesystem that cannot be measured gets: the count still bounds it.
+func (s *stateBackupStorage) budget(maxBytes int64) int64 {
+	if maxBytes > 0 {
+		return maxBytes
+	}
+	var st unix.Statfs_t
+	if err := unix.Statfs(s.dir, &st); err != nil {
+		return 0
+	}
+	return int64(st.Blocks) * int64(st.Bsize) / defaultBudgetShare
+}
+
+// size is the room one backup takes, archive and status together.
+func (s *stateBackupStorage) size(name string) int64 {
+	var total int64
+	for _, f := range []string{s.archive(name, false), s.archive(name, true), s.meta(name)} {
+		if fi, err := os.Stat(f); err == nil {
+			total += fi.Size()
+		}
+	}
+	return total
+}
+
+// prune keeps the newest keep archives, and drops more of them, oldest first,
+// while they take more than the budget. The newest always stays: a node with
+// one unusably large archive is still better off than a node with none.
+func (s *stateBackupStorage) prune(keep int, maxBytes int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	names := s.names()
 	for len(names) > keep {
+		s.remove(names[0])
+		names = names[1:]
+	}
+	budget := s.budget(maxBytes)
+	if budget <= 0 {
+		return
+	}
+	var used int64
+	for _, name := range names {
+		used += s.size(name)
+	}
+	for len(names) > 1 && used > budget {
+		used -= s.size(names[0])
 		s.remove(names[0])
 		names = names[1:]
 	}
@@ -401,7 +460,7 @@ func (s *stateBackupStorage) run(ctx context.Context) {
 			}
 		}
 		s.upload(ctx, cfg)
-		s.prune(cfg.keep)
+		s.prune(cfg.keep, cfg.maxBytes)
 	}
 }
 
