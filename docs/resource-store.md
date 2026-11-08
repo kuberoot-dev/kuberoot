@@ -278,6 +278,7 @@ archive and the live versions together:
 | `GET /tape/v1/range?key=K&end=E&rev=R` (or `&at=RFC3339`) | the keys of `[K, E)` as they were at a revision or a moment |
 | `GET /tape/v1/history?key=K` | every version of a key, deletions included |
 | `GET /tape/v1/graveyard?key=K&end=E` | the keys deleted and not written since, with what they last held |
+| `GET /tape/v1/journal?after=R&limit=N` | every version written after revision R, in revision order, with its time and lease; a page ends with a whole revision |
 
 The tape is replicated state like the rest: compactions reach every member
 through the log with the archiving flag of the member that proposed them,
@@ -296,7 +297,26 @@ for the control plane's own node.
 `--history-retention` (720h, say) bounds the tape: each compaction cuts the
 archive at the revision written that long ago, keeping every key as it was at
 the cut, and deletions before it leave the graveyard. Unset, the tape keeps
-everything. Old segments are not moved to object storage yet.
+everything.
+
+The journal is how the tape leaves the store: a base (the keys at a
+revision the tape holds, from `range`) and every version after it (from
+`journal`) are the whole tape from that revision on. A copy kept elsewhere,
+object storage for one, comes back as a tape file: a header line
+`{"format":"kuberoot-tape/v1","base":R,"time":T}`, the base's keys, then the
+journal, one version a line as the tape API returns them.
+
+```
+kuberoot-store tape restore tape.jsonl --data-dir /var/lib/kuberoot-store [--revision R | --at RFC3339]
+```
+
+makes a member of a new store from it, up to a revision or a moment: the
+keys keep their revisions, the tape reads, history and graveyard answer as
+they did from the base on, and the times of revisions come along. The
+leases restored keys were attached to come back with `--lease-ttl` (an
+hour), since the journal holds their IDs, not their TTLs. A journal with a
+revision missing is refused. Shipping the journal is left to its reader
+(Gachinetes ships it to S3).
 
 A snapshot ends with the SHA-256 of the state, as etcd's does, so
 `etcdctl snapshot save` takes it; the restore checks the sum and refuses a
