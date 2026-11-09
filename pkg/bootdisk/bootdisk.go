@@ -46,6 +46,26 @@ type Artifacts struct {
 
 func (a Artifacts) file(name string) string { return path.Join(a.Dir, name) }
 
+// InitrdPath is where the initramfs actually is, which is not always beside
+// the other artifacts.
+//
+// On boot media it sits at the root of the partition instead. That is the one
+// place both loaders can read it -- systemd-boot takes any path, while a
+// Raspberry Pi's firmware reads initramfs paths from the root -- and the
+// alternative is the same 22 MB written to every medium twice. Everywhere
+// else, including an installed system, it is beside the rest.
+//
+// Checked rather than assumed, because getting it wrong is not a missing file
+// at build time: it is an install that runs for a minute and then stops with
+// a path nobody recognises.
+func (a Artifacts) InitrdPath() string {
+	beside := path.Join(a.Dir, "initrd.cpio")
+	if _, err := os.Stat(beside); err == nil {
+		return beside
+	}
+	return path.Join(path.Dir(a.Dir), "initrd.cpio")
+}
+
 // KernelArgsFile holds the kernel's own boot arguments where the kernel
 // cannot add them to the boot loader's itself, as on arm64: they go into
 // every boot entry of that kernel.

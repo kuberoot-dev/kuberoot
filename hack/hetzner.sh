@@ -71,6 +71,12 @@ case "${1:-}" in
   media)
     arch=${2:?arch required}; shift 2
     sync
+    # arm64 media carry the Pi 4 firmware, which is fetched rather than built.
+    # Idempotent: it keeps what it already has, so this costs nothing on a
+    # builder that has run before.
+    if [ "$arch" = arm64 ]; then
+      tools sh -c "cd $SRC && KUBEROOT_OUT=/work/out scripts/fetch-rpi-firmware.sh arm64"
+    fi
     tools sh -c "cd $SRC && go run ./cmd/mkimage -arch $arch -artifacts /work/out/$arch -trust /work/trust -out /work/out/$arch/media.img.new -args '$*' && mv /work/out/$arch/media.img.new /work/out/$arch/media.img && ls -lh /work/out/$arch/media.img" ;;
   repo)
     shift
