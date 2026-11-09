@@ -16,6 +16,7 @@ type TapeKV struct {
 	CreateRevision int64  `json:"createRevision,omitempty"`
 	ModRevision    int64  `json:"modRevision"`
 	Version        int64  `json:"version,omitempty"`
+	Lease          int64  `json:"lease,omitempty"`
 	Deleted        bool   `json:"deleted,omitempty"`
 	// Time is when the version was written, in Unix milliseconds.
 	Time int64 `json:"time,omitempty"`
@@ -28,6 +29,15 @@ type TapeRangeResponse struct {
 	Count    int64    `json:"count"`
 	More     bool     `json:"more,omitempty"`
 	KVs      []TapeKV `json:"kvs"`
+}
+
+// TapeJournalResponse is a page of the journal: the versions written in
+// (after, upto], in revision order.
+type TapeJournalResponse struct {
+	After int64    `json:"after"`
+	Upto  int64    `json:"upto"`
+	More  bool     `json:"more,omitempty"`
+	KVs   []TapeKV `json:"kvs"`
 }
 
 // TapeGrave is a deleted key in the tape API.
@@ -44,6 +54,7 @@ type TapeGrave struct {
 //	GET /tape/v1/range?key=K[&end=E][&rev=R|&at=RFC3339][&limit=N]
 //	GET /tape/v1/history?key=K
 //	GET /tape/v1/graveyard?key=K[&end=E]
+//	GET /tape/v1/journal?after=R[&limit=N]
 //
 // end "\x00" (end=%00) reads every key from key. It reads values as the
 // API server stored them, Secrets included: serve it only to whoever may
@@ -96,6 +107,29 @@ func (s *Store) TapeHandler() http.Handler {
 		}
 		writeJSON(w, out)
 	})
+	mux.HandleFunc("GET /tape/v1/journal", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		after, err := strconv.ParseInt(q.Get("after"), 10, 64)
+		if err != nil {
+			http.Error(w, "after: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		limit, _ := strconv.ParseInt(q.Get("limit"), 10, 64)
+		page, err := s.Journal(after, limit)
+		switch {
+		case errors.Is(err, ErrBeforeTape), errors.Is(err, ErrFutureRev):
+			http.Error(w, err.Error(), http.StatusRequestedRangeNotSatisfiable)
+			return
+		case err != nil:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		out := TapeJournalResponse{After: page.After, Upto: page.Upto, More: page.More, KVs: []TapeKV{}}
+		for _, kv := range page.KVs {
+			out.KVs = append(out.KVs, s.tapeKV(kv))
+		}
+		writeJSON(w, out)
+	})
 	return mux
 }
 
@@ -122,7 +156,7 @@ func (s *Store) tapeRevision(rev, at string) (int64, error) {
 func (s *Store) tapeKV(kv KV) TapeKV {
 	return TapeKV{
 		Key: string(kv.Key), Value: kv.Value, CreateRevision: kv.CreateRevision,
-		ModRevision: kv.ModRevision, Version: kv.Version.Version, Deleted: kv.Deleted,
+		ModRevision: kv.ModRevision, Version: kv.Version.Version, Lease: kv.Lease, Deleted: kv.Deleted,
 		Time: s.TimeOf(kv.ModRevision),
 	}
 }

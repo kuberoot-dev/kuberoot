@@ -38,6 +38,7 @@ func serveControl(reconfigure func()) {
 			http.Error(w, "service not running", http.StatusNotFound)
 			return
 		}
+		restartRequested.Store(r.PathValue("name"), struct{}{})
 		_ = p.(*os.Process).Signal(unix.SIGTERM)
 	})
 	mux.HandleFunc("POST /v1/reconfigure", func(http.ResponseWriter, *http.Request) {

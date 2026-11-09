@@ -164,6 +164,13 @@ func renderServices(spec roleSpec, f facts) ([]service, error) {
 		if len(svc.args) == 0 {
 			return nil, fmt.Errorf("service %s has no command", s.Name)
 		}
+		if s.Alternatives != nil {
+			alt, err := renderAlternatives(s.Name, s.Alternatives, svc.args, f)
+			if err != nil {
+				return nil, err
+			}
+			svc.alt = alt
+		}
 		services = append(services, svc)
 	}
 	return services, nil
@@ -179,4 +186,30 @@ func render(text string, f facts) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(b.String()), nil
+}
+
+// renderAlternatives renders the command line of each of a service's
+// alternatives: its program in place of the service's, the service's
+// arguments, then its own.
+func renderAlternatives(name string, a *distro.Alternatives, base []string, f facts) (*serviceAlternatives, error) {
+	alt := &serviceAlternatives{args: map[string][]string{}, policy: a.Switch}
+	for _, c := range a.Choices {
+		program, err := render(c.Program, f)
+		if err != nil {
+			return nil, fmt.Errorf("service %s, alternative %s: %w", name, c.Name, err)
+		}
+		args := append([]string{program}, base[1:]...)
+		for i, arg := range c.Args {
+			out, err := render(arg, f)
+			if err != nil {
+				return nil, fmt.Errorf("service %s, alternative %s, argument %d: %w", name, c.Name, i, err)
+			}
+			if out != "" {
+				args = append(args, out)
+			}
+		}
+		alt.names = append(alt.names, c.Name)
+		alt.args[c.Name] = args
+	}
+	return alt, nil
 }

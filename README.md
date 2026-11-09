@@ -6,7 +6,7 @@ kuberoot builds Kubernetes distributions that boot straight on hardware. Each on
 
 The repository builds eight distributions: `edge`, a general-purpose cluster for one to a few nodes; `router`, Kubernetes without containers that runs a network router; `hypervisor`, virtual machines on KVM with their disks replicated between nodes, moved off a node that fails; `ai`, language models served as processes of the nodes behind one OpenAI-compatible endpoint, with new versions rolled out and back by the cluster; `rt`, a real-time controller whose pods get whole CPUs with no timer tick on a fully preemptible kernel; `iot`, a gateway with no containers that reads devices over Modbus and sends on what they say, its changes undone by themselves when they cut a device off; `observability`, a monitoring cluster outside what it watches, which reads servers' BMCs, switches, PDUs and probes of services natively and tells the outside world, by its heartbeats, that it still works; and `workstation`, people's desktops as virtual machines of the cluster, opened from a browser or an RDP client.
 
-> Status: experimental. The `edge` distribution passes the Kubernetes conformance suite (462 of 462 on a three-node cluster, Kubernetes 1.37.1), but the API of the node and the layout of the state may still change.
+> Status: experimental. The `edge` distribution passes the Kubernetes conformance suite (462 of 462 on a three-node cluster, Kubernetes 1.37.2), but the API of the node and the layout of the state may still change.
 
 ## Background
 
@@ -19,6 +19,7 @@ kuberoot puts into practice the essay [The Inevitable Future of Kubernetes: why 
 - **Node API**: every node serves `node.kuberoot.dev`, aggregated into the cluster API, so `kubectl get disks`, `kubectl get bootentries` or `kubectl create upgrade` act on a node. It works before a cluster exists, which is how a node is installed.
 - **Pod network**: VXLAN between nodes, or plain routes on a flat network, or none, for a CNI package such as Cilium.
 - **Container runtime**: containerd, or CRI-O for a distribution whose profile says `runtime: cri-o` and whose image carries it: CRI-O restores containers from checkpoints, which containerd's CRI does not.
+- **Alternative builds**: a profile may offer a service in several builds (`alternatives`, each its own program and arguments). On its first boot a node picks one at random and keeps it, so the nodes of a cluster run a mix of them. With `switch`, a build that keeps crashing (an exit kinit did not ask for, within a minute of starting, `crashes` times within `within`) is replaced by the next one, at most once per boot and once per `cooldown`, and never while the booted slot is on probation: a failing release is rolled back to the other slot instead. `nodeservices` shows the build in `status.alternative`, and the node is labelled `alternative.kuberoot.dev/<service>=<build>`.
 - **Packages**: the kubepkg operator runs on the control plane and installs the distribution's packages; the `edge` meta package and the platform packages live in [kubepkg-recipes](https://github.com/kuberoot-dev/kubepkg-recipes).
 
 ## The router distribution
@@ -433,9 +434,11 @@ spec:
   maxFailures: 0
   offline: Wait                 # or Skip
   soak: 30m                     # optional: how long a wave runs before the next
+  maintenanceWindows:           # optional: the only times waves start
+  - {start: "2026-11-08T22:00:00Z", duration: 2h}
 ```
 
-The nodes are picked when the rollout starts, of those that have enrolled, and taken in order of name. A node that enrolls or gets the selector's labels later joins the last wave while the rollout is under way (`lateNodes: Join`, the default; `Ignore` leaves it out): it never goes ahead of the waves that test the release, and a rollout that is Complete or Stopped takes no more nodes. A wave starts once every node of the waves before it is updated (and has soaked, if asked). A node that rolls the release back or cannot stage it is a failure, and more than `maxFailures` stop the rollout: the nodes it has not reached keep what they run, and a stopped rollout starts again only when its spec changes. `paused: true` holds the next wave. A node that is offline when its wave comes holds the wave (`Wait`) or is left behind (`Skip`); either way its release is set and it takes it when it connects again. A node keeps running without the center; the center only acts when it hears from the node. A node belongs to the newest rollout that gave it a release.
+The nodes are picked when the rollout starts, of those that have enrolled, and taken in order of name. A node that enrolls or gets the selector's labels later joins the last wave while the rollout is under way (`lateNodes: Join`, the default; `Ignore` leaves it out): it never goes ahead of the waves that test the release, and a rollout that is Complete or Stopped takes no more nodes. A wave starts once every node of the waves before it is updated (and has soaked, if asked). A node that rolls the release back or cannot stage it is a failure, and more than `maxFailures` stop the rollout: the nodes it has not reached keep what they run, and a stopped rollout starts again only when its spec changes. `paused: true` holds the next wave. `maintenanceWindows`, a list of a `start` time and a `duration`, keeps the rollout to those times: outside them no wave starts and no node is given the release, while nodes that already have it go on; windows that have ended are ignored, so a list kept filled ahead of time, by hand or by a generator, is enough, and the rollout's message names the next window. A node that is offline when its wave comes holds the wave (`Wait`) or is left behind (`Skip`); either way its release is set and it takes it when it connects again. A node keeps running without the center; the center only acts when it hears from the node. A node belongs to the newest rollout that gave it a release.
 
 The center also serves a connected node's API to its users, at `https://<center>:7443/nodes/<name>/`: `kubectl` with the center's client certificate and the center's authority (ConfigMap `kube-system/kuberoot-fleet-ca`, server name `kuberoot-fleet`) reaches the node's `nodeservices`, `bootentries` and the rest, for whoever the center's RBAC allows `get` on `fleetnodes/proxy`.
 
@@ -469,9 +472,11 @@ A node boots from media (`mkimage` writes a disk image with the kernel, the init
 
 An `Upgrade` downloads a signed release bundle, writes it to the inactive slot and boots it on probation: unless every service runs without restarting and the node is Ready within five minutes, the node reboots, and once the attempts run out it boots the previous slot again.
 
+Control planes of a cluster on etcd take an upgrade one at a time, and the cluster keeps answering while they do. `hack/e2e/etcd-ha.sh` checks this on three QEMU machines, run by the `e2e-etcd` workflow on GitHub's runners for every pull request that changes the image's components, the store, or how nodes install, upgrade and back up: three control planes installed from the previous image take the current one with an `Upgrade` each, one after the other, while a marker object is written through one API server and read back through another every two seconds; one of them is rolled back to its old slot and forward again, and comes back as the same member of the store; then a `StateBackup` of the first is uploaded encrypted, the cluster is lost, and the first control plane is installed from it on a blank disk with the marker as it was at the backup. The move from etcd 3.7.2 to 3.7.3 (Kubernetes 1.37.1 to 1.37.2) passed it without a failed write or read.
+
 ## Backups of the control plane
 
-A control plane keeps its state in one place: the cluster store, its certificate authorities and its identity. The node API archives it every hour, and on request with `kubectl create statebackup`, keeps the latest twelve locally and, when the Secret `kube-system/kuberoot-state-backup` says so, uploads them to S3-compatible storage:
+A control plane keeps its state in one place: the cluster store, its certificate authorities and its identity. The node API archives it every hour, and on request with `kubectl create statebackup`, keeps the latest twelve locally -- within a tenth of the filesystem, whichever bound is reached first -- and, when the Secret `kube-system/kuberoot-state-backup` says so, uploads them to S3-compatible storage:
 
 ```yaml
 apiVersion: v1
@@ -482,6 +487,7 @@ metadata:
 stringData:
   interval: 1h
   keep: "12"
+  maxBytes: "2147483648"    # room the archives may take, a tenth of the filesystem by default
   encryptionRecipient: age1...        # archives are encrypted to this age key
   s3Endpoint: https://s3.example.org
   s3Bucket: backups
