@@ -1,0 +1,181 @@
+name: e2e-etcd
+# A highly available control plane across an upgrade of its image, on three
+# QEMU/KVM machines (hack/e2e/etcd-ha.sh): rolling A/B upgrade from the
+# previous image to this one, rollback of one node, state backup and restore.
+#
+# The previous image is built from the base of a pull request that changes
+# the image's components, otherwise from the commit before the last change of
+# build/components.env, or from the old_ref given to a manual run. A manual
+# run can take both images from an earlier run (images_run_id) and run only
+# the test.
+on:
+  workflow_dispatch:
+    inputs:
+      old_ref:
+        description: commit or branch the previous image is built from
+        default: ""
+      images_run_id:
+        description: take both images from this earlier run instead of building them
+        default: ""
+  pull_request:
+    paths:
+      - build/components.env
+      - kernel/**
+      - cmd/kinit/**
+      - pkg/etcdstore/**
+      - pkg/installer/**
+      - pkg/upgrade/**
+      - pkg/nodeapi/etcd*.go
+      - pkg/nodeapi/install.go
+      - pkg/nodeapi/membership.go
+      - pkg/nodeapi/statebackup.go
+      - pkg/nodeapi/upgrade.go
+      - distros/edge/profile.yaml
+      - hack/e2e/**
+      - .github/workflows/e2e-etcd.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: e2e-etcd-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  refs:
+    runs-on: ubuntu-latest
+    outputs:
+      old: ${{ steps.refs.outputs.old }}
+      new: ${{ steps.refs.outputs.new }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: refs
+        env:
+          OLD_REF: ${{ inputs.old_ref }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          new=$(git rev-parse HEAD)
+          if [ -n "$OLD_REF" ]; then
+            old=$(git rev-parse "$OLD_REF^{commit}")
+          elif [ -n "$BASE" ] && ! git diff --quiet "$BASE" HEAD -- build/components.env kernel; then
+            old=$BASE
+          else
+            last=$(git log -1 --first-parent --format=%H -- build/components.env)
+            old=$(git rev-parse "$last^1")
+          fi
+          echo "old=$old" >>"$GITHUB_OUTPUT"
+          echo "new=$new" >>"$GITHUB_OUTPUT"
+          echo "previous image from $old, current from $new" >>"$GITHUB_STEP_SUMMARY"
+      - if: inputs.images_run_id == ''
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # A key of this run only, which both images trust and the bundle is
+      # signed with.
+      - if: inputs.images_run_id == ''
+        run: mkdir -p keys && go run ./cmd/kuberoot-release keygen keys/release
+      - if: inputs.images_run_id == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-key
+          path: keys/
+          retention-days: 1
+
+  image:
+    needs: refs
+    if: inputs.images_run_id == ''
+    strategy:
+      fail-fast: true
+      matrix:
+        which: [old, new]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: self
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.which == 'old' && needs.refs.outputs.old || needs.refs.outputs.new }}
+          path: src
+      - name: work directory
+        run: sudo mkdir -p /mnt/work/out/amd64 /mnt/work/keys && sudo chown -R "$USER" /mnt/work && df -h / /mnt
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-key
+          path: /mnt/work/keys
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /mnt/work/out/amd64/vmlinuz.efi
+            /mnt/work/out/amd64/kernel.config
+            /mnt/work/out/amd64/kernel.flavour
+            /mnt/work/out/amd64/modules
+          key: kernel-amd64-${{ hashFiles('src/kernel/**', 'src/scripts/build-kernel.sh', 'src/scripts/build-drbd.sh', 'src/scripts/kernel-flavour.sh') }}
+      - name: build
+        run: |
+          version=0.1.0-${{ matrix.which }}.$(git -C src rev-parse --short=7 HEAD)
+          self/hack/e2e/build-image.sh src /mnt/work "$version" ${{ matrix.which == 'new' && '--bundle' || '' }}
+          sudo chown -R "$USER" /mnt/work/out
+          ls -l /mnt/work/out/amd64 /mnt/work/out/amd64/bundles 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.which }}
+          retention-days: 7
+          compression-level: 0
+          path: |
+            /mnt/work/out/amd64/VERSION
+            /mnt/work/out/amd64/vmlinuz.efi
+            /mnt/work/out/amd64/initrd.cpio
+            /mnt/work/out/amd64/rootfs.squashfs
+            /mnt/work/out/amd64/systemd-boot.efi
+            /mnt/work/out/amd64/kernel.args
+            /mnt/work/out/amd64/bundles/*.tar
+            /mnt/work/out/amd64/bundles/*.tar.sig
+
+  e2e:
+    needs: [refs, image]
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: image-*
+          path: images
+          run-id: ${{ inputs.images_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+      - name: tools
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y qemu-system-x86 qemu-utils ovmf age >/dev/null
+          curl -fsSL -o /tmp/rclone.zip https://downloads.rclone.org/v1.71.2/rclone-v1.71.2-linux-amd64.zip
+          unzip -q -j /tmp/rclone.zip '*/rclone' -d /tmp/rclone && sudo install -m 0755 /tmp/rclone/rclone /usr/local/bin/rclone
+          sudo mkdir -p /mnt/stand /mnt/tmp && sudo chown "$USER" /mnt/stand /mnt/tmp
+          ls -l /dev/kvm; nproc; free -g; df -h /mnt
+          go build -o /dev/null ./cmd/mkimage
+      - name: rolling upgrade, rollback, backup and restore
+        run: hack/e2e/etcd-ha.sh images/image-old images/image-new /mnt/stand
+        env:
+          TMPDIR: /mnt/tmp
+      - if: always()
+        run: |
+          [ -f /mnt/stand/summary.log ] && cat /mnt/stand/summary.log >>"$GITHUB_STEP_SUMMARY" || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-etcd-stand
+          retention-days: 7
+          path: |
+            /mnt/stand/summary.log
+            /mnt/stand/marker.log
+            /mnt/stand/statebackup.yaml
+            /mnt/stand/n*/console.log
+            /mnt/stand/http.log
+            /mnt/stand/s3.log
