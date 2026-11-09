@@ -112,6 +112,11 @@ jobs:
             /mnt/work/out/amd64/kernel.flavour
             /mnt/work/out/amd64/modules
           key: kernel-amd64-${{ hashFiles('src/kernel/**', 'src/scripts/build-kernel.sh', 'src/scripts/build-drbd.sh', 'src/scripts/kernel-flavour.sh') }}
+      # What the root filesystem downloads, by the components' versions.
+      - uses: actions/cache@v4
+        with:
+          path: /mnt/work/cache
+          key: downloads-amd64-${{ hashFiles('src/build/components.env') }}
       - name: build
         run: |
           version=0.1.0-${{ matrix.which }}.$(git -C src rev-parse --short=7 HEAD)

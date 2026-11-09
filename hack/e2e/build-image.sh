@@ -17,11 +17,15 @@ work=$(cd "$work" && pwd)
 go_image=golang:$(sed -n 's/^go \([0-9]*\.[0-9]*\).*/\1/p' "$src/go.mod")-bookworm
 alpine_image=alpine:$(sed -n 's/^ALPINE_VERSION=//p' "$src/build/components.env")
 
+# Downloads from upstream fail now and then (504s); every curl of the build
+# steps retries, without changing the steps themselves.
+printf 'retry = 5\nretry-all-errors\nretry-delay = 5\n' >"$work/.curlrc"
+
 run() {
   local image=$1
   shift
   docker run --rm -v "$src:/src" -v "$work:/work" -w /src \
-    -e WORK=/work -e KUBEROOT_OUT=/work/out -e KUBEROOT_KEYS=/work/keys \
+    -e CURL_HOME=/work -e WORK=/work -e KUBEROOT_OUT=/work/out -e KUBEROOT_KEYS=/work/keys \
     -e KUBEROOT_VERSION="$version" -e KUBEROOT_DISTRO=edge \
     -e GOFLAGS="-mod=mod -buildvcs=false" -e GOMODCACHE=/work/gomod -e GOCACHE=/work/gocache \
     "$image" "$@"
