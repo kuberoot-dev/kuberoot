@@ -45,7 +45,21 @@ S3_PORT=9000
 log() { echo "=== $(date -u +%H:%M:%S) $*" | tee -a "$V/summary.log"; }
 fail() {
   log "FAIL: $*"
+  diagnose >"$V/diagnose.log" 2>&1 || true
   exit 1
+}
+# diagnose: what each node that answers says about itself and its store.
+diagnose() {
+  local i s
+  for i in 1 2 3; do
+    echo "##### node $i"
+    nk "$i" get bootentries,memberships,etcdmembers,nodeservices || continue
+    nk "$i" get memberships -o yaml | grep -v -i -E 'key|cert|token|ca:'
+    for s in etcd kube-apiserver kuberoot-node; do
+      echo "##### node $i: $s"
+      nk "$i" get --raw "/apis/node.kuberoot.dev/v1alpha1/nodeservices/$s/log" | tail -60
+    done
+  done
 }
 # until_ok <seconds> <command...>: retries the command every 5s.
 until_ok() {
@@ -77,6 +91,10 @@ up() { # up <i> [media image]
   local drives=()
   [ -z "$m" ] || drives+=(-drive "file=$m,format=raw,if=virtio,snapshot=on")
   drives+=(-drive "file=$d/sys.qcow2,format=qcow2,if=virtio")
+  # eth1: a tap of a host bridge where there is one (hack/e2e/bridge.sh),
+  # otherwise a multicast socket shared by the machines.
+  local l2=(-netdev socket,id=n1,mcast=230.0.0.1:12345,localaddr=127.0.0.1)
+  [ ! -e "/sys/class/net/e2etap$i" ] || l2=(-netdev "tap,id=n1,ifname=e2etap$i,script=no,downscript=no")
   echo "=== boot $(date -u +%FT%TZ) media=${m:-none}" >>"$d/console.log"
   qemu-system-x86_64 -name "n$i" -enable-kvm -cpu host -smp "$SMP" -m "$MEM" -machine q35 \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
@@ -84,9 +102,9 @@ up() { # up <i> [media image]
     "${drives[@]}" \
     -netdev user,id=n0,hostfwd=tcp:127.0.0.1:50${i}0-:50000,hostfwd=tcp:127.0.0.1:64${i}3-:6443 \
     -device virtio-net-pci,netdev=n0,mac=52:54:00:00:0$i:01 \
-    -netdev socket,id=n1,mcast=230.0.0.1:12345,localaddr=127.0.0.1 \
-    -device virtio-net-pci,netdev=n1,mac=52:54:00:01:0$i:01 \
-    -chardev file,id=ser0,path="$d/console.log" -serial chardev:ser0 \
+    "${l2[@]}" -device virtio-net-pci,netdev=n1,mac=52:54:00:01:0$i:01 \
+    -chardev socket,id=ser0,path="$d/serial.sock",server=on,wait=off,logfile="$d/console.log",logappend=on \
+    -serial chardev:ser0 \
     -display none -daemonize -pidfile "$d/pid"
 }
 

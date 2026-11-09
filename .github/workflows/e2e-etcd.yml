@@ -157,6 +157,7 @@ jobs:
           sudo apt-get -qq install -y qemu-system-x86 qemu-utils ovmf age >/dev/null
           curl -fsSL -o /tmp/rclone.zip https://downloads.rclone.org/v1.71.2/rclone-v1.71.2-linux-amd64.zip
           unzip -q -j /tmp/rclone.zip '*/rclone' -d /tmp/rclone && sudo install -m 0755 /tmp/rclone/rclone /usr/local/bin/rclone
+          sudo hack/e2e/bridge.sh "$USER"
           sudo mkdir -p /mnt/stand /mnt/tmp && sudo chown "$USER" /mnt/stand /mnt/tmp
           ls -l /dev/kvm; nproc; free -g; df -h /mnt
           go build -o /dev/null ./cmd/mkimage
@@ -176,6 +177,7 @@ jobs:
             /mnt/stand/summary.log
             /mnt/stand/marker.log
             /mnt/stand/statebackup.yaml
+            /mnt/stand/diagnose.log
             /mnt/stand/n*/console.log
             /mnt/stand/http.log
             /mnt/stand/s3.log
