@@ -25,16 +25,22 @@ spec:
     fs.inotify.max_user_watches: "524288"
   # Keep the VM pool out of pod allocatable memory. On an 8 GiB board the
   # platform itself has to fit in what is left, so the pool is 1 GiB and the
-  # node's own services get 3.5 GiB: about 4 GiB stays for pods, which the
-  # platform fills to 1.6 GiB. Measured, not guessed: the services really do
+  # node's own services get 4 GiB: about 3.6 GiB stays for pods, which the
+  # platform fills to 1.8 GiB. Measured, not guessed: the services really do
   # cost that much, and the two earlier guesses here -- 1 GiB, then 2 GiB --
   # both had the kubelet place pods against memory that was already spoken
   # for, and the node then evicted them by the thousand. The VM admission
   # budget below must change with this reservation; neither is the 60% HA
   # usage guard.
+  #
+  # The last 512 MiB went to the API server, which a platform the size of
+  # Cozystack had outgrown: held under its old limit, its garbage collector
+  # ran without pause, the watch cache fell behind the store, and controllers
+  # began reading versions older than what they had just written. The
+  # DaemonSet controller then recreated the same pods for hours.
   kubelet:
     systemReserved:
-      memory: 3584Mi
+      memory: 4096Mi
     enforceNodeAllocatable: [pods]
   roles:
     controlPlane:
@@ -116,7 +122,11 @@ spec:
         - '{{.Etcd.KeepHistory}}'
         - '{{.Etcd.ListenTape}}'
       - name: kube-apiserver
-        env: [GOMEMLIMIT=1024MiB]
+        # A platform the size of Cozystack keeps around 800 MiB of live heap
+        # here. Leave the collector room above that: at a limit it cannot
+        # meet it collects continuously, and an API server that slow stops
+        # keeping its watch cache level with the store.
+        env: [GOMEMLIMIT=1536MiB]
         args:
         - /usr/bin/kube-apiserver
         # On SIGTERM, leave the kubernetes Service and keep serving a while,

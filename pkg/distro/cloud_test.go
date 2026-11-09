@@ -84,3 +84,40 @@ func TestCloudCarriesNativeVMAPI(t *testing.T) {
 		t.Error("cloud and hypervisor must serve the same VM API; run hack/update-codegen.sh")
 	}
 }
+
+// The API server's soft memory limit must stay above the live heap a platform
+// the size of Cozystack keeps there, around 800 MiB. Held at a limit it cannot
+// meet, Go collects without pause; the server grows slow enough that its watch
+// cache falls behind the store, and controllers start reading versions older
+// than the ones they have just written. A DaemonSet controller reading a stale
+// DaemonSet recreates the pods it has just created, for as long as it lasts.
+func TestCloudLeavesTheAPIServerRoomToCollect(t *testing.T) {
+	p, err := Load("../../distros/cloud/profile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const floorMiB = 1536
+	for _, role := range []string{RoleControlPlane} {
+		var limit string
+		for _, s := range p.Spec.Roles[role].Services {
+			if s.Name != "kube-apiserver" {
+				continue
+			}
+			for _, e := range s.Env {
+				if v, ok := strings.CutPrefix(e, "GOMEMLIMIT="); ok {
+					limit = v
+				}
+			}
+		}
+		if limit == "" {
+			t.Fatalf("%s: the API server runs without a memory limit", role)
+		}
+		q, err := resource.ParseQuantity(strings.TrimSuffix(limit, "B"))
+		if err != nil {
+			t.Fatalf("%s: GOMEMLIMIT %q: %v", role, limit, err)
+		}
+		if q.Value() < floorMiB*1024*1024 {
+			t.Errorf("%s: GOMEMLIMIT %s leaves the collector no room above the live heap; %dMiB is the measured floor", role, limit, floorMiB)
+		}
+	}
+}

@@ -38,14 +38,35 @@ prepare() {
   tools sh -c 'command -v flex >/dev/null || { apt-get -qq update && apt-get -qq install -y flex bison bc libelf-dev libssl-dev cpio xz-utils zstd >/dev/null; }'
 }
 
-sync() {
-  # Sources only: git-tracked and new files, no build output.
-  (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^SESSION_LOG.md$' |
-    COPYFILE_DISABLE=1 tar --null -T - -czf -) |
-    tools sh -c 'rm -rf /work/src/kuberoot.new && mkdir -p /work/src/kuberoot.new && tar -xzf - -C /work/src/kuberoot.new && rm -rf /work/src/kuberoot && mv /work/src/kuberoot.new /work/src/kuberoot'
-}
-
 SRC=/work/src/kuberoot
+
+# sync ships the sources: git-tracked and new files, no build output.
+#
+# The stream crosses the API server, and a tunnel that stalls mid-transfer
+# leaves the builder with the tree it already had: the unpack and the swap
+# are chained, so a torn transfer changes nothing on the far side. That is
+# the safe outcome and also the treacherous one, because whatever builds
+# next compiles the previous sources and looks like it worked. So: retry,
+# then count what landed, and say so when the counts disagree.
+sync() {
+  local want got attempt
+  want=$(cd "$ROOT" && git ls-files -co --exclude-standard | grep -cv '^SESSION_LOG.md$')
+  for attempt in 1 2 3; do
+    if (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^SESSION_LOG.md$' |
+      COPYFILE_DISABLE=1 tar --null -T - -czf -) |
+      tools sh -c "rm -rf $SRC.new && mkdir -p $SRC.new && tar -xzf - -C $SRC.new && rm -rf $SRC && mv $SRC.new $SRC"
+    then
+      got=$(tools sh -c "find $SRC -type f | wc -l" | tr -cd '0-9')
+      [ "$got" = "$want" ] && return 0
+      echo "hetzner.sh: sync put $got of $want files on the builder (attempt $attempt)" >&2
+    else
+      echo "hetzner.sh: sync could not reach the builder (attempt $attempt)" >&2
+    fi
+    sleep 3
+  done
+  echo "hetzner.sh: the builder does not have the current sources; nothing was built" >&2
+  return 1
+}
 # nproc sees the host's CPUs, while the builder has a much smaller quota.
 # Bound compilation by default and forward an explicit override remotely.
 VM_API_TRANSITION=${KUBEROOT_VM_API_TRANSITION:-0}
