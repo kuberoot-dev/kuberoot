@@ -29,6 +29,12 @@ type apiBalancer struct {
 // backoff keeps a control plane that refused a connection out of turn.
 const backoff = 10 * time.Second
 
+// localAPIServer is the API server a control plane runs itself, on the
+// secure port every distribution profile gives it. A control plane points
+// the balancer here, so that the one address --api-balancer offers answers
+// on every node of the cluster.
+const localAPIServer = "https://127.0.0.1:6443"
+
 func newAPIBalancer(urls []string) *apiBalancer {
 	b := &apiBalancer{down: map[string]time.Time{}}
 	b.set(hostPorts(urls))
@@ -166,4 +172,28 @@ func (b *apiBalancer) follow(ctx context.Context, kubeconfig string) {
 		case <-time.After(30 * time.Second):
 		}
 	}
+}
+
+// balancerTargets is what the balancer forwards to, and the kubeconfig it
+// follows the cluster's control planes with, if any.
+//
+// A control plane serves the cluster API itself and never needed a balancer
+// for its own sake. The cluster around it does: a CNI that replaces
+// kube-proxy reaches the API server through the Service it programs itself,
+// so an entry left without endpoints leaves it unable to read the endpoints
+// that would refill it -- a circle it cannot leave on its own. One address
+// that answers on every node, control plane or worker, breaks that circle,
+// and unlike a control plane's own address it survives that control plane
+// being replaced.
+func balancerTargets(o Options) (servers []string, follow string) {
+	if len(o.APIServers) > 0 {
+		return o.APIServers, o.APIKubeconfig
+	}
+	if o.AdminKubeconfig == "" {
+		return nil, ""
+	}
+	// A node that runs an API server: the local one is right for as long as
+	// it does, so there is nothing to follow. The cluster's own list would
+	// only replace it with addresses that can go away.
+	return []string{localAPIServer}, ""
 }

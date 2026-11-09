@@ -270,15 +270,16 @@ func Run(ctx context.Context, o Options) error {
 	if models != nil {
 		go models.run(ctx)
 	}
-	if len(o.APIServers) > 0 && o.APIBalancer != "" {
-		b := newAPIBalancer(o.APIServers)
+	servers, follow := balancerTargets(o)
+	if len(servers) > 0 && o.APIBalancer != "" {
+		b := newAPIBalancer(servers)
 		go func() {
 			if err := b.serve(ctx, o.APIBalancer); err != nil {
 				klog.Errorf("API balancer: %v", err)
 			}
 		}()
-		if o.APIKubeconfig != "" {
-			go b.follow(ctx, o.APIKubeconfig)
+		if follow != "" {
+			go b.follow(ctx, follow)
 		}
 	}
 	if o.GPUs {
