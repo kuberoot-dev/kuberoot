@@ -138,9 +138,16 @@ booted() { # booted <i>: "<release> <state>" of the slot the node booted
 etcd_version() { # the version the node's etcd last started as
   nk "$1" get --raw /apis/node.kuberoot.dev/v1alpha1/nodeservices/etcd/log | grep -o '"etcd-version":"[^"]*"' | tail -1 | cut -d'"' -f4
 }
-voters() { # members of the store that vote
-  nk 1 get etcdmembers -o jsonpath='{range .items[?(@.status.learner!=true)]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -c . ||
-    nk 2 get etcdmembers -o jsonpath='{range .items[?(@.status.learner!=true)]}{.metadata.name}{"\n"}{end}' | grep -c .
+# voters: members of the store that vote, as node 1 or else node 2 sees them.
+# status.learner is left out when false, which a jsonpath filter cannot match.
+voters() {
+  local i out
+  for i in 1 2; do
+    out=$(nk "$i" get etcdmembers --no-headers -o custom-columns=N:.metadata.name,L:.status.learner 2>/dev/null) || continue
+    echo "$out" | awk '$2 != "true"' | grep -c .
+    return
+  done
+  return 1
 }
 voters_are() { [ "$(voters)" = "$1" ]; }
 three_voters() { voters_are 3; }
@@ -287,7 +294,7 @@ for i in 1 2 3; do [ "$(etcd_version "$i")" = "${ETCD_NEW:-3.7.3}" ] || fail "no
 member_id() { nk 1 get etcdmembers -o jsonpath="{range .items[?(@.metadata.name==\"$1\")]}{.status.id}{end}"; }
 n3=$(nk 3 get osconfigs -o jsonpath='{.items[0].status.hostname}')
 id_before=$(member_id "$n3")
-old_slot=$(nk 3 get bootentries -o jsonpath='{range .items[?(@.status.booted!=true)]}{.metadata.name}{end}')
+old_slot=$(nk 3 get bootentries --no-headers -o custom-columns=N:.metadata.name,B:.status.booted | awk '$2 != "true" {print $1}')
 new_slot=$(nk 3 get bootentries -o jsonpath='{range .items[?(@.status.booted==true)]}{.metadata.name}{end}')
 back_start=$(date +%s)
 log "roll node 3 back to $old_slot ($OLD_VERSION), member $id_before"
