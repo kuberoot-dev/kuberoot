@@ -2,17 +2,16 @@ package vmctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/vishvananda/netlink"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,9 +24,9 @@ import (
 
 	nodev1 "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1"
 	routerv1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
-	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha2"
 	"github.com/kuberoot-dev/kuberoot/pkg/router"
-	"github.com/kuberoot-dev/kuberoot/pkg/vm"
+	"github.com/kuberoot-dev/kuberoot/pkg/vmmaintenance"
 )
 
 const finalizer = "vm.kuberoot.dev/cleanup"
@@ -41,38 +40,88 @@ var (
 // Controller runs the cluster's virtual machines through the node APIs of
 // its nodes, and serves the machines' network its gateway.
 type Controller struct {
-	Dynamic dynamic.Interface
-	Kube    kubernetes.Interface
+	Maintenance *vmmaintenance.Guard
+	Dynamic     dynamic.Interface
+	Kube        kubernetes.Interface
 	// Network of the machines; the gateway takes its first address.
 	Network  netip.Prefix
 	StateDir string
+	// StableAddresses persists DHCP reservations before offering them.
+	// Replicas with independent lease files must enable this for takeover.
+	StableAddresses bool
 
-	dhcp *router.Daemon
-	conf string
-	nft  string
+	dhcp              *router.Daemon
+	conf              string
+	nft               string
+	gatewayOwned      bool
+	gatewayRulesOwned bool
 }
 
 // Run reconciles every few seconds until ctx ends.
-func (c *Controller) Run(ctx context.Context) error {
+func (c *Controller) Run(ctx context.Context) (runErr error) {
+	if c.Maintenance == nil || c.Maintenance.Mode != vmmaintenance.ModeAlpha2 {
+		return fmt.Errorf("maintenance guard with matching controller API mode is required")
+	}
 	if err := os.MkdirAll(c.StateDir, 0o700); err != nil {
 		return err
 	}
-	c.dhcp = &router.Daemon{Name: "dnsmasq", Args: []string{"/usr/sbin/dnsmasq", "--conf-file=" + filepath.Join(c.StateDir, "dnsmasq.conf")}}
-	defer c.dhcp.Stop()
+	c.dhcp = &router.Daemon{Name: "dnsmasq", Args: []string{"/usr/sbin/dnsmasq", "--conf-file=" + filepath.Join(c.StateDir, "dnsmasq.conf")}, StopWithParent: true}
+	ctx, cancel := context.WithCancel(ctx)
+	var seedErr error
+	var seedsDone chan struct{}
 	if c.Network.IsValid() {
-		go c.serveSeeds(ctx, c.Network.Masked().Addr().Next().String())
+		// The DMI serial must be stable even before the listener binds;
+		// clearing it during takeover would restart existing guests.
+		seedBase.Store(fmt.Sprintf("http://%s:%d", c.Network.Masked().Addr().Next(), SeedPort))
+		defer seedBase.Store("")
+		seedsDone = make(chan struct{})
+		go func() {
+			seedErr = c.serveSeeds(ctx, c.Network.Masked().Addr().Next().String())
+			close(seedsDone)
+		}()
 	}
-	for {
-		if err := c.gateway(); err != nil {
-			klog.Errorf("gateway: %v", err)
+	defer func() {
+		cancel()
+		c.dhcp.Stop()
+		if seedsDone != nil {
+			<-seedsDone
 		}
-		c.reconcile(ctx)
+		runErr = errors.Join(runErr, seedErr, c.stopGateway())
+	}()
+	for ctx.Err() == nil {
+		err := c.Maintenance.Work(ctx, func(ctx context.Context) error {
+			if err := vmmaintenance.APIReady(ctx, c.Dynamic); err != nil {
+				return err
+			}
+			gatewayErr := c.gateway(ctx)
+			if gatewayErr != nil {
+				klog.Errorf("gateway: %v", gatewayErr)
+				if c.StableAddresses {
+					// Never keep serving a stale reservation set after failing
+					// to read or persist the cluster's current assignments.
+					c.dhcp.Stop()
+				}
+			}
+			if gatewayErr == nil || !c.StableAddresses {
+				c.reconcile(ctx)
+			}
+			return nil
+		})
+		if err != nil {
+			klog.Errorf("VM reconcile: %v", err)
+		}
 		select {
 		case <-ctx.Done():
+			return nil
+		case <-seedsDone:
+			if ctx.Err() == nil {
+				return fmt.Errorf("cloud-init server stopped")
+			}
 			return nil
 		case <-time.After(5 * time.Second):
 		}
 	}
+	return nil
 }
 
 func (c *Controller) nodes(ctx context.Context) ([]Node, error) {
@@ -107,19 +156,13 @@ func (c *Controller) reconcile(ctx context.Context) {
 		klog.Errorf("nodes: %v", err)
 		return
 	}
-	list, err := c.Dynamic.Resource(vmsGVR).List(ctx, metav1.ListOptions{})
+	vms, err := c.boundMachines(ctx)
 	if err != nil {
-		klog.Errorf("virtual machines: %v", err)
+		klog.Errorf("virtual machine bindings: %v", err)
 		return
 	}
-	var vms []v1.VirtualMachine
 	used, load := map[int32]bool{}, map[string]int{}
-	for _, u := range list.Items {
-		var m v1.VirtualMachine
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &m); err != nil {
-			continue
-		}
-		vms = append(vms, m)
+	for _, m := range vms {
 		if m.Status.Minor != 0 {
 			used[m.Status.Minor] = true
 		}
@@ -135,7 +178,10 @@ func (c *Controller) reconcile(ctx context.Context) {
 		}
 	}
 	c.sweep(ctx, vms, nodes, disks)
-	leases := c.leases()
+	var leases map[string]string
+	if !c.StableAddresses {
+		leases = c.leases()
+	}
 	for i := range vms {
 		m := &vms[i]
 		if m.DeletionTimestamp != nil {
@@ -149,7 +195,7 @@ func (c *Controller) reconcile(ctx context.Context) {
 		mine := map[string]disk{}
 		upToDate := map[string]bool{}
 		for _, d := range disks {
-			if d.vm == m.Name {
+			if d.vm == backend(m) {
 				mine[d.node] = d
 				upToDate[d.node] = d.diskState == "UpToDate"
 			}
@@ -162,7 +208,11 @@ func (c *Controller) reconcile(ctx context.Context) {
 		}
 		used[p.Minor] = true
 		st := c.apply(ctx, m, p, nodes, mine)
-		st.Address = leases[strings.ToLower(p.MAC)]
+		if c.StableAddresses {
+			st.Address = m.Status.Address
+		} else {
+			st.Address = leases[strings.ToLower(p.MAC)]
+		}
 		c.writeStatus(ctx, m, st)
 	}
 }
@@ -207,7 +257,7 @@ func (c *Controller) sweep(ctx context.Context, vms []v1.VirtualMachine, nodes [
 	known := map[string]bool{}
 	for _, m := range vms {
 		for _, r := range m.Status.ReplicaNodes {
-			known[r+"."+m.Name] = true
+			known[r+"."+backend(&m)] = true
 		}
 	}
 	if machines, err := c.Dynamic.Resource(machinesGVR).List(ctx, metav1.ListOptions{}); err == nil {
@@ -240,7 +290,7 @@ func ready(nodes []Node, name string) bool {
 // apply makes the nodes run the plan: the disk's volume on each replica
 // node, primary where the machine runs; the machine there and nowhere else.
 func (c *Controller) apply(ctx context.Context, m *v1.VirtualMachine, p Plan, nodes []Node, mine map[string]disk) v1.VirtualMachineStatus {
-	st := v1.VirtualMachineStatus{Node: p.Node, ReplicaNodes: p.ReplicaNodes, MAC: p.MAC, Minor: p.Minor, Port: p.Port,
+	st := v1.VirtualMachineStatus{BackendID: m.Status.BackendID, InstanceID: m.Status.InstanceID, Node: p.Node, ReplicaNodes: p.ReplicaNodes, MAC: p.MAC, Minor: p.Minor, Port: p.Port,
 		Moves: m.Status.Moves, Phase: "Pending", ImageWritten: m.Status.ImageWritten, ReplicaAddresses: map[string]string{}}
 	if m.Status.FailedMigration == m.Spec.Node {
 		st.FailedMigration = m.Status.FailedMigration
@@ -281,7 +331,7 @@ func (c *Controller) apply(ctx context.Context, m *v1.VirtualMachine, p Plan, no
 	// there can step down.
 	for _, r := range p.ReplicaNodes {
 		if r != p.Node && byName[r].Ready {
-			_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, r+"."+m.Name, metav1.DeleteOptions{})
+			_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, r+"."+backend(m), metav1.DeleteOptions{})
 		}
 	}
 	primary := map[string]bool{}
@@ -292,7 +342,7 @@ func (c *Controller) apply(ctx context.Context, m *v1.VirtualMachine, p Plan, no
 		st.Message = err.Error()
 		return st
 	}
-	vol, err := c.Dynamic.Resource(volumesGVR).Get(ctx, p.Node+"."+m.Name, metav1.GetOptions{})
+	vol, err := c.Dynamic.Resource(volumesGVR).Get(ctx, p.Node+"."+backend(m), metav1.GetOptions{})
 	if err != nil {
 		st.Message = err.Error()
 		return st
@@ -310,11 +360,11 @@ func (c *Controller) apply(ctx context.Context, m *v1.VirtualMachine, p Plan, no
 		return st
 	}
 	machine := machineSpec(m, p, running)
-	if err := c.ensure(ctx, machinesGVR, p.Node+"."+m.Name, map[string]any{"spec": toMap(&machine)}); err != nil {
+	if err := c.ensure(ctx, machinesGVR, p.Node+"."+backend(m), map[string]any{"spec": toMap(&machine)}); err != nil {
 		st.Message = fmt.Sprintf("machine on %s: %v", p.Node, err)
 		return st
 	}
-	got, err := c.Dynamic.Resource(machinesGVR).Get(ctx, p.Node+"."+m.Name, metav1.GetOptions{})
+	got, err := c.Dynamic.Resource(machinesGVR).Get(ctx, p.Node+"."+backend(m), metav1.GetOptions{})
 	if err != nil {
 		st.Message = err.Error()
 		return st
@@ -355,28 +405,51 @@ func (c *Controller) ensure(ctx context.Context, gvr schema.GroupVersionResource
 
 // cleanup removes a deleted machine from every node, then lets it go.
 func (c *Controller) cleanup(ctx context.Context, m *v1.VirtualMachine, nodes []Node) {
+	waiting := func(message string) {
+		// The guest may still run. Keep every part of its identity,
+		// including the address reservation on a replacement gateway.
+		st := m.Status
+		st.Phase, st.Message = "Deleting", message
+		c.writeStatus(ctx, m, st)
+	}
 	exists, isReady := map[string]bool{}, map[string]bool{}
 	for _, n := range nodes {
 		exists[n.Name], isReady[n.Name] = true, n.Ready
 	}
 	for _, r := range m.Status.ReplicaNodes {
 		if !exists[r] {
-			continue // the node left the cluster, and its copy with it
+			// Deleting a Node is not proof that its guests have stopped.
+			// An operator may remove the finalizer after fencing that host.
+			waiting("node " + r + " is missing; fence it before removing the cleanup finalizer")
+			return
 		}
 		if !isReady[r] {
 			// Kept until the node is back: its copy may still run.
-			c.writeStatus(ctx, m, v1.VirtualMachineStatus{Phase: "Deleting", Message: "waiting for node " + r + " to remove its copy",
-				Node: m.Status.Node, ReplicaNodes: m.Status.ReplicaNodes, Minor: m.Status.Minor, Port: m.Status.Port, MAC: m.Status.MAC})
+			waiting("waiting for node " + r + " to remove its copy")
 			return
 		}
-		_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, r+"."+m.Name, metav1.DeleteOptions{})
-		if err := c.Dynamic.Resource(volumesGVR).Delete(ctx, r+"."+m.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-			klog.Errorf("%s: volume on %s: %v", m.Name, r, err)
+		name := r + "." + backend(m)
+		if err := c.Dynamic.Resource(machinesGVR).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			waiting(fmt.Sprintf("remove machine on %s: %v", r, err))
+			return
+		}
+		// Machine DELETE is asynchronous. A missing Volume alone does
+		// not prove that its guest is gone; wait for the node to confirm.
+		if _, err := c.Dynamic.Resource(machinesGVR).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+			if err != nil {
+				waiting(fmt.Sprintf("confirm machine removal on %s: %v", r, err))
+			} else {
+				waiting("waiting for the machine on " + r + " to stop")
+			}
+			return
+		}
+		if err := c.Dynamic.Resource(volumesGVR).Delete(ctx, r+"."+backend(m), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			waiting(fmt.Sprintf("remove volume on %s: %v", r, err))
 			return
 		}
 	}
-	u, err := c.Dynamic.Resource(vmsGVR).Get(ctx, m.Name, metav1.GetOptions{})
-	if err != nil {
+	u, err := c.machines(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	if err != nil || u.GetUID() != m.UID {
 		return
 	}
 	var keep []string
@@ -386,7 +459,7 @@ func (c *Controller) cleanup(ctx context.Context, m *v1.VirtualMachine, nodes []
 		}
 	}
 	u.SetFinalizers(keep)
-	_, _ = c.Dynamic.Resource(vmsGVR).Update(ctx, u, metav1.UpdateOptions{})
+	_, _ = c.machines(m.Namespace).Update(ctx, u, metav1.UpdateOptions{})
 }
 
 func (c *Controller) ensureFinalizer(ctx context.Context, m *v1.VirtualMachine) error {
@@ -395,12 +468,15 @@ func (c *Controller) ensureFinalizer(ctx context.Context, m *v1.VirtualMachine) 
 			return nil
 		}
 	}
-	u, err := c.Dynamic.Resource(vmsGVR).Get(ctx, m.Name, metav1.GetOptions{})
+	u, err := c.machines(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
+	if u.GetUID() != m.UID {
+		return fmt.Errorf("machine %s was replaced during reconciliation", key(m))
+	}
 	u.SetFinalizers(append(u.GetFinalizers(), finalizer))
-	_, err = c.Dynamic.Resource(vmsGVR).Update(ctx, u, metav1.UpdateOptions{})
+	_, err = c.machines(m.Namespace).Update(ctx, u, metav1.UpdateOptions{})
 	return err
 }
 
@@ -408,59 +484,14 @@ func (c *Controller) writeStatus(ctx context.Context, m *v1.VirtualMachine, st v
 	if reflect.DeepEqual(m.Status, st) {
 		return
 	}
-	u, err := c.Dynamic.Resource(vmsGVR).Get(ctx, m.Name, metav1.GetOptions{})
-	if err != nil {
+	u, err := c.machines(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	if err != nil || u.GetUID() != m.UID {
 		return
 	}
 	u.Object["status"] = toMap(&st)
-	if _, err := c.Dynamic.Resource(vmsGVR).UpdateStatus(ctx, u, metav1.UpdateOptions{}); err != nil {
+	if _, err := c.machines(m.Namespace).UpdateStatus(ctx, u, metav1.UpdateOptions{}); err != nil {
 		klog.V(2).Infof("status of %s: %v", m.Name, err)
 	}
-}
-
-// gateway gives the machines' network its gateway on this node: the
-// network's first address on the bridge, NAT out of the node's other links,
-// and DHCP and DNS.
-func (c *Controller) gateway() error {
-	if !c.Network.IsValid() {
-		return nil
-	}
-	gw := c.Network.Masked().Addr().Next()
-	addr := netip.PrefixFrom(gw, c.Network.Bits()).String()
-	start, end := gw.Next().Next(), lastHost(c.Network)
-	cfg := router.Config{
-		Interfaces: []routerv1.Interface{{ObjectMeta: metav1.ObjectMeta{Name: "machines"}, Spec: routerv1.InterfaceSpec{Link: vm.Bridge, Addresses: []string{addr}}}},
-		DHCP: []routerv1.DHCPServer{{ObjectMeta: metav1.ObjectMeta{Name: "machines"}, Spec: routerv1.DHCPServerSpec{
-			Link: vm.Bridge, RangeStart: start.String(), RangeEnd: end.String(), LeaseTime: "12h"}}},
-	}
-	if out, err := uplink(); err == nil {
-		cfg.NAT = []routerv1.NATRule{{ObjectMeta: metav1.ObjectMeta{Name: "machines"},
-			Spec: routerv1.NATRuleSpec{Masquerade: &routerv1.Masquerade{OutLink: out, Sources: []string{c.Network.Masked().String()}}}}}
-	}
-	ok, problems := router.Check(cfg)
-	if len(problems) > 0 {
-		return fmt.Errorf("%v", problems)
-	}
-	for _, err := range router.ApplyInterfaces(ok.Interfaces) {
-		return err // the bridge comes with the node's machines' network
-	}
-	if rs := router.Ruleset(ok); rs != c.nft {
-		cmd := exec.Command("nft", "-f", "-")
-		cmd.Stdin = strings.NewReader(rs)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("nft: %v: %s", err, out)
-		}
-		c.nft = rs
-	}
-	conf := router.DnsmasqConfig(ok, c.leaseFile()) + "user=root\npid-file=\n"
-	if conf != c.conf || !c.dhcp.Running() {
-		if err := os.WriteFile(filepath.Join(c.StateDir, "dnsmasq.conf"), []byte(conf), 0o644); err != nil {
-			return err
-		}
-		c.dhcp.Restart()
-		c.conf = conf
-	}
-	return nil
 }
 
 func (c *Controller) leaseFile() string { return filepath.Join(c.StateDir, "dnsmasq.leases") }
@@ -490,24 +521,6 @@ func newestLeases(leases []routerv1.Lease) map[string]string {
 		newest[mac], out[mac] = l.Expires.Time, l.Address
 	}
 	return out
-}
-
-// uplink is the link of the default route.
-func uplink() (string, error) {
-	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
-	if err != nil {
-		return "", err
-	}
-	for _, r := range routes {
-		if r.Dst == nil || r.Dst.IP.IsUnspecified() {
-			l, err := netlink.LinkByIndex(r.LinkIndex)
-			if err != nil {
-				return "", err
-			}
-			return l.Attrs().Name, nil
-		}
-	}
-	return "", fmt.Errorf("no default route")
 }
 
 func lastHost(p netip.Prefix) netip.Addr {
@@ -563,7 +576,11 @@ func machineSpec(m *v1.VirtualMachine, p Plan, running bool) nodev1.MachineSpec 
 	if cpus == 0 {
 		cpus = 1
 	}
-	return nodev1.MachineSpec{CPUs: cpus, MemoryMiB: mem, Volumes: []string{m.Name}, MAC: p.MAC, Running: running,
+	maxMemoryMiB := int64(0)
+	if m.Spec.MaxMemory != nil {
+		maxMemoryMiB = m.Spec.MaxMemory.Value() >> 20
+	}
+	return nodev1.MachineSpec{CPUs: cpus, MemoryMiB: mem, MaxCPUs: m.Spec.MaxCPUs, MaxMemoryMiB: maxMemoryMiB, Volumes: []string{backend(m)}, MAC: p.MAC, Running: running,
 		SystemSerial: systemSerial(m)}
 }
 
@@ -603,7 +620,7 @@ func (c *Controller) ensureVolumes(ctx context.Context, m *v1.VirtualMachine, p 
 				spec.Peers = append(spec.Peers, nodev1.VolumePeer{Node: peer, Address: st.ReplicaAddresses[peer], NodeID: int32(j)})
 			}
 		}
-		if err := c.ensure(ctx, volumesGVR, r+"."+m.Name, map[string]any{"spec": toMap(&spec)}); err != nil {
+		if err := c.ensure(ctx, volumesGVR, r+"."+backend(m), map[string]any{"spec": toMap(&spec)}); err != nil {
 			return fmt.Errorf("volume on %s: %w", r, err)
 		}
 	}

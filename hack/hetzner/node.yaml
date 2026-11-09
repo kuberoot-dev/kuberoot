@@ -1,6 +1,15 @@
-# A kuberoot node as a VM, like hardware: the boot media first, an empty
-# system disk second. The media is imported once from the builder; after the
-# install the node boots from its system disk.
+# A kuberoot node as a VM, like hardware: a system disk to install onto, boot
+# media to install from, and a blank disk for storage to claim. The media is
+# imported once from the builder.
+#
+# The order of the disks below is the boot order, which is why the system disk
+# is first: an empty one is not bootable, so the firmware falls through to the
+# media, and once the install has written the slots it boots them instead. With
+# the media first the node boots it again after installing, which looks like a
+# working node -- it joins the cluster and runs pods from the live system --
+# until an upgrade is refused with "not an installed system" and the node turns
+# out to have no boot slots at all.
+#
 # Applied by hack/hetzner.sh node <name> <arch>.
 apiVersion: apps.cozystack.io/v1alpha1
 kind: VMDisk
@@ -19,6 +28,18 @@ apiVersion: apps.cozystack.io/v1alpha1
 kind: VMDisk
 metadata:
   name: NODE-system
+  namespace: tenant-kuberoot
+spec:
+  optical: false
+  storage: 20Gi
+  storageClass: replicated
+---
+# Left blank for the platform's storage to claim: a node with no spare device
+# registers no storage pool, so volumes stay Pending with nothing saying why.
+apiVersion: apps.cozystack.io/v1alpha1
+kind: VMDisk
+metadata:
+  name: NODE-data
   namespace: tenant-kuberoot
 spec:
   optical: false
@@ -45,5 +66,6 @@ spec:
   - 50000
   - 6443
   disks:
-  - name: NODE-media
   - name: NODE-system
+  - name: NODE-media
+  - name: NODE-data

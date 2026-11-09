@@ -38,20 +38,45 @@ prepare() {
   tools sh -c 'command -v flex >/dev/null || { apt-get -qq update && apt-get -qq install -y flex bison bc libelf-dev libssl-dev cpio xz-utils zstd >/dev/null; }'
 }
 
-sync() {
-  # Sources only: git-tracked and new files, no build output.
-  (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^SESSION_LOG.md$' |
-    COPYFILE_DISABLE=1 tar --null -T - -czf -) |
-    tools sh -c 'rm -rf /work/src/kuberoot.new && mkdir -p /work/src/kuberoot.new && tar -xzf - -C /work/src/kuberoot.new && rm -rf /work/src/kuberoot && mv /work/src/kuberoot.new /work/src/kuberoot'
-}
-
 SRC=/work/src/kuberoot
-ENV="KUBEROOT_OUT=/work/out WORK=/work"
+
+# sync ships the sources: git-tracked and new files, no build output.
+#
+# The stream crosses the API server, and a tunnel that stalls mid-transfer
+# leaves the builder with the tree it already had: the unpack and the swap
+# are chained, so a torn transfer changes nothing on the far side. That is
+# the safe outcome and also the treacherous one, because whatever builds
+# next compiles the previous sources and looks like it worked. So: retry,
+# then count what landed, and say so when the counts disagree.
+sync() {
+  local want got attempt
+  want=$(cd "$ROOT" && git ls-files -co --exclude-standard | grep -cv '^SESSION_LOG.md$')
+  for attempt in 1 2 3; do
+    if (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^SESSION_LOG.md$' |
+      COPYFILE_DISABLE=1 tar --null -T - -czf -) |
+      tools sh -c "rm -rf $SRC.new && mkdir -p $SRC.new && tar -xzf - -C $SRC.new && rm -rf $SRC && mv $SRC.new $SRC"
+    then
+      got=$(tools sh -c "find $SRC -type f | wc -l" | tr -cd '0-9')
+      [ "$got" = "$want" ] && return 0
+      echo "hetzner.sh: sync put $got of $want files on the builder (attempt $attempt)" >&2
+    else
+      echo "hetzner.sh: sync could not reach the builder (attempt $attempt)" >&2
+    fi
+    sleep 3
+  done
+  echo "hetzner.sh: the builder does not have the current sources; nothing was built" >&2
+  return 1
+}
+# nproc sees the host's CPUs, while the builder has a much smaller quota.
+# Bound compilation by default and forward an explicit override remotely.
+VM_API_TRANSITION=${KUBEROOT_VM_API_TRANSITION:-0}
+case "$VM_API_TRANSITION" in 0|1) ;; *) echo "KUBEROOT_VM_API_TRANSITION must be 0 or 1" >&2; exit 1 ;; esac
+ENV="KUBEROOT_OUT=/work/out WORK=/work JOBS=${JOBS:-4} GOMAXPROCS=${GOMAXPROCS:-4} KUBEROOT_VM_API_TRANSITION=$VM_API_TRANSITION"
 case "${1:-}" in
   sync) sync ;;
   kernel)
     prepare; sync
-    tools sh -c "$ENV $SRC/scripts/build-kernel.sh $2 && $ENV $SRC/scripts/build-drbd.sh $2" ;;
+    tools sh -c "$ENV KUBEROOT_DISTRO=${KUBEROOT_DISTRO:-edge} $SRC/scripts/build-kernel.sh $2 && $ENV KUBEROOT_DISTRO=${KUBEROOT_DISTRO:-edge} $SRC/scripts/build-drbd.sh $2" ;;
   build)
     arch=${2:?arch required}
     prepare; sync
@@ -61,6 +86,10 @@ case "${1:-}" in
     tools sh -c "[ -f /work/out/$arch/vmlinuz.efi ] && [ \"\$(cat /work/out/$arch/kernel.flavour 2>/dev/null || echo base)\" = $flavour ] || { $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-kernel.sh $arch && $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-drbd.sh $arch; }"
     tools sh -c "cd $SRC && $ENV KUBEROOT_STORE_LAB=${KUBEROOT_STORE_LAB:-} scripts/build-binaries.sh $arch"
     case "$distro" in
+      cloud|hypervisor|workstation)
+        if [ "$arch" = arm64 ]; then
+          tools sh -c "$ENV $SRC/scripts/build-vmm.sh arm64"
+        fi ;;
       ai) tools sh -c "$ENV $SRC/scripts/build-llama.sh $arch && $ENV $SRC/scripts/build-nvidia.sh $arch && $ENV $SRC/scripts/build-llama-cuda.sh $arch" ;;
       rt) tools sh -c "$ENV $SRC/scripts/build-rt-tests.sh $arch" ;;
     esac
@@ -113,7 +142,9 @@ case "${1:-}" in
     tools sh -c "KUBECONFIG=/work/kube/$c.conf /work/bin/kubectl $*" ;;
   test)
     sync
-    tools sh -c "cd $SRC && go test ./... 2>&1 | grep -v 'no test files'" ;;
+    # A filtering pipeline in /bin/sh returned grep's status and hid failing
+    # tests. Return the Go command's status directly to the caller.
+    tools sh -c "cd $SRC && GOMAXPROCS=${GOMAXPROCS:-4} go test -p ${JOBS:-4} ./..." ;;
   sh)
     shift
     if [ $# -eq 0 ]; then k exec -it builder -c tools -- bash; else tools sh -c "$*"; fi ;;

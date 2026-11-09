@@ -4,6 +4,7 @@
 package upgrade
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,6 +72,15 @@ func otherSlot(slot string) string {
 }
 
 // withESP mounts the EFI partition of the system disk for the duration of fn.
+//
+// A call that mounted the partition and then failed to unmount it used to
+// leave it mounted here with nothing said about it. Every call after that one
+// failed at the mount with EBUSY, which reads as a problem reaching the
+// partition rather than as the leak it is, and a node has no shell to clear
+// the mount by hand: the slots stayed unreadable, and the staging of a release
+// stayed impossible, until the node rebooted. So a mount found here on the way
+// in is taken down first, and an unmount that fails on the way out is reported
+// rather than dropped.
 func withESP(fn func() error) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -81,14 +91,60 @@ func withESP(fn func() error) error {
 	if err := os.MkdirAll(efiMount, 0o755); err != nil {
 		return err
 	}
+	mounted, err := isMountPoint(efiMount)
+	if err != nil {
+		return err
+	}
+	if mounted {
+		if err := unmountESP(efiMount, unix.Unmount); err != nil {
+			return fmt.Errorf("EFI partition was left mounted at %s by an earlier call and cannot be unmounted: %w", efiMount, err)
+		}
+	}
 	if err := unix.Mount(dev, efiMount, "vfat", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, "umask=0077"); err != nil {
 		return fmt.Errorf("mount EFI partition: %w", err)
 	}
-	defer func() {
-		unix.Sync()
-		_ = unix.Unmount(efiMount, 0)
-	}()
-	return fn()
+	err = fn()
+	unix.Sync()
+	if uerr := unmountESP(efiMount, unix.Unmount); uerr != nil && err == nil {
+		err = fmt.Errorf("unmount EFI partition: %w", uerr)
+	}
+	return err
+}
+
+// unmountESP unmounts path, detaching it when it is still busy. A detached
+// mount leaves the mount point free straight away and releases the filesystem
+// once its last user is gone, which is what keeps one open file from making
+// every later call fail at the mount.
+func unmountESP(path string, unmount func(string, int) error) error {
+	err := unmount(path, 0)
+	switch {
+	case err == nil:
+		return nil
+	// Not a mount point: something else already took it down, which is the
+	// state this is for.
+	case errors.Is(err, unix.EINVAL):
+		return nil
+	case errors.Is(err, unix.EBUSY):
+		return unmount(path, unix.MNT_DETACH)
+	default:
+		return err
+	}
+}
+
+// isMountPoint reports whether path has a filesystem mounted on it, by the
+// device it sits on differing from its parent's.
+func isMountPoint(path string) (bool, error) {
+	var st, parent unix.Stat_t
+	if err := unix.Stat(path, &st); err != nil {
+		if errors.Is(err, unix.ENOENT) {
+			return false, nil
+		}
+		return false, err
+	}
+	if err := unix.Stat(filepath.Dir(path), &parent); err != nil {
+		return false, err
+	}
+	return st.Dev != parent.Dev, nil
 }
 
 // Entries lists the slot entries, newest first.

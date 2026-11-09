@@ -138,6 +138,39 @@ func TestParseLeases(t *testing.T) {
 	}
 }
 
+func TestDnsmasqStaticAuthority(t *testing.T) {
+	ok, problems := Check(gateway())
+	if len(problems) != 0 {
+		t.Fatal(problems)
+	}
+	got := DnsmasqStaticConfig(ok)
+	for _, want := range []string{
+		"leasefile-ro\n",
+		"dhcp-range=set:s-lan,192.168.10.100,static,255.255.255.0,12h\n",
+		"dhcp-host=52:54:00:aa:bb:cc,192.168.10.5,server\n",
+		"dhcp-option=tag:s-lan,option:router,192.168.10.1\n",
+		"dhcp-option=tag:s-lan,option:dns-server,192.168.10.1\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("static DHCP lacks %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{"dhcp-leasefile=", "dhcp-script=", "dhcp-luascript=", "192.168.10.100,192.168.10.199,255.255.255.0"} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("static DHCP retained another lease authority %q:\n%s", forbidden, got)
+		}
+	}
+	if DnsmasqStaticConfig(Config{}) != "" {
+		t.Fatal("static DHCP runs with no configured server")
+	}
+	// The old public renderer remains persistent and dynamic for the generic
+	// router and frozen transition-only legacy controller.
+	legacy := DnsmasqConfig(ok, "legacy.leases")
+	if strings.Contains(legacy, "leasefile-ro") || strings.Contains(legacy, ",static,") || !strings.Contains(legacy, "dhcp-leasefile=legacy.leases\n") {
+		t.Fatalf("generic DHCP behavior changed:\n%s", legacy)
+	}
+}
+
 func TestBirdConfig(t *testing.T) {
 	c := Config{
 		BGP: []v1.BGPRouter{{ObjectMeta: named("default"), Spec: v1.BGPRouterSpec{ASN: 65010, Announce: []string{"192.168.10.0/24", "fd00:10::/64"}, Import: "All"}}},

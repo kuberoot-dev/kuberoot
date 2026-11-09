@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	routerv1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
-	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha2"
 )
 
 func cluster(down string, since time.Time) []Node {
@@ -25,7 +25,7 @@ func cluster(down string, since time.Time) []Node {
 
 func TestPlanPlacesReplicasAndPicksTheLeastLoaded(t *testing.T) {
 	now := time.Now()
-	m := v1.VirtualMachine{ObjectMeta: metav1.ObjectMeta{Name: "web"}, Spec: v1.VirtualMachineSpec{Replicas: 2}}
+	m := v1.VirtualMachine{ObjectMeta: metav1.ObjectMeta{Name: "web"}, Spec: v1.VirtualMachineSpec{Replicas: 2}, Status: v1.VirtualMachineStatus{BackendID: "web"}}
 	p := PlanFor(m, cluster("", now), map[int32]bool{100: true}, map[string]int{"a": 2, "b": 0, "c": 1}, nil, now)
 	if p.Waiting != "" || strings.Join(p.ReplicaNodes, ",") != "b,c" || p.Node != "b" {
 		t.Errorf("plan = %+v", p)
@@ -104,6 +104,7 @@ func TestNewestLeaseWins(t *testing.T) {
 func TestSystemSerialPointsToTheSeed(t *testing.T) {
 	m := &v1.VirtualMachine{}
 	m.Name = "desk"
+	m.Status.BackendID = "desk"
 	if got := systemSerial(m); got != "" {
 		t.Fatalf("a machine without user data got %q", got)
 	}

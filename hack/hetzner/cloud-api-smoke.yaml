@@ -1,0 +1,100 @@
+# Legacy workload for the separate installed cloud-stage2-1 only.
+# Capture preservation baseline AFTER rolling out the transition image.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloud-api
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: observer
+  namespace: cloud-api
+spec:
+  containers:
+  - name: alpine
+    image: docker.io/library/alpine:3.22.2
+    command: [/bin/sh, -c]
+    args: ['trap "exit 0" TERM INT; while :; do sleep 3600 & wait $!; done']
+    resources:
+      requests: {cpu: 10m, memory: 16Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+---
+apiVersion: vm.kuberoot.dev/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: api-preserve
+spec:
+  cpus: 1
+  memory: 768Mi
+  replicas: 1
+  running: true
+  disk:
+    size: 4Gi
+    image: https://cloud.debian.org/cdimage/cloud/trixie/20261001-2618/debian-13-genericcloud-amd64-20261001-2618.qcow2
+  userData: |
+    #cloud-config
+    package_update: false
+    write_files:
+    - path: /usr/local/bin/cloud-api-observer
+      permissions: '0755'
+      content: |
+        #!/usr/bin/python3
+        import hashlib
+        import http.server
+        import json
+        import os
+        import pathlib
+        import subprocess
+        import uuid
+        marker = pathlib.Path('/var/lib/cloud-api-persistence')
+        if not marker.exists():
+            with marker.open('x') as f:
+                f.write(str(uuid.uuid4()) + '\n')
+                f.flush()
+                os.fsync(f.fileno())
+        def command(*args):
+            return subprocess.check_output(args, text=True).strip()
+        class Observer(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                try:
+                    root_device = command('findmnt', '-n', '-o', 'SOURCE', '/')
+                    data = dict(
+                        boot_id=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                        uptime_seconds=float(pathlib.Path('/proc/uptime').read_text().split()[0]),
+                        nproc=int(command('nproc')),
+                        meminfo=pathlib.Path('/proc/meminfo').read_text(),
+                        root_device=root_device,
+                        root_uuid=command('blkid', '-s', 'UUID', '-o', 'value', root_device),
+                        marker_sha256=hashlib.sha256(marker.read_bytes()).hexdigest(),
+                        cloud_init_instance_id=pathlib.Path('/var/lib/cloud/data/instance-id').read_text().strip(),
+                        system_serial=pathlib.Path('/sys/class/dmi/id/product_serial').read_text().strip())
+                    body = json.dumps(data).encode()
+                    self.send_response(200)
+                except Exception as error:
+                    body = json.dumps({'error': str(error)}).encode()
+                    self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+        http.server.HTTPServer(('0.0.0.0', 8080), Observer).serve_forever()
+    - path: /etc/systemd/system/cloud-api-observer.service
+      content: |
+        [Unit]
+        Description=Stage2 guest identity and disk preservation observation
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        ExecStart=/usr/local/bin/cloud-api-observer
+        Restart=on-failure
+        [Install]
+        WantedBy=multi-user.target
+    runcmd:
+    - [systemctl, daemon-reload]
+    - [systemctl, enable, --now, cloud-api-observer.service]
+    - [sh, -c, 'echo KUBEROOT_STAGE2_READY > /dev/ttyS0']

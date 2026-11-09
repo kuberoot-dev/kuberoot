@@ -268,6 +268,38 @@ func (s *upgradeStorage) ConvertToTable(_ context.Context, obj runtime.Object, _
 		}), nil
 }
 
+// How long the boot assessment keeps trying to read the boot entries and to
+// record a healthy slot. Both are steps of this boot's one chance to confirm
+// the slot, and a moment's failure in either used to spend that chance.
+const (
+	assessTries = 5
+	assessPause = 3 * time.Second
+)
+
+// Seams for the tests: the assessment's two steps against the EFI partition.
+var (
+	readEntries = upgrade.Entries
+	markGood    = upgrade.MarkGood
+)
+
+// retry runs fn until it succeeds, the context ends or the attempts run out.
+func retry(ctx context.Context, attempts int, pause time.Duration, fn func() error) error {
+	var err error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(pause):
+			}
+		}
+		if err = fn(); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
 // assessBoot decides whether a slot on probation stays. Healthy means every
 // service running without restarts and the cluster API answering, for a full
 // window; otherwise the node reboots and systemd-boot spends another attempt.
@@ -275,9 +307,18 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 	if upgrade.CurrentSlot() == "" {
 		return
 	}
-	entries, err := upgrade.Entries()
-	if err != nil {
-		klog.Errorf("boot assessment: %v", err)
+	var entries []upgrade.Entry
+	if err := retry(ctx, assessTries, assessPause, func() error {
+		var err error
+		entries, err = readEntries()
+		return err
+	}); err != nil {
+		// Giving up here is not neutral: the slot stays on probation, every
+		// boot spends one of its attempts, and when they run out the node
+		// goes back to the slot it came from. That happened over a failure
+		// to read the entries at all, with nothing but this line to say so
+		// on a node that has no shell to look with.
+		klog.Errorf("boot assessment: cannot read the boot entries, so this boot cannot confirm its slot and spends one of its attempts: %v", err)
 		return
 	}
 	onProbation, fallback := upgrade.Probation(entries)
@@ -304,8 +345,14 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 			healthySince = time.Now()
 		}
 		if time.Since(healthySince) >= window {
-			if _, err := upgrade.MarkGood(); err != nil {
-				klog.Errorf("boot assessment: mark good: %v", err)
+			// The slot has proved itself; failing to record that would throw
+			// the proof away and leave the node on its way back to the slot
+			// it came from, so this is worth more than one attempt.
+			if err := retry(ctx, assessTries, assessPause, func() error {
+				_, err := markGood()
+				return err
+			}); err != nil {
+				klog.Errorf("boot assessment: slot %s came up healthy but could not be marked good, so it stays on probation: %v", upgrade.CurrentSlot(), err)
 				return
 			}
 			klog.Infof("boot assessment: slot %s is good", upgrade.CurrentSlot())

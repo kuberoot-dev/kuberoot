@@ -35,6 +35,14 @@ type Module struct {
 
 type Spec struct {
 	Sysctls map[string]string `json:"sysctls,omitempty"`
+	// PodNetwork is how pod traffic crosses between nodes when the boot
+	// arguments do not say: "vxlan", "host-gw", or "none" for a distribution
+	// whose pods are networked by a CNI package. A distribution that always
+	// installs a CNI has to say "none" here, because the tunnel this would
+	// otherwise raise takes the UDP port the CNI's own tunnel needs, and the
+	// CNI then never finishes starting -- every pod is refused an address and
+	// nothing names the reason.
+	PodNetwork string `json:"podNetwork,omitempty"`
 	// Modules are loaded at boot, in order, from the out-of-tree modules
 	// built with the kernel; module loading is then disabled.
 	Modules []Module `json:"modules,omitempty"`

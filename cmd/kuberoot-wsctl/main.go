@@ -22,7 +22,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
+	"github.com/kuberoot-dev/kuberoot/internal/legacywsctl"
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
 	"github.com/kuberoot-dev/kuberoot/pkg/pki"
+	"github.com/kuberoot-dev/kuberoot/pkg/vmmaintenance"
 	"github.com/kuberoot-dev/kuberoot/pkg/wsctl"
 )
 
@@ -63,11 +66,37 @@ func main() {
 			certs.Names = append(certs.Names, n)
 		}
 	}
-	gw := &wsctl.Gateway{NoVNC: *novnc, Advertise: *advertise}
+	kube, client := kubernetes.NewForConfigOrDie(cfg), dynamic.NewForConfigOrDie(cfg)
+	mode, err := vmmaintenance.WaitAPIMode(ctx, client)
+	if err != nil {
+		klog.Fatalf("VM API startup selection: %v", err)
+	}
+	if mode == vmmaintenance.ModeAlpha1 && !distro.VMAPITransitionEnabled() {
+		klog.Fatal("legacy VM API requires an explicitly built transition image")
+	}
+	guard, err := vmmaintenance.New(ctx, kube, client, "kuberoot-wsctl", mode)
+	if err != nil {
+		klog.Fatalf("maintenance barrier: %v", err)
+	}
+	var handler http.Handler
+	var run func(context.Context) error
+	var getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	if mode == vmmaintenance.ModeAlpha1 {
+		legacyCerts := &legacywsctl.Certificates{Authority: certs.Authority, Names: certs.Names, IPs: certs.IPs}
+		gw := &legacywsctl.Gateway{NoVNC: *novnc, Advertise: *advertise}
+		controller := &legacywsctl.Controller{Dynamic: client, Kube: kube, Gateway: gw, Advertise: *advertise, HTTPPort: *port, Certificates: legacyCerts, Maintenance: guard}
+		handler, run, getCertificate = gw, controller.Run, legacyCerts.GetCertificate
+	} else {
+		gw := &wsctl.Gateway{NoVNC: *novnc, Advertise: *advertise}
+		controller := &wsctl.Controller{Dynamic: client, Kube: kube, Gateway: gw, Advertise: *advertise, HTTPPort: *port, Certificates: certs, Maintenance: guard}
+		handler, run, getCertificate = gw, controller.Run, certs.GetCertificate
+	}
+	klog.Infof("controller API mode: %s", mode)
+	go guard.Run(ctx)
 	// The gateway speaks only TLS: a plain HTTP request gets an error, not
 	// a desktop.
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", *port), Handler: gw, ReadHeaderTimeout: 10 * time.Second,
-		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: certs.GetCertificate}}
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", *port), Handler: handler, ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: getCertificate}}
 	go func() {
 		if err := srv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			klog.Fatalf("gateway: %v", err)
@@ -79,9 +108,7 @@ func main() {
 		defer cancel()
 		_ = srv.Shutdown(shut)
 	}()
-	c := &wsctl.Controller{Dynamic: dynamic.NewForConfigOrDie(cfg), Kube: kubernetes.NewForConfigOrDie(cfg),
-		Gateway: gw, Advertise: *advertise, HTTPPort: *port, Certificates: certs}
-	if err := c.Run(ctx); err != nil {
+	if err := run(ctx); err != nil {
 		klog.Fatal(err)
 	}
 }

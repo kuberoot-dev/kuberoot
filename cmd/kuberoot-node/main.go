@@ -45,6 +45,7 @@ func main() {
 	flag.StringVar(&o.ProxyTrustCA, "proxy-trust-ca-file", "", "CA of the control plane proxy identity (member node)")
 	flag.StringVar(&o.RoutesKubeconfig, "routes-kubeconfig", "", "credentials to read nodes and route pod subnets between them")
 	flag.BoolVar(&o.Machines, "machines", false, "run virtual machines: serve the volumes and machines resources")
+	flag.Int64Var(&o.MachineMemoryBudgetMiB, "machine-memory-budget-mib", 0, "node guest RAM budget in MiB (0: unlimited); reserve this plus OS/monitor headroom from pod allocatable")
 	flag.StringVar(&o.VMNetworkKubeconfig, "vm-network-kubeconfig", "", "credentials to read nodes and join the machines' network to them")
 	flag.BoolVar(&o.ModelServers, "model-servers", false, "serve language models: the modelservers resource")
 	flag.BoolVar(&o.GPUs, "gpus", false, "make NVIDIA GPUs usable: device files and their CDI description")

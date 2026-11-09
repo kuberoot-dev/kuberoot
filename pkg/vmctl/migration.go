@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
 
-	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha2"
 )
 
 // MigrationTimeout ends a live move that has not finished, leaving the
@@ -59,8 +59,8 @@ func (c *Controller) migrate(ctx context.Context, m *v1.VirtualMachine, p Plan, 
 	port := migrationPort(p)
 	abort := func(reason string) v1.VirtualMachineStatus {
 		klog.Errorf("%s: live move to %s failed: %s", m.Name, dst, reason)
-		_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, dst+"."+m.Name, metav1.DeleteOptions{})
-		_ = c.ensure(ctx, machinesGVR, src+"."+m.Name, map[string]any{"spec": toMap(ptr(machineSpec(m, p, true)))})
+		_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, dst+"."+backend(m), metav1.DeleteOptions{})
+		_ = c.ensure(ctx, machinesGVR, src+"."+backend(m), map[string]any{"spec": toMap(ptr(machineSpec(m, p, true)))})
 		_ = c.ensureVolumes(ctx, m, p, &st, byName, map[string]bool{src: true}, bothPrimary(mine))
 		st.Migration, st.FailedMigration, st.Phase = nil, dst, "Running"
 		st.Message = "live move to " + dst + " failed: " + reason
@@ -74,7 +74,7 @@ func (c *Controller) migrate(ctx context.Context, m *v1.VirtualMachine, p Plan, 
 	}
 	switch mg.Phase {
 	case "Preparing":
-		if phase, _ := c.machinePhase(ctx, dst+"."+m.Name); phase == "Deleting" {
+		if phase, _ := c.machinePhase(ctx, dst+"."+backend(m)); phase == "Deleting" {
 			st.Message = "waiting for the machine left on " + dst + " to go"
 			return st
 		}
@@ -85,17 +85,17 @@ func (c *Controller) migrate(ctx context.Context, m *v1.VirtualMachine, p Plan, 
 		if mine[dst].role == "Primary" {
 			recv := machineSpec(m, p, true)
 			recv.Receive = fmt.Sprintf("tcp:0.0.0.0:%d", port)
-			if err := c.ensure(ctx, machinesGVR, dst+"."+m.Name, map[string]any{"spec": toMap(&recv)}); err != nil {
+			if err := c.ensure(ctx, machinesGVR, dst+"."+backend(m), map[string]any{"spec": toMap(&recv)}); err != nil {
 				return abort(err.Error())
 			}
 			mg.Phase = "Receiving"
 		}
 	case "Receiving":
-		switch phase, msg := c.machinePhase(ctx, dst+"."+m.Name); phase {
+		switch phase, msg := c.machinePhase(ctx, dst+"."+backend(m)); phase {
 		case "Receiving":
 			send := machineSpec(m, p, true)
 			send.SendTo = fmt.Sprintf("tcp:%s:%d", st.ReplicaAddresses[dst], port)
-			if err := c.ensure(ctx, machinesGVR, src+"."+m.Name, map[string]any{"spec": toMap(&send)}); err != nil {
+			if err := c.ensure(ctx, machinesGVR, src+"."+backend(m), map[string]any{"spec": toMap(&send)}); err != nil {
 				return abort(err.Error())
 			}
 			mg.Phase = "Sending"
@@ -103,17 +103,17 @@ func (c *Controller) migrate(ctx context.Context, m *v1.VirtualMachine, p Plan, 
 			return abort("the target could not receive: " + msg)
 		}
 	case "Sending":
-		srcPhase, srcMsg := c.machinePhase(ctx, src+"."+m.Name)
-		dstPhase, dstMsg := c.machinePhase(ctx, dst+"."+m.Name)
+		srcPhase, srcMsg := c.machinePhase(ctx, src+"."+backend(m))
+		dstPhase, dstMsg := c.machinePhase(ctx, dst+"."+backend(m))
 		switch {
 		case srcPhase == "Sent" && dstPhase == "Running":
 			// The machine runs on the target: it is the machine's node now.
 			klog.Infof("%s: moved alive from %s to %s", m.Name, src, dst)
-			if err := c.ensure(ctx, machinesGVR, dst+"."+m.Name, map[string]any{"spec": toMap(ptr(machineSpec(m, p, true)))}); err != nil {
+			if err := c.ensure(ctx, machinesGVR, dst+"."+backend(m), map[string]any{"spec": toMap(ptr(machineSpec(m, p, true)))}); err != nil {
 				st.Message = err.Error()
 				return st
 			}
-			_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, src+"."+m.Name, metav1.DeleteOptions{})
+			_ = c.Dynamic.Resource(machinesGVR).Delete(ctx, src+"."+backend(m), metav1.DeleteOptions{})
 			st.Node, st.Migration, st.Phase, st.Message = dst, nil, "Running", "moved alive from "+src
 			p.Node = dst
 			_ = c.ensureVolumes(ctx, m, p, &st, byName, map[string]bool{dst: true}, true)

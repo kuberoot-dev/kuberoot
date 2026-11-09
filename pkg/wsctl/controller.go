@@ -24,8 +24,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	vmv1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha1"
+	vmv1 "github.com/kuberoot-dev/kuberoot/pkg/apis/vm/v1alpha2"
 	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/workstation/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/vmmaintenance"
 )
 
 const (
@@ -47,9 +48,10 @@ var (
 // Controller keeps each workspace's machine, credentials and status, and
 // tells the gateway where each desktop is.
 type Controller struct {
-	Dynamic dynamic.Interface
-	Kube    kubernetes.Interface
-	Gateway *Gateway
+	Maintenance *vmmaintenance.Guard
+	Dynamic     dynamic.Interface
+	Kube        kubernetes.Interface
+	Gateway     *Gateway
 	// Advertise is the address people reach the gateway at; HTTPPort its
 	// port for browsers.
 	Advertise string
@@ -78,6 +80,9 @@ const (
 )
 
 func (c *Controller) Run(ctx context.Context) error {
+	if c.Maintenance == nil || c.Maintenance.Mode != vmmaintenance.ModeAlpha2 {
+		return fmt.Errorf("maintenance guard with matching controller API mode is required")
+	}
 	if c.Reachable == nil {
 		c.Reachable = func(address string, port int) bool {
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(address, fmt.Sprint(port)), 2*time.Second)
@@ -89,7 +94,15 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 	}
 	for {
-		c.reconcile(ctx)
+		if err := c.Maintenance.Work(ctx, func(ctx context.Context) error {
+			if err := vmmaintenance.APIReady(ctx, c.Dynamic); err != nil {
+				return err
+			}
+			c.reconcile(ctx)
+			return nil
+		}); err != nil {
+			klog.Errorf("workspace reconcile: %v", err)
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -278,7 +291,7 @@ func (c *Controller) apply(ctx context.Context, w *v1.Workspace, used map[int32]
 	}
 	st.RDP = net.JoinHostPort(c.Advertise, fmt.Sprint(st.RDPPort))
 
-	u, err := c.Dynamic.Resource(vmsGVR).Get(ctx, MachineName(w.Name), metav1.GetOptions{})
+	u, err := c.Dynamic.Resource(vmsGVR).Namespace(Namespace).Get(ctx, MachineName(w.Name), metav1.GetOptions{})
 	if err != nil {
 		return st, Route{}, err
 	}
@@ -361,7 +374,7 @@ func machineSpec(w *v1.Workspace) vmv1.VirtualMachineSpec {
 	spec := vmv1.VirtualMachineSpec{CPUs: w.Spec.CPUs, Memory: w.Spec.Memory, Running: w.Spec.Running,
 		Replicas: w.Spec.Replicas, Node: w.Spec.Node,
 		Disk:           vmv1.Disk{Size: w.Spec.Disk, Image: image},
-		UserDataSecret: &vmv1.SecretRef{Namespace: Namespace, Name: w.Name + "-userdata"}}
+		UserDataSecret: &vmv1.SecretRef{Name: w.Name + "-userdata"}}
 	if spec.CPUs == 0 {
 		spec.CPUs = 2
 	}
@@ -384,12 +397,12 @@ func (c *Controller) ensureMachine(ctx context.Context, w *v1.Workspace) error {
 	if err != nil {
 		return err
 	}
-	r := c.Dynamic.Resource(vmsGVR)
+	r := c.Dynamic.Resource(vmsGVR).Namespace(Namespace)
 	cur, err := r.Get(ctx, MachineName(w.Name), metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		obj := &unstructured.Unstructured{Object: map[string]any{
 			"apiVersion": vmv1.GroupVersion.String(), "kind": "VirtualMachine",
-			"metadata": map[string]any{"name": MachineName(w.Name),
+			"metadata": map[string]any{"name": MachineName(w.Name), "namespace": Namespace,
 				"labels": map[string]any{"workstation.kuberoot.dev/workspace": w.Name}},
 			"spec": want}}
 		_, err = r.Create(ctx, obj, metav1.CreateOptions{})
@@ -418,7 +431,7 @@ func ptr[T any](v T) *T { return &v }
 // cleanup removes a deleted workspace's machine and Secrets, then lets it
 // go once the machine is gone.
 func (c *Controller) cleanup(ctx context.Context, w *v1.Workspace) {
-	err := c.Dynamic.Resource(vmsGVR).Delete(ctx, MachineName(w.Name), metav1.DeleteOptions{})
+	err := c.Dynamic.Resource(vmsGVR).Namespace(Namespace).Delete(ctx, MachineName(w.Name), metav1.DeleteOptions{})
 	if err == nil {
 		return // gone on a later pass, once its nodes let it go
 	}

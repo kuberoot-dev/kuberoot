@@ -90,6 +90,8 @@ type Options struct {
 	// resources), on a network joined to the nodes VMNetworkKubeconfig lists.
 	Machines            bool
 	VMNetworkKubeconfig string
+	// MachineMemoryBudgetMiB caps guest RAM; zero preserves unlimited admission.
+	MachineMemoryBudgetMiB int64
 
 	// ModelServers: the node serves language models (modelservers resource),
 	// with all its memory but ModelReserveMiB for them.
@@ -137,6 +139,9 @@ func init() {
 
 // Run serves the node API until ctx is cancelled.
 func Run(ctx context.Context, o Options) error {
+	if o.MachineMemoryBudgetMiB < 0 {
+		return fmt.Errorf("machine-memory-budget-mib must not be negative")
+	}
 	cfg := genericapiserver.NewRecommendedConfig(codecs)
 	cfg.EffectiveVersion = basecompatibility.NewEffectiveVersionFromString("1.37", "", "")
 
@@ -174,7 +179,7 @@ func Run(ctx context.Context, o Options) error {
 	storages := enabledResources(o.Resources, resourceDeps{nodeName: o.NodeName, kinit: kinit, fleet: agent})
 	var vms *vmHost
 	if o.Machines {
-		vms = newVMHost(o.NodeName, o.Advertise)
+		vms = newVMHost(o.NodeName, o.Advertise, o.MachineMemoryBudgetMiB)
 		storages["volumes"], storages["machines"] = volumeStorage{vms}, machineStorage{vms}
 	}
 	var models *modelHost
@@ -265,15 +270,16 @@ func Run(ctx context.Context, o Options) error {
 	if models != nil {
 		go models.run(ctx)
 	}
-	if len(o.APIServers) > 0 && o.APIBalancer != "" {
-		b := newAPIBalancer(o.APIServers)
+	servers, follow := balancerTargets(o)
+	if len(servers) > 0 && o.APIBalancer != "" {
+		b := newAPIBalancer(servers)
 		go func() {
 			if err := b.serve(ctx, o.APIBalancer); err != nil {
 				klog.Errorf("API balancer: %v", err)
 			}
 		}()
-		if o.APIKubeconfig != "" {
-			go b.follow(ctx, o.APIKubeconfig)
+		if follow != "" {
+			go b.follow(ctx, follow)
 		}
 	}
 	if o.GPUs {

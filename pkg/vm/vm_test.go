@@ -50,9 +50,10 @@ func TestParseStatus(t *testing.T) {
 
 func TestMachineArgs(t *testing.T) {
 	m := &Machines{}
-	got := strings.Join(m.Args("web", node.MachineSpec{CPUs: 2, MemoryMiB: 1024, MAC: "52:54:00:aa:bb:cc"}, []string{"/dev/drbd100"}), " ")
+	got := strings.Join(m.Args("web", node.MachineSpec{CPUs: 2, MemoryMiB: 1024, MAC: "52:54:00:aa:bb:cc"}, []string{"/dev/drbd100", "/dev/drbd101"}), " ")
 	for _, want := range []string{"--cpus boot=2", "--memory size=1024M", "--firmware /usr/share/kuberoot/CLOUDHV.fd",
-		"--disk path=/dev/drbd100", "--net tap=" + TapName("web") + ",mac=52:54:00:aa:bb:cc", "--api-socket path=/run/kuberoot/vm/web.sock"} {
+		"--disk path=/dev/drbd100,image_type=raw", "--disk path=/dev/drbd101,image_type=raw",
+		"--net tap=" + TapName("web") + ",mac=52:54:00:aa:bb:cc", "--api-socket path=/run/kuberoot/vm/web.sock"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("args lack %q: %s", want, got)
 		}

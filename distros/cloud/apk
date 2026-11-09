@@ -1,0 +1,5 @@
+# Replicated disks (DRBD), disk images, and DHCP for the machines' network.
+drbd-utils
+qemu-img
+dnsmasq
+losetup

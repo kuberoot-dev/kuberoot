@@ -17,13 +17,30 @@ import (
 // on their links and a DNS cache there in front of the router's resolvers.
 // It is empty when there is nothing to serve.
 func DnsmasqConfig(c Config, leaseFile string) string {
+	return dnsmasqConfig(c, leaseFile, false)
+}
+
+// DnsmasqStaticConfig serves only the supplied reservations. The caller owns
+// their durable state, so an old local lease database must neither override
+// an assignment nor make dnsmasq offer an unrelated dynamic address.
+func DnsmasqStaticConfig(c Config) string {
+	return dnsmasqConfig(c, "", true)
+}
+
+func dnsmasqConfig(c Config, leaseFile string, staticOnly bool) string {
 	if len(c.DHCP) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("# Written by kuberoot-router from the DHCPServer resources.\n")
 	b.WriteString("keep-in-foreground\nno-hosts\nbind-dynamic\ndhcp-authoritative\nresolv-file=/etc/resolv.conf\n")
-	fmt.Fprintf(&b, "dhcp-leasefile=%s\n", leaseFile)
+	if staticOnly {
+		// Without a lease-change script, this disables reading, creating and
+		// writing the lease file; active leases exist only in this process.
+		b.WriteString("leasefile-ro\n")
+	} else {
+		fmt.Fprintf(&b, "dhcp-leasefile=%s\n", leaseFile)
+	}
 	for _, d := range c.DHCP {
 		s := d.Spec
 		tag := "s-" + d.Name
@@ -41,7 +58,11 @@ func DnsmasqConfig(c Config, leaseFile string) string {
 			lease = "12h"
 		}
 		fmt.Fprintf(&b, "\n# DHCPServer %s\ninterface=%s\n", d.Name, s.Link)
-		fmt.Fprintf(&b, "dhcp-range=set:%s,%s,%s,%s,%s\n", tag, s.RangeStart, s.RangeEnd, netmask(linkNet4(c.Interfaces, s.Link)), lease)
+		if staticOnly {
+			fmt.Fprintf(&b, "dhcp-range=set:%s,%s,static,%s,%s\n", tag, s.RangeStart, netmask(linkNet4(c.Interfaces, s.Link)), lease)
+		} else {
+			fmt.Fprintf(&b, "dhcp-range=set:%s,%s,%s,%s,%s\n", tag, s.RangeStart, s.RangeEnd, netmask(linkNet4(c.Interfaces, s.Link)), lease)
+		}
 		fmt.Fprintf(&b, "dhcp-option=tag:%s,option:router,%s\n", tag, gateway)
 		fmt.Fprintf(&b, "dhcp-option=tag:%s,option:dns-server,%s\n", tag, strings.Join(dns, ","))
 		if s.Domain != "" {

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
 )
 
 const rootImage = "/rootfs.squashfs"
@@ -49,11 +51,13 @@ func boot() error {
 	var uts unix.Utsname
 	_ = unix.Uname(&uts)
 	log.Printf("kuberoot booting, kernel %s, uptime %s", unix.ByteSliceToString(uts.Release[:]), uptime())
+	go watchCPUHotplug()
 
 	waitForEntropy()
 	cfg := loadCmdline()
-	podNetworkMode = cfg.podNetwork
 	activeProfile = loadProfileOrRescue()
+	cfg.podNetwork = podNetworkDefault(cfg.podNetwork, activeProfile)
+	podNetworkMode = cfg.podNetwork
 	loadModulesAndLock(activeProfile.Spec.Modules)
 	if err := applySysctls(activeProfile.Spec.Sysctls); err != nil {
 		log.Printf("sysctls: %v", err)
@@ -195,4 +199,21 @@ func uptime() string {
 		return "?"
 	}
 	return (unixSeconds(info.Uptime)).String()
+}
+
+// podNetworkDefault settles how pod traffic crosses between nodes: the boot
+// argument first, then what the distribution declares, and vxlan when neither
+// says. A distribution that installs a CNI declares "none", so the node does
+// not raise a tunnel of its own on the port the CNI needs.
+func podNetworkDefault(fromCmdline string, profile *distro.Profile) string {
+	if fromCmdline != "" {
+		return fromCmdline
+	}
+	if profile != nil {
+		switch profile.Spec.PodNetwork {
+		case "vxlan", "host-gw", "none":
+			return profile.Spec.PodNetwork
+		}
+	}
+	return "vxlan"
 }

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kuberoot-dev/kuberoot/pkg/distro"
 )
 
 const (
@@ -153,6 +155,16 @@ func applyAddons(ctx context.Context, cfg bootConfig, node nodeInfo) {
 	}
 	if err := renderAddons(); err != nil {
 		log.Printf("add-ons: %v", err)
+	}
+	if distro.VMAPITransitionEnabled() {
+		path, err := stageTransitionVMAddon(addonsDir, generatedAddonsDir, "/run/kuberoot/vm-api-transition")
+		if err != nil {
+			log.Printf("transition add-on staging failed: %v", err)
+			return
+		}
+		if path != "" {
+			go applyTransitionVMAddon(ctx, path)
+		}
 	}
 	if activeRole.Packages {
 		if err := renderPackages(cfg); err != nil {

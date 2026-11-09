@@ -3,7 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OPENAPI=k8s.io/kube-openapi/cmd/openapi-gen@v0.0.0-20261001230523-97fa35140926
+# Match the OpenAPI runtime pinned in go.mod instead of requiring a newer toolchain.
+OPENAPI="k8s.io/kube-openapi/cmd/openapi-gen@$(go list -m -f '{{.Version}}' k8s.io/kube-openapi)"
 HEADER=hack/boilerplate.go.txt
 
 go run k8s.io/code-generator/cmd/deepcopy-gen@v0.37.1 --go-header-file $HEADER \
@@ -22,11 +23,15 @@ go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 object:headerFile
 
 # The virtual machines API: deepcopy, and its CRD as the hypervisor distribution's add-on.
 go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 object:headerFile=$HEADER \
-  paths=./pkg/apis/vm/... crd:crdVersions=v1 output:crd:dir=distros/hypervisor/addons
+  paths=./pkg/apis/vm/v1alpha2 crd:crdVersions=v1 output:crd:dir=distros/hypervisor/addons
+
+# Cloud runs the same native VM controller alongside pods and packages.
+mkdir -p distros/cloud/addons
+cp distros/hypervisor/addons/vm.kuberoot.dev_*.yaml distros/cloud/addons/
 
 # The workstation distribution runs machines too, and workspaces in them.
 go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 \
-  paths=./pkg/apis/vm/... crd:crdVersions=v1 output:crd:dir=distros/workstation/addons
+  paths=./pkg/apis/vm/v1alpha2 crd:crdVersions=v1 output:crd:dir=distros/workstation/addons
 go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0 object:headerFile=$HEADER \
   paths=./pkg/apis/workstation/... crd:crdVersions=v1 output:crd:dir=distros/workstation/addons
 

@@ -1,0 +1,113 @@
+# Separate stage1 hotplug hardware; the accepted stage0 lab stays unchanged. KubeVirt is only the
+# outer lab machine; pods and native cloud-hypervisor VMs run inside kuberoot.
+# Build amd64 media with kuberoot.datastore=etcd before applying this file.
+# Existing pi1 disks, VMs and the builder's ARM guests are not used here.
+#
+# Workshop's Kube-OVN controller has --keep-vm-ip=true. The pod bridge gives
+# each guest its own routable pod IP and preserves the VM's allocation across
+# restarts. This matches the existing pi1 bridge and avoids masquerade's
+# repeated private guest address. The future three nodes must retain distinct
+# names, disks and pod IPs. Three guests on ws4 are not three failure domains.
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: cloud-stage1-1-media
+  namespace: tenant-kuberoot
+  labels:
+    app.kubernetes.io/part-of: kuberoot-cloud-stage1
+spec:
+  contentType: kubevirt
+  source:
+    http:
+      url: http://builder.tenant-kuberoot.svc:8080/stage1/amd64/media.img
+  storage:
+    storageClassName: replicated
+    resources:
+      requests:
+        storage: 1Gi
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: cloud-stage1-1-system
+  namespace: tenant-kuberoot
+  labels:
+    app.kubernetes.io/part-of: kuberoot-cloud-stage1
+spec:
+  contentType: kubevirt
+  source:
+    blank: {}
+  storage:
+    storageClassName: replicated
+    resources:
+      requests:
+        storage: 20Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: cloud-stage1-1
+  namespace: tenant-kuberoot
+  labels:
+    app.kubernetes.io/part-of: kuberoot-cloud-stage1
+spec:
+  runStrategy: RerunOnFailure
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloud-stage1-1
+        app.kubernetes.io/part-of: kuberoot-cloud-stage1
+    spec:
+      architecture: amd64
+      nodeSelector:
+        kubernetes.io/hostname: ws4
+      terminationGracePeriodSeconds: 60
+      domain:
+        cpu:
+          cores: 4
+          sockets: 1
+          threads: 1
+          model: host-passthrough
+          features:
+          - name: svm
+            policy: require
+        resources:
+          requests:
+            # Match workshop's existing 4-vCPU VM overcommit: the tenant
+            # has a 3.2-core request quota, while the guest may use 4 CPUs.
+            cpu: 400m
+            memory: 8Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        machine:
+          type: q35
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        devices:
+          disks:
+          - name: media
+            bootOrder: 1
+            disk:
+              bus: virtio
+          - name: system
+            bootOrder: 2
+            disk:
+              bus: virtio
+          interfaces:
+          - name: default
+            model: virtio
+            bridge: {}
+          rng: {}
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+      - name: media
+        dataVolume:
+          name: cloud-stage1-1-media
+      - name: system
+        dataVolume:
+          name: cloud-stage1-1-system

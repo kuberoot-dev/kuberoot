@@ -107,7 +107,10 @@ func parseCmdline(cmdline string) bootConfig {
 	switch cfg.podNetwork {
 	case "vxlan", "host-gw", "none":
 	default:
-		cfg.podNetwork = "vxlan"
+		// Left for the distribution to answer: one that always brings a CNI
+		// of its own has no business raising a second tunnel. Settled in
+		// podNetworkDefault once the profile is loaded.
+		cfg.podNetwork = ""
 	}
 	if cfg.repo == "" {
 		cfg.repo = "https://kuberoot-dev.github.io/kubepkg-recipes/index.yaml"

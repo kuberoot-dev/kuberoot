@@ -273,7 +273,17 @@ func (s *fleetStorage) List(ctx context.Context, opts *metainternalversion.ListO
 	if !viaCluster(ctx) {
 		return lister.List(ctx, opts)
 	}
-	all, err := s.snapshot(ctx)
+	var all map[string]runtime.Object
+	var err error
+	// A node-scoped inventory must not silently turn an unreachable node
+	// into an empty result. Maintenance uses this to prove complete backend
+	// ownership before changing the VM API. The unscoped fleet view retains
+	// its best-effort behavior for ordinary failover reconciliation.
+	if nodeName, exact := exactNodeSelector(opts); exact {
+		all, err = s.nodeSnapshot(ctx, nodeName)
+	} else {
+		all, err = s.snapshot(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +304,56 @@ func (s *fleetStorage) List(ctx context.Context, opts *metainternalversion.ListO
 		items = append(items, obj)
 	}
 	return list, meta.SetList(list, items)
+}
+
+func exactNodeSelector(opts *metainternalversion.ListOptions) (string, bool) {
+	if opts == nil || opts.LabelSelector == nil {
+		return "", false
+	}
+	return opts.LabelSelector.RequiresExactMatch(NodeLabel)
+}
+
+func (s *fleetStorage) nodeSnapshot(ctx context.Context, nodeName string) (map[string]runtime.Object, error) {
+	var list runtime.Object
+	var err error
+	if nodeName == s.f.self {
+		list, err = s.local.(rest.Lister).List(ctx, &metainternalversion.ListOptions{})
+	} else {
+		// Read the exact Node freshly: the normal fleet cache can omit a
+		// recently joined node, which is unsuitable for complete inventory.
+		n, lookupErr := s.f.cluster.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if lookupErr != nil {
+			return nil, lookupErr
+		}
+		m := member{name: nodeName}
+		for _, address := range n.Status.Addresses {
+			if address.Type == corev1.NodeInternalIP {
+				m.address = address.Address
+				break
+			}
+		}
+		if m.address == "" {
+			return nil, apierrors.NewServiceUnavailable("node " + nodeName + " has no internal address")
+		}
+		list, err = s.f.call(ctx, m, http.MethodGet, s.resource, nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	items, err := meta.ExtractList(list)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]runtime.Object{}
+	for _, item := range items {
+		obj := s.rename(item, nodeName)
+		acc, err := meta.Accessor(obj)
+		if err != nil {
+			return nil, err
+		}
+		out[acc.GetName()] = obj
+	}
+	return out, nil
 }
 
 // snapshot gathers the resource from this node and every reachable member.

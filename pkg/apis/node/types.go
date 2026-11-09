@@ -83,6 +83,22 @@ type NodeServiceStatus struct {
 	// MemoryBytes and CPUUsageSeconds come from the service cgroup.
 	MemoryBytes     int64 `json:"memoryBytes,omitempty"`
 	CPUUsageSeconds int64 `json:"cpuUsageSeconds,omitempty"`
+	// ControllerProcesses is a read-only /proc inventory for vmctl/wsctl.
+	// It includes orphaned matching executables, not only the supervised PID.
+	// InventoryError means no migration barrier may trust this observation.
+	// +listType=atomic
+	ControllerProcesses         []ControllerProcess `json:"controllerProcesses,omitempty"`
+	ControllerInventoryObserved bool                `json:"controllerInventoryObserved,omitempty"`
+	ControllerInventoryError    string              `json:"controllerInventoryError,omitempty"`
+}
+
+// ControllerProcess identifies one process incarnation without exposing its
+// argument list, environment or credentials.
+type ControllerProcess struct {
+	PID        int32  `json:"pid"`
+	Executable string `json:"executable"`
+	StartTicks int64  `json:"startTicks"`
+	BootID     string `json:"bootID"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -503,6 +519,14 @@ type Machine struct {
 type MachineSpec struct {
 	CPUs      int32 `json:"cpus"`
 	MemoryMiB int64 `json:"memoryMiB"`
+	// MaxCPUs is the immutable CPU ceiling. Zero keeps the legacy behavior:
+	// any CPU change restarts the guest. Growth within a ceiling is live;
+	// shrinking always restarts it.
+	MaxCPUs int32 `json:"maxCPUs,omitempty"`
+	// MaxMemoryMiB is the immutable, fully reserved RAM ceiling. With a
+	// ceiling, both memory values must be multiples of 128 MiB. Zero keeps
+	// legacy restart-on-change behavior. Shrinking always restarts the guest.
+	MaxMemoryMiB int64 `json:"maxMemoryMiB,omitempty"`
 	// Volumes on this node, by name, as the machine's disks in order.
 	Volumes []string `json:"volumes"`
 	// MAC of the machine's network interface on the machines' network.
@@ -526,6 +550,15 @@ type MachineStatus struct {
 	Message   string       `json:"message,omitempty"`
 	PID       int32        `json:"pid,omitempty"`
 	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+	// CPUs and MemoryMiB are the VMM's applied configuration, not guest
+	// online CPUs or memory_actual_size. A guest may online hotplug later.
+	CPUs      int32 `json:"cpus,omitempty"`
+	MemoryMiB int64 `json:"memoryMiB,omitempty"`
+	// ResourcesReady reports whether the VMM accepted the requested size.
+	// Guest online resources require observation inside the guest.
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

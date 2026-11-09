@@ -63,6 +63,7 @@ func (s *serviceStorage) snapshot(ctx context.Context) (map[string]runtime.Objec
 	for _, st := range statuses {
 		out[st.Name] = toNodeService(st, s.specs[st.Name])
 	}
+	addAbsentControllers(out, "/proc")
 	return out, nil
 }
 
@@ -120,6 +121,10 @@ func (s *serviceStorage) Update(ctx context.Context, name string, objInfo rest.U
 }
 
 func toNodeService(st supervisor.ServiceStatus, spec node.NodeServiceSpec) *node.NodeService {
+	return toNodeServiceWithProc(st, spec, "/proc")
+}
+
+func toNodeServiceWithProc(st supervisor.ServiceStatus, spec node.NodeServiceSpec, proc string) *node.NodeService {
 	status := node.NodeServiceStatus{
 		State:           st.State,
 		PID:             int32(st.PID),
@@ -129,13 +134,17 @@ func toNodeService(st supervisor.ServiceStatus, spec node.NodeServiceSpec) *node
 		MemoryBytes:     readInt(filepath.Join(st.Cgroup, "memory.current")),
 		CPUUsageSeconds: cgroupCPUSeconds(st.Cgroup),
 	}
+	if st.Name == "kuberoot-vmctl" || st.Name == "kuberoot-wsctl" {
+		status.ControllerProcesses, status.ControllerInventoryError = controllerProcesses(proc, st.Name)
+		status.ControllerInventoryObserved = status.ControllerInventoryError == ""
+	}
 	return &node.NodeService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              st.Name,
 			UID:               types.UID(string(nodeUID()) + "-" + st.Name),
 			CreationTimestamp: status.StartedAt,
 			// Usage counters are left out: they would change the version on every poll.
-			ResourceVersion: resourceVersion(spec, status.State, status.PID, status.Restarts),
+			ResourceVersion: resourceVersion(spec, status.State, status.PID, status.Restarts, status.ControllerProcesses, status.ControllerInventoryObserved, status.ControllerInventoryError),
 		},
 		Spec:   spec,
 		Status: status,
@@ -219,4 +228,14 @@ func (s *logStream) InputStream(context.Context, string, string) (io.ReadCloser,
 func nodeUID() types.UID {
 	raw, _ := os.ReadFile("/etc/machine-id")
 	return types.UID(strings.TrimSpace(string(raw)))
+}
+
+// Even a worker with no configured controller must expose a successful empty
+// inventory. A missing supervised service does not prove an orphan is absent.
+func addAbsentControllers(out map[string]runtime.Object, proc string) {
+	for _, name := range []string{"kuberoot-vmctl", "kuberoot-wsctl"} {
+		if _, ok := out[name]; !ok {
+			out[name] = toNodeServiceWithProc(supervisor.ServiceStatus{Name: name, State: "Absent"}, node.NodeServiceSpec{}, proc)
+		}
+	}
 }

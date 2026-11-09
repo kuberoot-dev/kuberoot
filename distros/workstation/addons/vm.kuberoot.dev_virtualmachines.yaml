@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: (devel)
   name: virtualmachines.vm.kuberoot.dev
 spec:
   group: vm.kuberoot.dev
@@ -14,7 +14,7 @@ spec:
     shortNames:
     - vm
     singular: virtualmachine
-  scope: Cluster
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.running
@@ -32,7 +32,7 @@ spec:
     - jsonPath: .status.replicaNodes
       name: Replicas
       type: string
-    name: v1alpha1
+    name: v1alpha2
     schema:
       openAPIV3Schema:
         description: VirtualMachine is a machine of the cluster, wherever it runs.
@@ -78,6 +78,23 @@ spec:
                 required:
                 - image
                 type: object
+              maxCPUs:
+                description: |-
+                  MaxCPUs is fixed at creation. Growth within it does not reboot the
+                  guest; shrinking does. Omit it to restart on every CPU change.
+                format: int32
+                minimum: 1
+                type: integer
+              maxMemory:
+                anyOf:
+                - type: integer
+                - type: string
+                description: |-
+                  MaxMemory is fixed at creation and reserved in full on the host.
+                  With it, memory and maxMemory use 128Mi steps. Growth is live;
+                  shrinking restarts the guest. Omit it for restart-on-change behavior.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
               memory:
                 anyOf:
                 - type: integer
@@ -106,6 +123,16 @@ spec:
                 description: 'Running: the machine runs; false shuts it down and keeps
                   its disk.'
                 type: boolean
+              seedMode:
+                description: |-
+                  SeedMode selects the SMBIOS NoCloud protocol. Unset preserves the
+                  original ds=nocloud serial. NoCloudNet uses ds=nocloud-net and serves
+                  a MAC-specific DHCP network-config, required by Talos HTTP bootstrap.
+                  It is fixed at creation, including whether the field is present.
+                enum:
+                - NoCloud
+                - NoCloudNet
+                type: string
               userData:
                 description: |-
                   UserData is cloud-init's user data for the machine, a #cloud-config
@@ -118,20 +145,54 @@ spec:
                   instead, for user data with credentials in it.
                 properties:
                   name:
-                    type: string
-                  namespace:
+                    minLength: 1
                     type: string
                 required:
                 - name
-                - namespace
                 type: object
             required:
             - disk
             type: object
+            x-kubernetes-validations:
+            - message: maxCPUs must be at least cpus
+              rule: '!has(self.maxCPUs) || self.maxCPUs >= self.cpus'
+            - message: maxCPUs is immutable; create a new machine to change its ceiling
+              rule: has(self.maxCPUs) == has(oldSelf.maxCPUs) && (!has(self.maxCPUs)
+                || self.maxCPUs == oldSelf.maxCPUs)
+            - message: maxMemory is immutable; create a new machine to change its
+                ceiling
+              rule: has(self.maxMemory) == has(oldSelf.maxMemory) && (!has(self.maxMemory)
+                || quantity(string(self.maxMemory)).compareTo(quantity(string(oldSelf.maxMemory)))
+                == 0)
+            - message: maxMemory must be at least memory
+              rule: '!has(self.maxMemory) || quantity(string(self.maxMemory)).compareTo(quantity(string(self.memory)))
+                >= 0'
+            - message: memory and maxMemory must be positive multiples of 128Mi when
+                maxMemory is set
+              rule: '!has(self.maxMemory) || (quantity(string(self.memory)).isInteger()
+                && quantity(string(self.maxMemory)).isInteger() && quantity(string(self.memory)).asInteger()
+                > 0 && quantity(string(self.memory)).asInteger() % 134217728 == 0
+                && quantity(string(self.maxMemory)).asInteger() % 134217728 == 0)'
+            - message: seedMode is immutable; create a new machine to change its bootstrap
+                protocol
+              rule: has(self.seedMode) == has(oldSelf.seedMode) && (!has(self.seedMode)
+                || self.seedMode == oldSelf.seedMode)
           status:
             properties:
               address:
                 type: string
+              backendID:
+                description: |-
+                  BackendID binds this API object to the node Machine and Volume names.
+                  Only the controller or the privileged migration tool writes it. New
+                  objects use their UID; imports retain the old backend name.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                type: string
+                x-kubernetes-validations:
+                - message: backendID is immutable
+                  rule: self == oldSelf
               failedMigration:
                 description: |-
                   FailedMigration names the node the last live move to failed for; it
@@ -141,6 +202,17 @@ spec:
                 description: 'ImageWritten: the disk holds its data; the image is
                   never written again.'
                 type: boolean
+              instanceID:
+                description: |-
+                  InstanceID is cloud-init's persistent guest identity. An imported VM
+                  keeps its original UID even though recreating the API changes its UID.
+                maxLength: 128
+                minLength: 1
+                pattern: ^[a-zA-Z0-9-]+$
+                type: string
+                x-kubernetes-validations:
+                - message: instanceID is immutable
+                  rule: self == oldSelf
               mac:
                 description: MAC of its network interface, and the address it took.
                 type: string
@@ -193,9 +265,23 @@ spec:
                   type: string
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: backendID cannot be removed or changed
+              rule: '!has(oldSelf.backendID) || (has(self.backendID) && self.backendID
+                == oldSelf.backendID)'
+            - message: instanceID cannot be removed or changed
+              rule: '!has(oldSelf.instanceID) || (has(self.instanceID) && self.instanceID
+                == oldSelf.instanceID)'
         required:
         - spec
         type: object
+        x-kubernetes-validations:
+        - message: backendID cannot be removed, including by removing status
+          rule: '!has(oldSelf.status) || !has(oldSelf.status.backendID) || (has(self.status)
+            && has(self.status.backendID) && self.status.backendID == oldSelf.status.backendID)'
+        - message: instanceID cannot be removed, including by removing status
+          rule: '!has(oldSelf.status) || !has(oldSelf.status.instanceID) || (has(self.status)
+            && has(self.status.instanceID) && self.status.instanceID == oldSelf.status.instanceID)'
     served: true
     storage: true
     subresources:
