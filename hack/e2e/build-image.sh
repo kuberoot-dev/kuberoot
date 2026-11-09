@@ -19,7 +19,7 @@ alpine_image=alpine:$(sed -n 's/^ALPINE_VERSION=//p' "$src/build/components.env"
 
 # Downloads from upstream fail now and then (504s); every curl of the build
 # steps retries, without changing the steps themselves.
-printf 'retry = 5\nretry-all-errors\nretry-delay = 5\n' >"$work/.curlrc"
+printf 'retry = 15\nretry-all-errors\nretry-delay = 20\n' >"$work/.curlrc"
 
 run() {
   local image=$1
