@@ -24,6 +24,8 @@
 # Usage: hack/e2e/etcd-ha.sh <old artifacts> <new artifacts> <stand dir>
 #   artifacts: vmlinuz.efi, initrd.cpio, rootfs.squashfs, systemd-boot.efi,
 #   VERSION (and kernel.args if any); the new ones also bundles/*.tar{,.sig}.
+# OLD_SRC: a checkout of the previous image's sources, used to write the
+#   medium that image boots from.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -76,10 +78,18 @@ until_ok() {
 # cluster API are forwarded to 127.0.0.1:50<i>0 and 127.0.0.1:64<i>3 (eth0,
 # user networking, which also reaches the host's HTTP and S3 at 10.0.2.2).
 
+# The layout of a medium is part of the image that reads it: mkimage writes
+# the files and that image's installer looks them up. Building every medium
+# with this checkout's mkimage pairs the new layout with the old installer,
+# which surfaces as an install that never finishes rather than as the layout
+# mismatch it is. OLD_SRC names a checkout of the previous image's sources;
+# without it both media come from here, which only holds while the layout
+# has not moved.
 media() { # media <i> <artifacts> [kernel args]
-  local i=$1 art=$2
+  local i=$1 art=$2 src=$ROOT
   shift 2
-  (cd "$ROOT" && go run ./cmd/mkimage -arch amd64 -artifacts "$art" -version "$(cat "$art/VERSION")" -trust "$V/trust" \
+  [ "$art" = "$OLD" ] && src=${OLD_SRC:-$ROOT}
+  (cd "$src" && go run ./cmd/mkimage -arch amd64 -artifacts "$art" -version "$(cat "$art/VERSION")" -trust "$V/trust" \
     -out "$V/media-$i.img" -args "kuberoot.nameserver=1.1.1.1 kuberoot.ip=eth1:10.10.0.1$i/24 $*") >/dev/null
 }
 
