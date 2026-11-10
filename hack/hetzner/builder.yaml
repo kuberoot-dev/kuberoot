@@ -37,6 +37,11 @@ spec:
     - {name: GOPATH, value: /work/go}
     - {name: GOCACHE, value: /work/gocache}
     - {name: GOFLAGS, value: -mod=mod}
+    # The Rust toolchain the VMM is cross-compiled with is well over the
+    # container disk on its own, so it is installed on the volume too.
+    - {name: RUSTUP_HOME, value: /work/rustup}
+    - {name: CARGO_HOME, value: /work/cargo}
+    - {name: PATH, value: "/work/cargo/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
     resources:
       requests: {cpu: 200m, memory: 1Gi}
       limits: {cpu: "8", memory: 16Gi}
