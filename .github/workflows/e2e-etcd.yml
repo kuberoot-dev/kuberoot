@@ -145,6 +145,12 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
+      # The previous image's own sources, so its boot medium is written by the
+      # mkimage that matches the installer reading it.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.refs.outputs.old }}
+          path: old-src
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -166,10 +172,12 @@ jobs:
           sudo mkdir -p /mnt/stand /mnt/tmp && sudo chown "$USER" /mnt/stand /mnt/tmp
           ls -l /dev/kvm; nproc; free -g; df -h /mnt
           go build -o /dev/null ./cmd/mkimage
+          (cd old-src && go build -o /dev/null ./cmd/mkimage)
       - name: rolling upgrade, rollback, backup and restore
         run: hack/e2e/etcd-ha.sh images/image-old images/image-new /mnt/stand
         env:
           TMPDIR: /mnt/tmp
+          OLD_SRC: ${{ github.workspace }}/old-src
       - if: always()
         run: |
           [ -f /mnt/stand/summary.log ] && cat /mnt/stand/summary.log >>"$GITHUB_STEP_SUMMARY" || true
