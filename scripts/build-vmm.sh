@@ -13,7 +13,17 @@ WORK=${WORK:-/work}
 OUT=${KUBEROOT_OUT:-$ROOT/out}/$ARCH
 export LC_ALL=C
 . "$ROOT/scripts/vmm-contract.sh"
-for tool in curl sha256sum tar git python3 flock; do command -v "$tool" >/dev/null; done
+# A tool the builder has not been given is the likeliest way this build
+# stops, so say which one: `command -v` on its own fails the script under
+# set -e without printing anything, and the build then looks like it broke
+# on the step it had just finished.
+require() { # require <what it is for> <tool>...
+  local tool missing=()
+  for tool in "${@:2}"; do command -v "$tool" >/dev/null || missing+=("$tool"); done
+  [[ ${#missing[@]} -eq 0 ]] ||
+    { printf 'the VMM build needs %s, missing from PATH: %s\n' "$1" "${missing[*]}" >&2; exit 1; }
+}
+require 'the source tools' curl sha256sum tar git python3 flock
 vmm_verify_inputs
 state="$WORK/vmm-build"
 mkdir -p "$state/downloads" "$state/sources" "$OUT"
@@ -58,6 +68,8 @@ cmp "$source_manifest" "$state/source-verification.sha256"
 printf 'verified source %s\n' "$VMM_SOURCE_ID"
 if [[ ${2:-} == --prepare-only ]]; then exit 0; fi
 
+require 'an aarch64 cross compiler and the pinned Rust' \
+  "${CROSS_LINKER:-aarch64-linux-gnu-gcc}" rustup rustc
 linker=$(command -v "${CROSS_LINKER:-aarch64-linux-gnu-gcc}")
 # Keep compiler/proxy access, but exclude ambient Cargo/cc-rs configuration.
 # Cache directories may be shared; their parent Cargo config is never loaded.
