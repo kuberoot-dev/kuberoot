@@ -38,6 +38,25 @@ prepare() {
   tools sh -c 'command -v flex >/dev/null || { apt-get -qq update && apt-get -qq install -y flex bison bc libelf-dev libssl-dev cpio xz-utils zstd >/dev/null; }'
 }
 
+# The VMM is Rust cross-compiled for the boards, which the kernel and the
+# Go binaries do not need; it is installed only when something asks for it.
+# Debian 12 ships the GCC 12 the build contract requires, and the Rust
+# version comes from the pin, not from whatever rustup calls stable.
+prepare_vmm() {
+  local rust target
+  rust=$(. "$ROOT/build/cloud-hypervisor/pin.env" && echo "$VMM_RUST_VERSION")
+  target=$(. "$ROOT/build/cloud-hypervisor/pin.env" && echo "$VMM_TARGET")
+  tools sh -c 'command -v aarch64-linux-gnu-gcc >/dev/null ||
+    { apt-get -qq update && apt-get -qq install -y gcc-aarch64-linux-gnu >/dev/null; }'
+  # The proxies go on PATH, because the build runs in a shell of its own
+  # that does not read a login profile.
+  tools sh -c 'command -v rustup >/dev/null || {
+    curl -sSf https://sh.rustup.rs |
+      sh -s -- -y --no-modify-path --profile minimal --default-toolchain none >/dev/null &&
+    ln -sf "$HOME/.cargo/bin/rustup" "$HOME/.cargo/bin/cargo" "$HOME/.cargo/bin/rustc" /usr/local/bin/; }'
+  tools sh -c "rustup toolchain install $rust --profile minimal --target $target >/dev/null"
+}
+
 SRC=/work/src/kuberoot
 
 # sync ships the sources: git-tracked and new files, no build output.
@@ -88,6 +107,7 @@ case "${1:-}" in
     case "$distro" in
       cloud|hypervisor|workstation)
         if [ "$arch" = arm64 ]; then
+          prepare_vmm
           tools sh -c "$ENV $SRC/scripts/build-vmm.sh arm64"
         fi ;;
       ai) tools sh -c "$ENV $SRC/scripts/build-llama.sh $arch && $ENV $SRC/scripts/build-nvidia.sh $arch && $ENV $SRC/scripts/build-llama-cuda.sh $arch" ;;
