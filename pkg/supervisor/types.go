@@ -24,6 +24,9 @@ type ServiceStatus struct {
 	LastExit  string    `json:"lastExit,omitempty"`
 	Cgroup    string    `json:"cgroup"`
 	LogFile   string    `json:"logFile"`
+	// Alternative is the build the node runs, for a service with
+	// alternatives in the profile.
+	Alternative string `json:"alternative,omitempty"`
 }
 
 const (

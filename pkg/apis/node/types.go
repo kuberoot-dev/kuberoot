@@ -83,6 +83,9 @@ type NodeServiceStatus struct {
 	// MemoryBytes and CPUUsageSeconds come from the service cgroup.
 	MemoryBytes     int64 `json:"memoryBytes,omitempty"`
 	CPUUsageSeconds int64 `json:"cpuUsageSeconds,omitempty"`
+	// Alternative is the build of the service this node runs, for a service
+	// the distribution offers in alternative builds.
+	Alternative string `json:"alternative,omitempty"`
 	// ControllerProcesses is a read-only /proc inventory for vmctl/wsctl.
 	// It includes orphaned matching executables, not only the supervised PID.
 	// InventoryError means no migration barrier may trust this observation.

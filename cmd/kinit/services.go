@@ -30,7 +30,13 @@ type service struct {
 	// after holds the first start until it returns true, so a service does not
 	// crash just because what it depends on is still coming up.
 	after func() bool
+	// alt, when set, holds the command lines of the service's alternatives;
+	// args is then only the profile's own.
+	alt *serviceAlternatives
 }
+
+// healthyRun: a service that ran this long before it exited was not crashing.
+const healthyRun = time.Minute
 
 // children maps the PIDs kinit started to the channel waiting for their exit.
 // As PID 1 kinit reaps everything itself, so exec.Cmd.Wait is never used.
@@ -38,6 +44,9 @@ var (
 	childrenMu sync.Mutex
 	children   = map[int]chan unix.WaitStatus{}
 	running    sync.Map // service name -> *os.Process
+	// restartRequested marks the services kinit was asked to restart: their
+	// next exit is not a crash.
+	restartRequested sync.Map // service name -> struct{}
 
 	// A generation is one set of running services; reconfiguring replaces it.
 	genMu     sync.Mutex
@@ -128,13 +137,18 @@ func supervise(ctx context.Context, s service, verbose bool) {
 			}
 		}
 	}
+	choice := ""
+	if s.alt != nil {
+		choice = s.alt.choose(s.name)
+	}
 	backoff := time.Second
 	for ctx.Err() == nil {
 		started := time.Now()
-		status, err := runService(ctx, s, verbose)
+		status, err := runService(ctx, s, choice, verbose)
 		if ctx.Err() != nil {
 			return
 		}
+		_, requested := restartRequested.LoadAndDelete(s.name)
 		exit := describe(status)
 		if err != nil {
 			exit = err.Error()
@@ -146,8 +160,12 @@ func supervise(ctx context.Context, s service, verbose bool) {
 			st.State, st.PID, st.LastExit = supervisor.StateRestarting, 0, exit
 			st.Restarts++
 		})
-		if time.Since(started) > time.Minute {
+		ran := time.Since(started)
+		if ran > healthyRun {
 			backoff = time.Second
+		}
+		if s.alt != nil && !requested && ran < healthyRun && (err != nil || status.Signaled() || status.ExitStatus() != 0) {
+			choice = s.alt.crashed(s.name, choice, time.Now())
 		}
 		select {
 		case <-ctx.Done():
@@ -158,7 +176,7 @@ func supervise(ctx context.Context, s service, verbose bool) {
 	}
 }
 
-func runService(ctx context.Context, s service, verbose bool) (unix.WaitStatus, error) {
+func runService(ctx context.Context, s service, choice string, verbose bool) (unix.WaitStatus, error) {
 	logFile, err := os.OpenFile(logPath(s.name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return 0, err
@@ -168,7 +186,11 @@ func runService(ctx context.Context, s service, verbose bool) (unix.WaitStatus, 
 	if verbose {
 		out = io.MultiWriter(logFile, &prefixWriter{prefix: "[" + s.name + "] ", w: os.Stdout})
 	}
-	cmd := exec.Command(s.args[0], s.args[1:]...)
+	args := s.args
+	if s.alt != nil {
+		args = s.alt.args[choice]
+	}
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = append(append([]string{}, servicePath...), s.env...)
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}

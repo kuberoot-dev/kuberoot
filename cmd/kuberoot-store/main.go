@@ -54,6 +54,14 @@ func main() {
 		}
 		return
 	}
+	// kuberoot-store tape restore FILE --data-dir DIR [--revision R | --at T]
+	if len(os.Args) > 2 && os.Args[1] == "tape" && os.Args[2] == "restore" {
+		if err := tapeRestore(os.Args[3:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	var f flags
 	flag.StringVar(&f.name, "name", "default", "this member's name in --initial-cluster")
 	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/kuberoot-store", "the member's data: its state and Raft log")
@@ -343,6 +351,68 @@ func restore(args []string) error {
 		return err
 	}
 	return resourcestore.Restore(args[0], *dataDir, *name, cluster, *token)
+}
+
+// tapeRestore makes a data directory from a tape file: a copy of the tape
+// kept elsewhere, restored up to a revision or a moment.
+func tapeRestore(args []string) error {
+	usage := errors.New("usage: kuberoot-store tape restore FILE --data-dir DIR [--revision R | --at RFC3339] [--lease-ttl 1h] [--name N --initial-cluster N=URL,... --initial-advertise-peer-urls URL]")
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return usage
+	}
+	fs := flag.NewFlagSet("tape restore", flag.ContinueOnError)
+	dataDir := fs.String("data-dir", "", "the member's data directory to create")
+	revision := fs.Int64("revision", 0, "the newest revision restored (default: all of the file)")
+	at := fs.String("at", "", "restore up to this moment, RFC 3339, instead of a revision")
+	leaseTTL := fs.Duration("lease-ttl", time.Hour, "the time to live of the leases the restored keys are attached to")
+	name := fs.String("name", "default", "this member's name in --initial-cluster")
+	initial := fs.String("initial-cluster", "", "the new store's members, name=peer-URL,... (default: this member alone)")
+	peers := fs.String("initial-advertise-peer-urls", "http://127.0.0.1:2380", "this member's peer URLs, when --initial-cluster is not given")
+	token := fs.String("initial-cluster-token", "etcd-cluster", "the store's token, part of member IDs")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *dataDir == "" {
+		return errors.New("--data-dir is required")
+	}
+	if *at != "" && *revision != 0 {
+		return errors.New("--revision or --at, not both")
+	}
+	self, err := splitURLs(*peers)
+	if err != nil {
+		return err
+	}
+	cluster, err := parseCluster(*initial, *name, self)
+	if err != nil {
+		return err
+	}
+	if *at != "" {
+		t, err := time.Parse(time.RFC3339, *at)
+		if err != nil {
+			return fmt.Errorf("--at: %w", err)
+		}
+		f, err := os.Open(args[0])
+		if err != nil {
+			return err
+		}
+		*revision, err = resourcestore.TapeFileRevisionAt(f, t.UnixMilli())
+		f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	f, err := os.Open(args[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	info, err := resourcestore.RestoreTape(f, *dataDir, resourcestore.TapeRestoreOptions{
+		Revision: *revision, LeaseTTL: int64(leaseTTL.Seconds()), Name: *name, InitialCluster: cluster, Token: *token})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("restored the tape from revision %d to %d into %s\n", info.From, info.Current, *dataDir)
+	return nil
 }
 
 func metrics(n *resourcestore.Node) http.Handler {

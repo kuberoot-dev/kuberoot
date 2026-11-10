@@ -295,6 +295,7 @@ func Run(ctx context.Context, o Options) error {
 		go syncDeadlines(ctx, o.RoutesKubeconfig, o.NodeName)
 	}
 	if o.RoutesKubeconfig != "" {
+		go syncAlternativeLabels(ctx, kinit, o.RoutesKubeconfig, o.NodeName)
 		_, podRange, _ := net.ParseCIDR(o.PodCIDR)
 		if o.PodNetwork != PodNetworkNone {
 			go syncRoutes(ctx, o.RoutesKubeconfig, o.NodeName, podRange, o.PodNetwork, o.CNITemplate)

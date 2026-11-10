@@ -131,6 +131,7 @@ func toNodeServiceWithProc(st supervisor.ServiceStatus, spec node.NodeServiceSpe
 		Restarts:        int32(st.Restarts),
 		StartedAt:       metav1.NewTime(st.StartedAt.Truncate(1e9)),
 		LastExit:        st.LastExit,
+		Alternative:     st.Alternative,
 		MemoryBytes:     readInt(filepath.Join(st.Cgroup, "memory.current")),
 		CPUUsageSeconds: cgroupCPUSeconds(st.Cgroup),
 	}
@@ -144,7 +145,7 @@ func toNodeServiceWithProc(st supervisor.ServiceStatus, spec node.NodeServiceSpe
 			UID:               types.UID(string(nodeUID()) + "-" + st.Name),
 			CreationTimestamp: status.StartedAt,
 			// Usage counters are left out: they would change the version on every poll.
-			ResourceVersion: resourceVersion(spec, status.State, status.PID, status.Restarts, status.ControllerProcesses, status.ControllerInventoryObserved, status.ControllerInventoryError),
+			ResourceVersion: resourceVersion(spec, status.State, status.PID, status.Restarts, status.Alternative, status.ControllerProcesses, status.ControllerInventoryObserved, status.ControllerInventoryError),
 		},
 		Spec:   spec,
 		Status: status,
@@ -188,10 +189,12 @@ func (s *serviceStorage) ConvertToTable(_ context.Context, obj runtime.Object, _
 	}
 	return table([]metav1.TableColumnDefinition{
 		col("Name", "name"), col("State", ""), col("PID", ""), col("Restarts", ""), col("Memory", ""), col("CPU", ""), col("Age", ""),
+		{Name: "Alternative", Type: "string", Priority: 1},
 	}, items, func(o runtime.Object) []any {
 		svc := o.(*node.NodeService)
 		return []any{svc.Name, svc.Status.State, svc.Status.PID, svc.Status.Restarts,
-			bytesHuman(svc.Status.MemoryBytes), strconv.FormatInt(svc.Status.CPUUsageSeconds, 10) + "s", age(svc.Status.StartedAt.Time)}
+			bytesHuman(svc.Status.MemoryBytes), strconv.FormatInt(svc.Status.CPUUsageSeconds, 10) + "s", age(svc.Status.StartedAt.Time),
+			svc.Status.Alternative}
 	}), nil
 }
 

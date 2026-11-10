@@ -366,6 +366,10 @@ var carriedArgs = []string{
 	"kuberoot.pod-cidr=", "kuberoot.service-cidr=", "kuberoot.pod-network=",
 	"kuberoot.distro=", "kuberoot.repo=", "kuberoot.repo-key=",
 	"kuberoot.fleet-center",
+	// The resource store lab's tape is a setting of the cluster store, kept
+	// like the store itself: without it an installed or upgraded control
+	// plane compacts the history away and serves no tape.
+	"kuberoot.store-tape",
 }
 
 func consoleArgs() string { return carryArgs(readFile("/proc/cmdline")) }
