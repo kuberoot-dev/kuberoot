@@ -24,25 +24,53 @@ type member struct {
 	name, dir  string
 	peerURL    string
 	clientAddr string
-	tune       func(*Config)
-	node       *Node
-	grpc       *grpc.Server
-	http       *http.Server
-	client     *clientv3.Client
+	// The two ports, held from the moment they are chosen until the member
+	// serves on them, and held again while it is stopped. A port learned by
+	// binding and releasing is only a port that was free a moment ago: the
+	// package's binary runs beside others, so between the probe and the bind
+	// the address can go to anyone, and the member then fails to start on an
+	// address the rest of the cluster has already been told to reach it at.
+	peerHold, clientHold net.Listener
+	tune                 func(*Config)
+	node                 *Node
+	grpc                 *grpc.Server
+	http                 *http.Server
+	client               *clientv3.Client
 }
 
-func freeAddr(t *testing.T) string {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+func hold(t *testing.T, addr string) net.Listener {
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
-	return l.Addr().String()
+	return l
 }
 
 func newMember(t *testing.T, name string, tune func(*Config)) *member {
-	return &member{t: t, name: name, dir: filepath.Join(t.TempDir(), name), tune: tune,
-		peerURL: "http://" + freeAddr(t), clientAddr: freeAddr(t)}
+	peer, client := hold(t, "127.0.0.1:0"), hold(t, "127.0.0.1:0")
+	m := &member{t: t, name: name, dir: filepath.Join(t.TempDir(), name), tune: tune,
+		peerURL: "http://" + peer.Addr().String(), clientAddr: client.Addr().String(),
+		peerHold: peer, clientHold: client}
+	// Runs after the cleanup that stop registers, which hands the ports back
+	// to the member, so the last holder of each one is closed.
+	t.Cleanup(func() {
+		for _, l := range []net.Listener{m.peerHold, m.clientHold} {
+			if l != nil {
+				_ = l.Close()
+			}
+		}
+	})
+	return m
+}
+
+// serve returns the listener the member was holding on addr, so the address
+// it has advertised is the one it now answers on.
+func (m *member) serve(held *net.Listener, addr string) net.Listener {
+	if l := *held; l != nil {
+		*held = nil
+		return l
+	}
+	return hold(m.t, addr)
 }
 
 // newCluster starts a new store of n members.
@@ -64,10 +92,7 @@ func newCluster(t *testing.T, n int, tune func(*Config)) []*member {
 
 func (m *member) start(initial map[string][]string, state string) {
 	m.t.Helper()
-	peerL, err := net.Listen("tcp", strings.TrimPrefix(m.peerURL, "http://"))
-	if err != nil {
-		m.t.Fatal(err)
-	}
+	peerL := m.serve(&m.peerHold, strings.TrimPrefix(m.peerURL, "http://"))
 	cfg := Config{Name: m.name, DataDir: m.dir, InitialCluster: initial, InitialClusterState: state,
 		PeerURLs: []string{m.peerURL}, ClientURLs: []string{"http://" + m.clientAddr},
 		TickMs: 20, ElectionTicks: 10, RequestTimeout: 5 * time.Second}
@@ -82,10 +107,7 @@ func (m *member) start(initial map[string][]string, state string) {
 	m.node = node
 	m.http = &http.Server{Handler: node.PeerHandler()}
 	go func() { _ = m.http.Serve(peerL) }()
-	cl, err := net.Listen("tcp", m.clientAddr)
-	if err != nil {
-		m.t.Fatal(err)
-	}
+	cl := m.serve(&m.clientHold, m.clientAddr)
 	m.grpc = grpc.NewServer()
 	(&Server{Node: node}).Register(m.grpc)
 	go func() { _ = m.grpc.Serve(cl) }()
@@ -105,6 +127,11 @@ func (m *member) stop() {
 	_ = m.http.Close()
 	m.node.Stop()
 	m.node = nil
+	// Take the ports back while the member is down: it goes on advertising
+	// them to the rest of the cluster, and restart has to get these and no
+	// others.
+	m.peerHold = hold(m.t, strings.TrimPrefix(m.peerURL, "http://"))
+	m.clientHold = hold(m.t, m.clientAddr)
 }
 
 func (m *member) restart() {
