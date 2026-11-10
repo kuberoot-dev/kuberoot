@@ -48,12 +48,12 @@ prepare_vmm() {
   target=$(. "$ROOT/build/cloud-hypervisor/pin.env" && echo "$VMM_TARGET")
   tools sh -c 'command -v aarch64-linux-gnu-gcc >/dev/null ||
     { apt-get -qq update && apt-get -qq install -y gcc-aarch64-linux-gnu >/dev/null; }'
-  # The proxies go on PATH, because the build runs in a shell of its own
-  # that does not read a login profile.
-  tools sh -c 'command -v rustup >/dev/null || {
+  # RUSTUP_HOME, CARGO_HOME and the PATH that reaches them come from the
+  # builder manifest, which keeps the toolchain on the volume: the container
+  # disk is far too small for it, and filling it evicts the whole pod.
+  tools sh -c 'command -v rustup >/dev/null ||
     curl -sSf https://sh.rustup.rs |
-      sh -s -- -y --no-modify-path --profile minimal --default-toolchain none >/dev/null &&
-    ln -sf "$HOME/.cargo/bin/rustup" "$HOME/.cargo/bin/cargo" "$HOME/.cargo/bin/rustc" /usr/local/bin/; }'
+      sh -s -- -y --no-modify-path --profile minimal --default-toolchain none >/dev/null'
   tools sh -c "rustup toolchain install $rust --profile minimal --target $target >/dev/null"
 }
 
