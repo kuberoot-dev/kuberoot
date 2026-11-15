@@ -259,7 +259,7 @@ func WriteSlotBoot(esp filesystem.FileSystem, a bootdisk.Artifacts, slot, versio
 	if err := bootdisk.CopyFile(esp, entry.Kernel, filepath.Join(a.Dir, "vmlinuz.efi")); err != nil {
 		return err
 	}
-	if err := bootdisk.CopyFile(esp, entry.Initrd, filepath.Join(a.Dir, "initrd.cpio")); err != nil {
+	if err := bootdisk.CopyFile(esp, entry.Initrd, a.InitrdPath()); err != nil {
 		return err
 	}
 	return bootdisk.WriteFile(esp, "/loader/entries/"+entry.ID+".conf", strings.NewReader(entry.String()))
