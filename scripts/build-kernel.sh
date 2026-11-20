@@ -50,7 +50,11 @@ make -s ARCH=$KARCH O="$O" olddefconfig
 # ask for, and says nothing. For most options the loss shows up as a kernel
 # that misbehaves; for these it shows up much later, as a CNI that refuses to
 # load on a cluster that is already built, so check them here instead.
-for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM; do
+# The Hyper-V drivers are among them for the same reason: a kernel without
+# them boots everywhere else and only fails on the machine that needed them.
+hyperv="CONFIG_HYPERV CONFIG_HYPERV_VMBUS CONFIG_HYPERV_STORAGE CONFIG_HYPERV_NET CONFIG_HYPERV_UTILS CONFIG_HYPERV_VSOCKETS CONFIG_PCI_HYPERV"
+case "$ARCH" in amd64) hyperv="$hyperv CONFIG_HYPERV_TIMER CONFIG_DRM_HYPERV" ;; arm64) hyperv="$hyperv CONFIG_FB_HYPERV" ;; esac
+for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM $hyperv; do
   grep -qx "$opt=y" "$O/.config" || {
     echo "$opt was asked for in the fragments and is not in the resulting config: a dependency of it is unmet" >&2
     exit 1
