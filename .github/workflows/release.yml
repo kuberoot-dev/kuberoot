@@ -1,0 +1,158 @@
+name: release
+# A version tag (v1.2.3) publishes the edge distribution as assets of the
+# tag's GitHub release, for amd64 and arm64: what boot media is written from
+# (kernel, initrd, root filesystem, systemd-boot, VERSION), mkimage for
+# Linux, macOS and Windows, SHA256SUMS and kuberoot-edge.json, which lists
+# every file with its size and sha256 (hack/release/lab-assets.sh). Each
+# architecture is built on a runner of its own, natively.
+#
+# A pull request that changes how the release is made builds and packages it
+# the same way and keeps the assets as an artifact of the run instead.
+# A manual run publishes an existing tag again, replacing its assets.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - hack/release/**
+      - hack/e2e/build-image.sh
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: the tag to publish (v1.2.3)
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && github.ref || inputs.tag || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      ref: ${{ steps.v.outputs.ref }}
+    steps:
+      - id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          case "$EVENT" in
+            pull_request) tag=""; version=0.0.0-pr.${SHA::7}; ref=$SHA ;;
+            workflow_dispatch) tag=$INPUT_TAG; version=${tag#v}; ref=refs/tags/$tag ;;
+            *) tag=$REF_NAME; version=${tag#v}; ref=refs/tags/$tag ;;
+          esac
+          if [ -n "$tag" ] && ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "$tag is not a version tag (v1.2.3)" >&2
+            exit 1
+          fi
+          { echo "tag=$tag"; echo "version=$version"; echo "ref=$ref"; } >>"$GITHUB_OUTPUT"
+          echo "edge $version from $ref" >>"$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      - name: work directory
+        run: sudo mkdir -p /mnt/work/out/${{ matrix.arch }} /mnt/work/keys && sudo chown -R "$USER" /mnt/work && df -h / /mnt/work
+      # The same kernel cache as e2e-etcd's, by the same key, so a kernel
+      # already built for a pull request is not built again.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /mnt/work/out/${{ matrix.arch }}/vmlinuz.efi
+            /mnt/work/out/${{ matrix.arch }}/kernel.config
+            /mnt/work/out/${{ matrix.arch }}/kernel.flavour
+            /mnt/work/out/${{ matrix.arch }}/modules
+          key: kernel-${{ matrix.arch }}-${{ hashFiles('kernel/**', 'scripts/build-kernel.sh', 'scripts/build-drbd.sh', 'scripts/kernel-flavour.sh') }}
+      - uses: actions/cache@v4
+        with:
+          path: /mnt/work/cache
+          key: downloads-${{ matrix.arch }}-${{ hashFiles('build/components.env') }}
+      - name: build
+        env:
+          KUBEROOT_ARCH: ${{ matrix.arch }}
+        run: |
+          hack/e2e/build-image.sh . /mnt/work "${{ needs.version.outputs.version }}"
+          sudo chown -R "$USER" /mnt/work/out
+          ls -l /mnt/work/out/${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edge-${{ matrix.arch }}
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            /mnt/work/out/${{ matrix.arch }}/VERSION
+            /mnt/work/out/${{ matrix.arch }}/vmlinuz.efi
+            /mnt/work/out/${{ matrix.arch }}/initrd.cpio
+            /mnt/work/out/${{ matrix.arch }}/rootfs.squashfs
+            /mnt/work/out/${{ matrix.arch }}/systemd-boot.efi
+            /mnt/work/out/${{ matrix.arch }}/kernel.args
+            /mnt/work/out/${{ matrix.arch }}/kernel.config
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: edge-*
+          path: built
+      - name: assets
+        run: |
+          mkdir -p out
+          for a in amd64 arm64; do mv "built/edge-$a" "out/$a"; done
+          # The built kernel's configuration says what the kernel has;
+          # the Hyper-V guest drivers are checked here as they ship.
+          for a in amd64 arm64; do
+            for opt in CONFIG_HYPERV CONFIG_HYPERV_VMBUS CONFIG_HYPERV_STORAGE CONFIG_HYPERV_NET; do
+              grep -qx "$opt=y" "out/$a/kernel.config" || { echo "$a: $opt is not built in" >&2; exit 1; }
+            done
+          done
+          hack/release/lab-assets.sh "${{ needs.version.outputs.version }}" out assets
+          cat assets/kuberoot-edge.json >>"$GITHUB_STEP_SUMMARY"
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          retention-days: 3
+          compression-level: 0
+          path: assets/
+      - if: github.event_name != 'pull_request'
+        name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
+              --notes "The edge distribution for amd64 and arm64: kuberoot-edge.json lists the files with their sizes and SHA256 sums."
+          fi
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber assets/*
