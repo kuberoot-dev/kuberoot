@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Builds an amd64 edge image of a kuberoot checkout on a machine with Docker,
+# Builds an edge image of a kuberoot checkout on a machine with Docker,
 # in the same containers as the builder pod (hack/hetzner/builder.yaml): the
-# kernel and DRBD unless <work>/out/amd64 already has them, the binaries, the
+# kernel and DRBD unless <work>/out/<arch> already has them, the binaries, the
 # root filesystem, the initramfs and, with --bundle, a signed release bundle.
 # The release key is <work>/keys/release.{key,pub}, made if missing.
+# KUBEROOT_ARCH names the architecture (amd64 by default); it must be the
+# machine's own, as on GitHub's amd64 and arm64 runners.
 # Usage: hack/e2e/build-image.sh <checkout> <work> <version> [--bundle]
 set -euo pipefail
 
@@ -11,6 +13,7 @@ src=$(cd "${1:?checkout required}" && pwd)
 work=${2:?work directory required}
 version=${3:?version required}
 bundle=${4:-}
+arch=${KUBEROOT_ARCH:-amd64}
 mkdir -p "$work"
 work=$(cd "$work" && pwd)
 
@@ -26,7 +29,7 @@ run() {
   shift
   docker run --rm -v "$src:/src" -v "$work:/work" -w /src \
     -e CURL_HOME=/work -e WORK=/work -e KUBEROOT_OUT=/work/out -e KUBEROOT_KEYS=/work/keys \
-    -e KUBEROOT_VERSION="$version" -e KUBEROOT_DISTRO=edge \
+    -e KUBEROOT_VERSION="$version" -e KUBEROOT_DISTRO=edge -e ARCH="$arch" \
     -e GOFLAGS="-mod=mod -buildvcs=false" -e GOMODCACHE=/work/gomod -e GOCACHE=/work/gocache \
     "$image" "$@"
 }
@@ -34,15 +37,15 @@ run() {
 run "$go_image" bash -euc '
   apt-get -qq update
   apt-get -qq install -y flex bison bc libelf-dev libssl-dev cpio xz-utils zstd >/dev/null
-  if [ -f /work/out/amd64/vmlinuz.efi ] && [ -d /work/out/amd64/modules ]; then
-    echo "kernel: kept $(cat /work/out/amd64/kernel.flavour) from the cache"
+  if [ -f /work/out/$ARCH/vmlinuz.efi ] && [ -d /work/out/$ARCH/modules ]; then
+    echo "kernel: kept $(cat /work/out/$ARCH/kernel.flavour) from the cache"
   else
-    scripts/build-kernel.sh amd64
-    scripts/build-drbd.sh amd64
+    scripts/build-kernel.sh $ARCH
+    scripts/build-drbd.sh $ARCH
   fi
-  scripts/build-binaries.sh amd64'
-run "$alpine_image" sh /src/scripts/build-rootfs.sh amd64
+  scripts/build-binaries.sh $ARCH'
+run "$alpine_image" sh -c 'sh /src/scripts/build-rootfs.sh $ARCH'
 run "$go_image" bash -euc '
   apt-get -qq update && apt-get -qq install -y cpio >/dev/null
-  scripts/build-initramfs.sh amd64
-  if [ "$1" = --bundle ]; then scripts/build-bundle.sh amd64; fi' _ "$bundle"
+  scripts/build-initramfs.sh $ARCH
+  if [ "$1" = --bundle ]; then scripts/build-bundle.sh $ARCH; fi' _ "$bundle"

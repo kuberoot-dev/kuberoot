@@ -8,6 +8,8 @@
 #   hack/hetzner.sh kernel <arch>        rebuild the kernel
 #   hack/hetzner.sh media <arch> [args]  boot media from the last build, with
 #                                        kernel arguments; served as <arch>/media.img
+#   hack/hetzner.sh assets <version>     release assets of the last edge builds (built with
+#                                        KUBEROOT_VERSION=<version>), copied to out/release-<version>
 #   hack/hetzner.sh repo <recipe-dir>... build kubepkg recipes into the builder's
 #                                        registry and a signed test index at repo/index.yaml
 #   hack/hetzner.sh builder              the builder pod itself (hetzner/builder.yaml)
@@ -72,6 +74,14 @@ case "${1:-}" in
     arch=${2:?arch required}; shift 2
     sync
     tools sh -c "cd $SRC && go run ./cmd/mkimage -arch $arch -artifacts /work/out/$arch -trust /work/trust -out /work/out/$arch/media.img.new -args '$*' && mv /work/out/$arch/media.img.new /work/out/$arch/media.img && ls -lh /work/out/$arch/media.img" ;;
+  assets)
+    # What the release workflow publishes, from the builder's builds instead
+    # of GitHub's runners; gh release upload takes it from out/release-<v>.
+    v=${2:?version required}
+    sync
+    tools sh -c "cd $SRC && hack/release/lab-assets.sh $v /work/out /work/out/release-$v >&2 && tar -C /work/out/release-$v -cf - ." |
+      { mkdir -p "$ROOT/out/release-$v" && tar -xf - -C "$ROOT/out/release-$v"; }
+    echo "assets: $ROOT/out/release-$v" ;;
   repo)
     shift
     # The recipes travel like the sources; the registry and index are reached
