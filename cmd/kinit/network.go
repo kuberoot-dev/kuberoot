@@ -42,11 +42,17 @@ func setupNetwork(cfg bootConfig) (nodeInfo, error) {
 	}
 	mac := link.Attrs().HardwareAddr
 	node.name = keptNodeName(fmt.Sprintf("kuberoot-%02x%02x%02x", mac[3], mac[4], mac[5]))
-	node.ip, err = dhcp(link, cfg.nameservers)
+	explicit := cfg.explicitUplinkMTU(link.Attrs().Name)
+	// Set before DHCP too: the lease may not come, and the link should still
+	// have the MTU it was told to.
+	if err := setMTU(link, explicit, "kuberoot.mtu"); err != nil {
+		log.Print(err)
+	}
+	node.ip, err = dhcp(link, cfg.nameservers, explicit)
 	if err != nil || cfg.static == "" {
 		return node, err
 	}
-	ip, err := staticAddress(staticIface, staticAddr)
+	ip, err := staticAddress(staticIface, staticAddr, cfg.mtu[staticIface])
 	if err != nil {
 		return node, err
 	}
@@ -55,10 +61,13 @@ func setupNetwork(cfg bootConfig) (nodeInfo, error) {
 }
 
 // staticAddress brings up a cluster-facing interface with a fixed address.
-func staticAddress(iface, cidr string) (net.IP, error) {
+func staticAddress(iface, cidr string, mtu int) (net.IP, error) {
 	link, err := netlink.LinkByName(iface)
 	if err != nil {
 		return nil, fmt.Errorf("static interface %s: %w", iface, err)
+	}
+	if err := setMTU(link, mtu, "kuberoot.mtu"); err != nil {
+		return nil, err
 	}
 	addr, err := netlink.ParseAddr(cidr)
 	if err != nil {
@@ -99,7 +108,12 @@ func firstEthernet(skip string) (netlink.Link, error) {
 	return nil, fmt.Errorf("no ethernet link found")
 }
 
-func dhcp(link netlink.Link, nameservers []string) (net.IP, error) {
+// dhcp configures link from a lease. The interface MTU (option 26) is asked
+// for: a network whose path MTU is below 1500 -- nested virtualisation, a
+// VPN, PPPoE, Hyper-V's NAT -- says so there, and a link left at 1500 has
+// its large packets dropped, so TLS hangs once certificates or image layers
+// flow. explicitMTU, from the kernel command line, wins over the lease's.
+func dhcp(link netlink.Link, nameservers []string, explicitMTU int) (net.IP, error) {
 	name := link.Attrs().Name
 	client, err := nclient4.New(name)
 	if err != nil {
@@ -108,11 +122,18 @@ func dhcp(link netlink.Link, nameservers []string) (net.IP, error) {
 	defer client.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	lease, err := client.Request(ctx)
+	lease, err := client.Request(ctx, dhcpRequest...)
 	if err != nil {
 		return nil, fmt.Errorf("dhcp on %s: %w", name, err)
 	}
 	ack := lease.ACK
+	offered := leaseMTU(ack)
+	if explicitMTU != 0 && offered != 0 && offered != explicitMTU {
+		log.Printf("%s: dhcp offers mtu %d, kuberoot.mtu keeps %d", name, offered, explicitMTU)
+	}
+	if err := setMTU(link, uplinkMTU(explicitMTU, offered), "dhcp"); err != nil {
+		return nil, err
+	}
 	ipnet := &net.IPNet{IP: ack.YourIPAddr, Mask: ack.SubnetMask()}
 	if err := netlink.AddrReplace(link, &netlink.Addr{IPNet: ipnet}); err != nil {
 		return nil, fmt.Errorf("address %s: %w", ipnet, err)
