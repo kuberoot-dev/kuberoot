@@ -6,6 +6,7 @@
 # The release key is <work>/keys/release.{key,pub}, made if missing.
 # KUBEROOT_ARCH names the architecture (amd64 by default); it must be the
 # machine's own, as on GitHub's amd64 and arm64 runners.
+# (Not ARCH: the kernel's makefiles read that from the environment.)
 # Usage: hack/e2e/build-image.sh <checkout> <work> <version> [--bundle]
 set -euo pipefail
 
@@ -29,7 +30,7 @@ run() {
   shift
   docker run --rm -v "$src:/src" -v "$work:/work" -w /src \
     -e CURL_HOME=/work -e WORK=/work -e KUBEROOT_OUT=/work/out -e KUBEROOT_KEYS=/work/keys \
-    -e KUBEROOT_VERSION="$version" -e KUBEROOT_DISTRO=edge -e ARCH="$arch" \
+    -e KUBEROOT_VERSION="$version" -e KUBEROOT_DISTRO=edge -e KUBEROOT_ARCH="$arch" \
     -e GOFLAGS="-mod=mod -buildvcs=false" -e GOMODCACHE=/work/gomod -e GOCACHE=/work/gocache \
     "$image" "$@"
 }
@@ -37,15 +38,15 @@ run() {
 run "$go_image" bash -euc '
   apt-get -qq update
   apt-get -qq install -y flex bison bc libelf-dev libssl-dev cpio xz-utils zstd >/dev/null
-  if [ -f /work/out/$ARCH/vmlinuz.efi ] && [ -d /work/out/$ARCH/modules ]; then
-    echo "kernel: kept $(cat /work/out/$ARCH/kernel.flavour) from the cache"
+  if [ -f /work/out/$KUBEROOT_ARCH/vmlinuz.efi ] && [ -d /work/out/$KUBEROOT_ARCH/modules ]; then
+    echo "kernel: kept $(cat /work/out/$KUBEROOT_ARCH/kernel.flavour) from the cache"
   else
-    scripts/build-kernel.sh $ARCH
-    scripts/build-drbd.sh $ARCH
+    scripts/build-kernel.sh $KUBEROOT_ARCH
+    scripts/build-drbd.sh $KUBEROOT_ARCH
   fi
-  scripts/build-binaries.sh $ARCH'
-run "$alpine_image" sh -c 'sh /src/scripts/build-rootfs.sh $ARCH'
+  scripts/build-binaries.sh $KUBEROOT_ARCH'
+run "$alpine_image" sh -c 'sh /src/scripts/build-rootfs.sh $KUBEROOT_ARCH'
 run "$go_image" bash -euc '
   apt-get -qq update && apt-get -qq install -y cpio >/dev/null
-  scripts/build-initramfs.sh $ARCH
-  if [ "$1" = --bundle ]; then scripts/build-bundle.sh $ARCH; fi' _ "$bundle"
+  scripts/build-initramfs.sh $KUBEROOT_ARCH
+  if [ "$1" = --bundle ]; then scripts/build-bundle.sh $KUBEROOT_ARCH; fi' _ "$bundle"
