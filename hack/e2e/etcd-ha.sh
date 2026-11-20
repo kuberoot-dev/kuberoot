@@ -29,6 +29,11 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+# The etcd each image runs, from its own sources: a pull request that
+# changes the kernel compares with its base, which may run the same etcd.
+etcd_of() { sed -n 's/^ETCD_VERSION=v//p' "$1/build/components.env"; }
+ETCD_NEW=${ETCD_NEW:-$(etcd_of "$ROOT")}
+ETCD_OLD=${ETCD_OLD:-$(etcd_of "${OLD_SRC:-$ROOT}")}
 OLD=$(cd "${1:?old artifacts required}" && pwd)
 NEW=$(cd "${2:?new artifacts required}" && pwd)
 V=${3:?stand directory required}
@@ -297,7 +302,7 @@ done
 sleep 20
 read -r rounds bad gap <<<"$(marker_report "$roll_start")"
 log "rolling upgrade: $rounds marker rounds, $bad failed, longest gap ${gap}s"
-for i in 1 2 3; do [ "$(etcd_version "$i")" = "${ETCD_NEW:-3.7.3}" ] || fail "node $i runs etcd $(etcd_version "$i")"; done
+for i in 1 2 3; do [ "$(etcd_version "$i")" = "$ETCD_NEW" ] || fail "node $i runs etcd $(etcd_version "$i")"; done
 [ "$gap" -le "${MAX_GAP:-30}" ] || fail "the cluster was unavailable for ${gap}s"
 
 # --- rollback ---------------------------------------------------------------
@@ -316,7 +321,7 @@ until_ok 600 three_voters || fail "store lost a voter after the rollback"
 until_ok 600 nodes_ready 3 || fail "nodes not Ready after the rollback"
 v=$(ck 3 -n default get configmap e2e-marker -o jsonpath='{.data.n}')
 log "node 3 rolled back: $(booted 3), etcd $(etcd_version 3), member $(member_id "$n3"), marker n=$v through its API server"
-[ "$(etcd_version 3)" = "${ETCD_OLD:-3.7.2}" ] || fail "node 3 runs etcd $(etcd_version 3) after the rollback"
+[ "$(etcd_version 3)" = "$ETCD_OLD" ] || fail "node 3 runs etcd $(etcd_version 3) after the rollback"
 [ "$(member_id "$n3")" = "$id_before" ] || fail "node 3's store member changed: its data did not survive"
 log "roll node 3 forward to $new_slot"
 nk 3 patch bootentry "$new_slot" --type merge -p '{"spec":{"preferred":true}}' >/dev/null
