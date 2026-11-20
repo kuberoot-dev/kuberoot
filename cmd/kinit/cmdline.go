@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"strings"
 )
@@ -32,6 +33,10 @@ type bootConfig struct {
 	// static is an interface with a fixed address, "eth1:192.168.100.11/24";
 	// that address becomes the node address in the cluster.
 	static string
+	// mtu is the MTU set on the kernel command line: kuberoot.mtu=1400 for
+	// the link DHCP runs on (key uplinkMTUKey), kuberoot.mtu=eth1:9000 for a
+	// named one. It wins over the MTU a DHCP server offers.
+	mtu map[string]int
 	// datastore is the store of a cluster this node creates: kine, the
 	// default, for one control plane, or etcd, which other control planes
 	// can join. It is read once, when the cluster is created.
@@ -77,6 +82,17 @@ func parseCmdline(cmdline string) bootConfig {
 			}
 			if v, ok := strings.CutPrefix(f, "kuberoot.ip="); ok {
 				cfg.static = v
+			}
+			if v, ok := strings.CutPrefix(f, "kuberoot.mtu="); ok {
+				iface, mtu, err := parseMTUArg(v)
+				if err != nil {
+					log.Printf("ignoring %v", err)
+					continue
+				}
+				if cfg.mtu == nil {
+					cfg.mtu = map[string]int{}
+				}
+				cfg.mtu[iface] = mtu
 			}
 			if v, ok := strings.CutPrefix(f, "kuberoot.distro="); ok {
 				cfg.distro = v
