@@ -72,6 +72,9 @@ func configure(node nodeInfo, cfg bootConfig) ([]service, bool, error) {
 	}
 	activeRole = spec
 	services, err := renderRole(spec, r, cfg)
+	if err == nil {
+		services, err = combineServices(services)
+	}
 	return services, spec.Addons, err
 }
 

@@ -14,10 +14,11 @@ WORK=${WORK:-/work}
 OUT=${KUBEROOT_OUT:-$ROOT/out}/$ARCH
 mkdir -p "$OUT"
 
-cmds="kinit kuberoot-node kuberoot-installer kuberoot-intents kuberoot-fleet"
+cmds="kinit kuberoot-node kuberoot-installer kuberoot-fleet"
+[ "${KUBEROOT_DISTRO:-edge}" = slim ] || cmds="$cmds kuberoot-intents"
 case "$ARCH" in
   riscv64) cmds="$cmds kuberoot-pause" ;;
-  *) cmds="$cmds kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl" ;;
+  *) [ "${KUBEROOT_DISTRO:-edge}" = slim ] || cmds="$cmds kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl" ;;
 esac
 for cmd in $cmds; do
   (cd "$ROOT" && GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/$cmd" "./cmd/$cmd")
@@ -28,8 +29,13 @@ rm -f "$OUT/kuberoot-store"
 if [ "${KUBEROOT_STORE_LAB:-}" = 1 ]; then
   (cd "$ROOT" && GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT/kuberoot-store" ./cmd/kuberoot-store)
 fi
-"$ROOT/scripts/build-kubepkg.sh" "$ARCH"
-[ "$ARCH" != riscv64 ] || "$ROOT/scripts/build-kubernetes.sh" "$ARCH"
+[ "${KUBEROOT_DISTRO:-edge}" = slim ] || "$ROOT/scripts/build-kubepkg.sh" "$ARCH"
+if [ "${KUBEROOT_DISTRO:-edge}" = slim ]; then
+  [ "$ARCH" != riscv64 ] || "$ROOT/scripts/build-kubernetes.sh" "$ARCH" kubectl
+  "$ROOT/scripts/build-slim.sh" "$ARCH"
+elif [ "$ARCH" = riscv64 ]; then
+  "$ROOT/scripts/build-kubernetes.sh" "$ARCH"
+fi
 
 # The upstream kubelet is linked against glibc: carry just its runtime. The
 # builder's own for its architecture; another's from Debian's package of it.

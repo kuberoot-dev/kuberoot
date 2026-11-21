@@ -51,3 +51,18 @@ jobs:
           go vet ./cmd/... ./pkg/...
           go build -trimpath ./cmd/...
           cd build/kubepkg && go build -trimpath github.com/kuberoot-dev/kubepkg/cmd/kubepkg github.com/kuberoot-dev/kubepkg/cmd/kubepkg-operator
+  slim:
+    name: slim (riscv64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: sudo apt-get update -qq && sudo apt-get install -y gcc-riscv64-linux-gnu lld
+      - name: Build the shared Kubernetes and kine runtime
+        env:
+          WORK: ${{ runner.temp }}/slim
+          KUBEROOT_OUT: ${{ runner.temp }}/slim-out
+        run: scripts/build-slim.sh riscv64

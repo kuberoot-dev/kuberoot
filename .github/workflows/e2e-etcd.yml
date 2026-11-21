@@ -86,6 +86,8 @@ jobs:
     if: inputs.images_run_id == ''
     strategy:
       fail-fast: true
+      # Kernel builds are deliberately serialized, including CI images.
+      max-parallel: 1
       matrix:
         which: [old, new]
     runs-on: ubuntu-latest

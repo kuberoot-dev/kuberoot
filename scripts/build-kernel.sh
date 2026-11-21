@@ -64,7 +64,7 @@ case "$ARCH" in
   arm64) required="CONFIG_DEBUG_INFO_BTF $hyperv CONFIG_FB_HYPERV" ;;
   riscv64) required="CONFIG_VIRTIO_MMIO CONFIG_VIRTIO_PCI CONFIG_VIRTIO_BLK CONFIG_VIRTIO_NET CONFIG_VIRTIO_CONSOLE CONFIG_HW_RANDOM_VIRTIO CONFIG_RTC_DRV_GOLDFISH CONFIG_RTC_DRV_EFI CONFIG_EFI_STUB CONFIG_ACPI" ;;
 esac
-for opt in CONFIG_BLK_DEV_DM $required; do
+for opt in CONFIG_BLK_DEV_DM CONFIG_SWAP CONFIG_ZSMALLOC CONFIG_ZRAM CONFIG_ZRAM_BACKEND_LZ4 $required; do
   grep -qx "$opt=y" "$O/.config" || {
     echo "$opt was asked for in the fragments and is not in the resulting config: a dependency of it is unmet" >&2
     exit 1

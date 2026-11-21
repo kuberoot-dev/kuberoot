@@ -23,6 +23,16 @@ if [ "$(cat "$OUT/VERSION" 2>/dev/null)" = "$K8S_VERSION" ]; then
   exit 0
 fi
 
+# Serialize with the shared-runtime build, which temporarily overlays source.
+mkdir -p "$WORK"
+exec 9>"$WORK/kubernetes-source.lock"
+flock 9
+
+# Keep downloads, compiler temporaries and package caches on the builder PVC.
+export GOCACHE=$WORK/kubernetes-cache-$ARCH TMPDIR=$WORK/kubernetes-tmp-$ARCH
+mkdir -p "$GOCACHE" "$TMPDIR"
+trap 'rm -rf "$GOCACHE" "$TMPDIR"' EXIT
+
 # The release's source archive, checked against the digest published with it.
 src=$WORK/src/kubernetes-$K8S_VERSION
 if [ ! -d "$src" ]; then
@@ -53,12 +63,15 @@ if [ "$(cat "$OUT/SOURCE" 2>/dev/null)" != "$K8S_VERSION" ]; then
   mkdir -p "$OUT"
   echo "$K8S_VERSION" >"$OUT/SOURCE"
 fi
-cmds=""
-for b in $want; do cmds="$cmds ./cmd/$b"; done
-# The source vendors its modules: no -mod=mod from the builder's GOFLAGS.
-# shellcheck disable=SC2086
-(cd "$src" && GOFLAGS=-buildvcs=false GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 \
-  go build -trimpath -ldflags="$ldflags" -o "$OUT/" $cmds)
+# Keep both compiled packages and compiler temporaries on WORK. Building one
+# command at a time and dropping its cache bounds disk use on the 60 GiB PVC.
+for b in $want; do
+  case " $BINARIES " in *" $b "*) ;; *) echo "unknown Kubernetes binary: $b" >&2; exit 1 ;; esac
+  (cd "$src" && GOFLAGS=-buildvcs=false GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 \
+    go build -p "${GO_BUILD_PARALLELISM:-4}" -trimpath -ldflags="$ldflags" -o "$OUT/$b" "./cmd/$b")
+  rm -rf "$GOCACHE" "$TMPDIR"
+  mkdir -p "$GOCACHE" "$TMPDIR"
+done
 missing=""
 for b in $BINARIES; do [ -f "$OUT/$b" ] || missing="$missing $b"; done
 [ -z "$missing" ] || { echo "kubernetes: built $want; still to build:$missing"; exit 0; }

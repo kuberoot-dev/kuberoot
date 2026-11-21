@@ -1,0 +1,404 @@
+{
+  "date": "2026-11-21",
+  "environment": {
+    "qemu": "10.0.0 TCG",
+    "host_cpu": "AMD EPYC 9454P",
+    "vcpus": 4,
+    "pod_cpu_limit": 4,
+    "kernel": "6.18.62",
+    "kubernetes": "v1.37.2",
+    "kine": "v0.17.2",
+    "boot": "OpenSBI, live media, fresh tmpfs /var"
+  },
+  "artifact_sha256": {
+    "vmlinuz.efi": "db43c7264ee97779f9271ebb6c57e90df675d7ab768462e01115d84d4f7cd598",
+    "initrd.cpio": "cc6c785760ae1451ea3683256298b0c2c16f994ba8e5b6d1d9f48163a60f9ffc",
+    "rootfs.squashfs": "95b14bc51d3b0381ac1befe621e85c4ed2f5536f2e0678fb44b70d97a3730ef5",
+    "kuberoot-control": "48435454c2ffc49a450b1b636301028638cc12fde6658faabf506dc56a65d4e4"
+  },
+  "runs": [
+    {
+      "ram_mib": 512,
+      "stable": false,
+      "node_api_s": 15.9,
+      "ready_observed_s": 139.5,
+      "ready_s": 132.2,
+      "failure": "deadline exceeded: Unable to connect to the server: context deadline exceeded",
+      "elapsed_s": 480.7
+    },
+    {
+      "ram_mib": 640,
+      "stable": false,
+      "node_api_s": 16.5,
+      "ready_observed_s": 50.4,
+      "ready_s": 48.4,
+      "idle": {
+        "time": "2026-11-21T18:07:37Z",
+        "availableBytes": 273014784,
+        "usageBytes": 458231808,
+        "workingSetBytes": 346542080,
+        "rssBytes": 214179840,
+        "pageFaults": 571520,
+        "majorPageFaults": 405774,
+        "psi": {
+          "full": {
+            "total": 57668376,
+            "avg10": 9.22,
+            "avg60": 10.5,
+            "avg300": 10.71
+          },
+          "some": {
+            "total": 71389599,
+            "avg10": 9.79,
+            "avg60": 11.83,
+            "avg300": 13.06
+          }
+        }
+      },
+      "api_idle": {
+        "requests": 30,
+        "errors": 0,
+        "samples_ms": [
+          80.565,
+          52.998999999999995,
+          67.861,
+          48.522000000000006,
+          272.992,
+          50.907000000000004,
+          59.583999999999996,
+          72.02,
+          32.166,
+          37.171,
+          65.946,
+          64.944,
+          41.77,
+          49.561,
+          35.795,
+          36.089999999999996,
+          66.304,
+          55.448,
+          42.501,
+          34.071999999999996,
+          35.47,
+          41.369,
+          56.329,
+          65.64,
+          67.552,
+          68.768,
+          47.648,
+          58.165,
+          31.05,
+          52.057
+        ],
+        "p50_ms": 52.528,
+        "p95_ms": 72.02,
+        "max_ms": 272.992
+      },
+      "failure": "deadline exceeded: Unable to connect to the server: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)",
+      "elapsed_s": 513.2,
+      "service_restarts_idle": {
+        "containerd": 0,
+        "kuberoot-control": 0,
+        "kuberoot-node": 0
+      }
+    },
+    {
+      "ram_mib": 768,
+      "stable": true,
+      "node_api_s": 16.5,
+      "ready_observed_s": 47.6,
+      "ready_s": 44.8,
+      "idle": {
+        "time": "2026-11-21T17:51:32Z",
+        "availableBytes": 324616192,
+        "usageBytes": 596860928,
+        "workingSetBytes": 427061248,
+        "rssBytes": 242057216,
+        "pageFaults": 198119,
+        "majorPageFaults": 53030,
+        "psi": {
+          "full": {
+            "total": 8237732,
+            "avg10": 0.12,
+            "avg60": 1.06,
+            "avg300": 1.5
+          },
+          "some": {
+            "total": 9041624,
+            "avg10": 0.12,
+            "avg60": 1.13,
+            "avg300": 1.65
+          }
+        }
+      },
+      "api_idle": {
+        "requests": 30,
+        "errors": 0,
+        "samples_ms": [
+          93.25999999999999,
+          43.787,
+          47.785000000000004,
+          36.607,
+          51.333999999999996,
+          46.368,
+          30.700000000000003,
+          30.609,
+          35.22,
+          44.672000000000004,
+          42.565,
+          57.660999999999994,
+          51.696,
+          47.997,
+          32.064,
+          52.865,
+          48.198,
+          54.879999999999995,
+          58.948,
+          50.403999999999996,
+          35.761,
+          57.3,
+          63.837,
+          56.168,
+          39.160000000000004,
+          58.756,
+          61.936,
+          47.222,
+          41.576,
+          47.379999999999995
+        ],
+        "p50_ms": 47.891000000000005,
+        "p95_ms": 61.936,
+        "max_ms": 93.25999999999999
+      },
+      "three_pods": {
+        "time": "2026-11-21T17:53:54Z",
+        "availableBytes": 321949696,
+        "usageBytes": 587833344,
+        "workingSetBytes": 429727744,
+        "rssBytes": 258375680,
+        "pageFaults": 282361,
+        "majorPageFaults": 90546,
+        "psi": {
+          "full": {
+            "total": 17278465,
+            "avg10": 0.9,
+            "avg60": 3.18,
+            "avg300": 2.98
+          },
+          "some": {
+            "total": 19312444,
+            "avg10": 1,
+            "avg60": 3.52,
+            "avg300": 3.34
+          }
+        }
+      },
+      "api_loaded": {
+        "requests": 30,
+        "errors": 0,
+        "samples_ms": [
+          162.335,
+          33.178,
+          34.852000000000004,
+          39.358999999999995,
+          41.736000000000004,
+          41.379,
+          42.985,
+          55.676,
+          60.198,
+          33.751999999999995,
+          57.76,
+          31.342000000000002,
+          144.37,
+          50.601,
+          46.574999999999996,
+          95.929,
+          35.791000000000004,
+          48.803,
+          52.278999999999996,
+          78.788,
+          68.557,
+          68.58699999999999,
+          30.389,
+          59.263999999999996,
+          49.033,
+          48.867,
+          61.991,
+          33.629,
+          33.214,
+          75.999
+        ],
+        "p50_ms": 48.95,
+        "p95_ms": 95.929,
+        "max_ms": 162.335
+      },
+      "swap_used_mib": 191.3046875,
+      "zram_bytes": {
+        "original": 192978944,
+        "compressed": 110815043,
+        "backing": 114716672
+      },
+      "pod_restarts": 0,
+      "elapsed_s": 423.5,
+      "service_restarts_idle": {
+        "containerd": 0,
+        "kuberoot-control": 0,
+        "kuberoot-node": 0
+      },
+      "service_restarts_final": {
+        "containerd": 0,
+        "kuberoot-control": 0,
+        "kuberoot-node": 0
+      }
+    },
+    {
+      "ram_mib": 1024,
+      "stable": true,
+      "node_api_s": 17.0,
+      "ready_observed_s": 48.1,
+      "ready_s": 46.1,
+      "idle": {
+        "time": "2026-11-21T18:15:08Z",
+        "availableBytes": 441131008,
+        "usageBytes": 965632000,
+        "workingSetBytes": 574787584,
+        "rssBytes": 280530944,
+        "pageFaults": 146466,
+        "majorPageFaults": 419,
+        "psi": {
+          "full": {
+            "total": 10594,
+            "avg10": 0,
+            "avg60": 0,
+            "avg300": 0
+          },
+          "some": {
+            "total": 11111,
+            "avg10": 0,
+            "avg60": 0,
+            "avg300": 0
+          }
+        }
+      },
+      "api_idle": {
+        "requests": 30,
+        "errors": 0,
+        "samples_ms": [
+          49.859,
+          51.818000000000005,
+          38.314,
+          34.609,
+          41.492000000000004,
+          52.883,
+          47.766000000000005,
+          46.433,
+          44.427,
+          46.548,
+          39.660000000000004,
+          59.613,
+          70.758,
+          57.112,
+          54.371,
+          70.96900000000001,
+          50.386,
+          63.531000000000006,
+          60.555,
+          45.143,
+          61.725,
+          60.775999999999996,
+          32.576,
+          31.008,
+          32.841,
+          58.391,
+          61.964,
+          64.60499999999999,
+          48.821999999999996,
+          47.838
+        ],
+        "p50_ms": 50.1225,
+        "p95_ms": 64.60499999999999,
+        "max_ms": 70.96900000000001
+      },
+      "three_pods": {
+        "time": "2026-11-21T18:17:20Z",
+        "availableBytes": 398544896,
+        "usageBytes": 957243392,
+        "workingSetBytes": 617373696,
+        "rssBytes": 302018560,
+        "pageFaults": 191968,
+        "majorPageFaults": 419,
+        "psi": {
+          "full": {
+            "total": 39424,
+            "avg10": 0,
+            "avg60": 0,
+            "avg300": 0
+          },
+          "some": {
+            "total": 48748,
+            "avg10": 0,
+            "avg60": 0,
+            "avg300": 0
+          }
+        }
+      },
+      "api_loaded": {
+        "requests": 30,
+        "errors": 0,
+        "samples_ms": [
+          51.077,
+          32.106,
+          29.817,
+          29.701,
+          33.937000000000005,
+          52.636,
+          38.625,
+          43.477000000000004,
+          36.76,
+          30.134999999999998,
+          48.015,
+          38.307,
+          30.127000000000002,
+          28.489,
+          34.651,
+          30.977,
+          36.293,
+          35.674,
+          38.422,
+          29.093999999999998,
+          35.435,
+          35.902,
+          35.01,
+          49.891,
+          45.649,
+          36.801,
+          37.943999999999996,
+          30.994,
+          55.606,
+          35.789
+        ],
+        "p50_ms": 35.8455,
+        "p95_ms": 51.077,
+        "max_ms": 55.606
+      },
+      "swap_used_mib": 0.0,
+      "zram_bytes": {
+        "original": 4096,
+        "compressed": 43,
+        "backing": 4096
+      },
+      "pod_restarts": 0,
+      "elapsed_s": 397.6,
+      "service_restarts_idle": {
+        "containerd": 0,
+        "kuberoot-control": 0,
+        "kuberoot-node": 0
+      },
+      "service_restarts_final": {
+        "containerd": 0,
+        "kuberoot-control": 0,
+        "kuberoot-node": 0
+      }
+    }
+  ]
+}
