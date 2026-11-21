@@ -37,6 +37,7 @@ func scaleServices(services []service, n int) []service {
 		case "kube-controller-manager":
 			s.args = append(s.args, "--node-monitor-grace-period="+duration(50), "--node-startup-grace-period="+duration(60))
 		case "kine":
+			s.args = append(s.args, "--compact-timeout="+duration(5))
 			for j, arg := range s.args {
 				s.args[j] = strings.ReplaceAll(arg, "_busy_timeout=30000", fmt.Sprintf("_busy_timeout=%d", 30000*n))
 			}

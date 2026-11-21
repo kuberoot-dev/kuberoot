@@ -19,7 +19,7 @@ cluster = ['/work/bin/kubectl', '--kubeconfig', str(work/f'{profile}.conf'),
            '--server', f'https://{host}:6443', '--tls-server-name=10.0.2.15', '--request-timeout=120s', '-n', 'default']
 report = dict(profile=profile, timescale=1 if profile=='baseline' else 60,
               cpu_limit_millicores=100, vcpus=1, ram_mib=1024, success=False)
-deadline = boot + (900 if profile == 'baseline' else 2400)
+deadline = boot + (900 if profile == 'baseline' else 7200)
 
 def run(args):
     p = subprocess.run(args, capture_output=True, text=True, timeout=150)

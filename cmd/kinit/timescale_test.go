@@ -68,6 +68,9 @@ func TestTimingServices(t *testing.T) {
 		}
 		scaled := scaleServices(services, 60)
 		for _, svc := range scaled {
+			if svc.name == "kine" && !strings.Contains(strings.Join(svc.args, " "), "--compact-timeout=5m0s") {
+				t.Fatal(svc.args)
+			}
 			if svc.name == "kube-apiserver" && !strings.Contains(strings.Join(svc.args, " "), "--request-timeout=1h0m0s") {
 				t.Fatal(svc.args)
 			}

@@ -16,7 +16,7 @@ for profile in ('emulator','baseline'):
     print('START',profile,start,flush=True)
     try:
         with (work/f'{profile}-measure.log').open('w') as log:
-            subprocess.run(['python3',str(work/'measure.py'),host,profile,str(start['boot'])],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=2800)
+            subprocess.run(['python3',str(work/'measure.py'),host,profile,str(start['boot'])],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=7600)
         print('RESULT', (work/f'{profile}-report.json').read_text(),flush=True)
     finally:
         control('stop')
