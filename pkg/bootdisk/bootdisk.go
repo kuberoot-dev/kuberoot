@@ -39,7 +39,7 @@ func RootLabel(slot string) string { return "kuberoot-root-" + slot }
 // Artifacts are the files a kuberoot release consists of.
 type Artifacts struct {
 	Dir        string // holds vmlinuz.efi, initrd.cpio, rootfs.squashfs, systemd-boot.efi, maybe kernel.args
-	Arch       string // arm64 or amd64
+	Arch       string // amd64, arm64 or riscv64
 	Version    string
 	ConsoleArg string // console= arguments for the kernel command line
 }
@@ -68,8 +68,11 @@ func (a Artifacts) BootArgs() string {
 
 // RemovableBootPath is where firmware looks for a bootloader without NVRAM entries.
 func (a Artifacts) RemovableBootPath() string {
-	if a.Arch == "amd64" {
+	switch a.Arch {
+	case "amd64":
 		return "/EFI/BOOT/BOOTX64.EFI"
+	case "riscv64":
+		return "/EFI/BOOT/BOOTRISCV64.EFI"
 	}
 	return "/EFI/BOOT/BOOTAA64.EFI"
 }

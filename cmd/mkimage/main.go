@@ -52,8 +52,12 @@ func main() {
 }
 
 func consoleFor(arch string) string {
-	if arch == "amd64" {
+	switch arch {
+	case "amd64":
 		return "console=tty0 console=ttyS0"
+	case "riscv64":
+		// The virt machine's UART; riscv64 nodes have no screen.
+		return "console=ttyS0"
 	}
 	return "console=tty0 console=ttyAMA0"
 }

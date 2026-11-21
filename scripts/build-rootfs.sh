@@ -3,7 +3,10 @@
 # Kubernetes, containerd, runc, CNI plugins, kine, the few tools they exec
 # (nft, mount, conntrack, mkfs.ext4), and what build-binaries.sh made. No shell,
 # no package manager. Runs in the builder's Alpine container.
-# Usage: scripts/build-rootfs.sh <arch: amd64|arm64>
+# The riscv64 root is the edge distribution's on a single node, for emulators:
+# no etcd (kine is the store), none of the other distributions' programs,
+# Kubernetes as build-kubernetes.sh built it, and a pause image of its own.
+# Usage: scripts/build-rootfs.sh <arch: amd64|arm64|riscv64>
 set -eu
 
 ARCH=${1:?arch required}
@@ -22,7 +25,7 @@ fetch() { [ -s "$CACHE/$2" ] || curl -fsSL -o "$CACHE/$2" "$1"; }
 
 # Alpine's packages for the target architecture, which may not be the
 # builder's: apk installs another's, verified with that architecture's keys.
-case "$ARCH" in amd64) APK_ARCH=x86_64 ;; arm64) APK_ARCH=aarch64 ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
+case "$ARCH" in amd64) APK_ARCH=x86_64 ;; arm64) APK_ARCH=aarch64 ;; riscv64) APK_ARCH=riscv64 ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
 r=$(mktemp -d)
 mkdir -p $r/etc/apk/keys
 if [ "$(apk --print-arch)" = "$APK_ARCH" ]; then
@@ -39,6 +42,11 @@ apk add -q --root $r --arch $APK_ARCH --initdb --no-scripts --no-cache \
 rm -rf $r/etc/apk $r/lib/apk $r/var/cache/apk
 
 for b in kube-apiserver kube-controller-manager kube-scheduler kubelet kube-proxy kubectl; do
+  if [ "$ARCH" = riscv64 ]; then
+    [ "$(cat "$OUT/kubernetes/VERSION" 2>/dev/null)" = "$K8S_VERSION" ] || { echo "no Kubernetes $K8S_VERSION in $OUT/kubernetes (build-kubernetes.sh)" >&2; exit 1; }
+    install -D -m 0755 "$OUT/kubernetes/$b" "$r/usr/bin/$b"
+    continue
+  fi
   fetch "https://dl.k8s.io/release/$K8S_VERSION/bin/linux/$ARCH/$b" "$b-$K8S_VERSION"
   install -D -m 0755 "$CACHE/$b-$K8S_VERSION" "$r/usr/bin/$b"
 done
@@ -52,16 +60,25 @@ tar -xzf "$CACHE/cni-$CNI_VERSION.tgz" -C $r/usr/libexec/cni ./bridge ./host-loc
 fetch "https://github.com/k3s-io/kine/releases/download/$KINE_VERSION/kine-$ARCH" "kine-$KINE_VERSION"
 install -m 0755 "$CACHE/kine-$KINE_VERSION" $r/usr/bin/kine
 # etcd: the store of a control plane that others join; etcdutl restores its snapshots.
-fetch "https://github.com/etcd-io/etcd/releases/download/$ETCD_VERSION/etcd-$ETCD_VERSION-linux-$ARCH.tar.gz" "etcd-$ETCD_VERSION-$ARCH.tgz"
-tar -xzf "$CACHE/etcd-$ETCD_VERSION-$ARCH.tgz" -C $r/usr/bin --strip-components=1 \
-  "etcd-$ETCD_VERSION-linux-$ARCH/etcd" "etcd-$ETCD_VERSION-linux-$ARCH/etcdutl"
+if [ "$ARCH" != riscv64 ]; then
+  fetch "https://github.com/etcd-io/etcd/releases/download/$ETCD_VERSION/etcd-$ETCD_VERSION-linux-$ARCH.tar.gz" "etcd-$ETCD_VERSION-$ARCH.tgz"
+  tar -xzf "$CACHE/etcd-$ETCD_VERSION-$ARCH.tgz" -C $r/usr/bin --strip-components=1 \
+    "etcd-$ETCD_VERSION-linux-$ARCH/etcd" "etcd-$ETCD_VERSION-linux-$ARCH/etcdutl"
+fi
 
 install -m 0755 "$OUT/kinit" $r/usr/sbin/kinit
 if [ "${KUBEROOT_STORE_LAB:-}" = 1 ]; then install -m 0755 "$OUT/kuberoot-store" $r/usr/bin/; fi
-install -m 0755 "$OUT/kuberoot-node" "$OUT/kuberoot-installer" "$OUT/kuberoot-intents" "$OUT/kuberoot-router" "$OUT/kuberoot-vmctl" "$OUT/kuberoot-aictl" "$OUT/kuberoot-agent" "$OUT/kuberoot-devices" "$OUT/kuberoot-wsctl" "$OUT/kuberoot-fleet" "$OUT/kubepkg" "$OUT/kubepkg-operator" $r/usr/bin/
+bins="kuberoot-node kuberoot-installer kuberoot-intents kuberoot-fleet kubepkg kubepkg-operator"
+[ "$ARCH" = riscv64 ] || bins="$bins kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl"
+for b in $bins; do install -m 0755 "$OUT/$b" $r/usr/bin/; done
+# The pause image, where upstream has none for the architecture: an OCI
+# archive kinit imports into containerd and names as the sandbox image.
+if [ "$ARCH" = riscv64 ]; then
+  sh "$ROOT/scripts/pause-image.sh" "$OUT/kuberoot-pause" "$ARCH" "$r/usr/share/kuberoot/images"
+fi
 mkdir -p $r/usr/share/kuberoot/kubepkg/crds
 cp "$OUT"/kubepkg-crds/*.yaml $r/usr/share/kuberoot/kubepkg/crds/
-cp -r "$OUT/glibc/." $r/
+[ ! -d "$OUT/glibc" ] || cp -r "$OUT/glibc/." $r/
 cp -r "$ROOT/rootfs/." $r/
 install -m 0644 "$ROOT/distros/$DISTRO/profile.yaml" $r/usr/share/kuberoot/profile.yaml
 # The distribution's own add-ons, next to the image's.

@@ -23,7 +23,7 @@ func TestSlotEntryKernelArgs(t *testing.T) {
 }
 
 func TestRemovableBootPath(t *testing.T) {
-	for arch, want := range map[string]string{"amd64": "/EFI/BOOT/BOOTX64.EFI", "arm64": "/EFI/BOOT/BOOTAA64.EFI"} {
+	for arch, want := range map[string]string{"amd64": "/EFI/BOOT/BOOTX64.EFI", "arm64": "/EFI/BOOT/BOOTAA64.EFI", "riscv64": "/EFI/BOOT/BOOTRISCV64.EFI"} {
 		if got := (Artifacts{Arch: arch}).RemovableBootPath(); got != want {
 			t.Errorf("%s: %s, want %s", arch, got, want)
 		}
