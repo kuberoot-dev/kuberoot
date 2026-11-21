@@ -373,6 +373,7 @@ func delegatedAuthorizer(kubeconfig string) (authorizer.Authorizer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cluster kubeconfig: %w", err)
 	}
+	scaleInternalClient(restCfg)
 	client, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
 		return nil, err

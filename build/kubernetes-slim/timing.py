@@ -12,6 +12,9 @@ import sys
 root = Path(sys.argv[1])
 helper = root / 'staging/src/k8s.io/client-go/util/kuberootclock/clock.go'
 patches = {
+ 'cmd/kubelet/app/server.go': [
+  ('net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}', 'net.Dialer{Timeout: kuberootclock.Scale(30 * time.Second), KeepAlive: 30 * time.Second}'),
+ ],
  'staging/src/k8s.io/client-go/transport/cache.go': [
   ('Timeout:   30 * time.Second,', 'Timeout:   kuberootclock.Scale(30 * time.Second),'),
   ('TLSHandshakeTimeout: 10 * time.Second,', 'TLSHandshakeTimeout: kuberootclock.Scale(10 * time.Second),'),
@@ -24,6 +27,12 @@ patches = {
   ('DialKeepAliveTime:    keepaliveTime,', 'DialKeepAliveTime:    kuberootclock.Scale(keepaliveTime),'),
   ('DialKeepAliveTimeout: keepaliveTimeout,', 'DialKeepAliveTimeout: kuberootclock.Scale(keepaliveTimeout),'),
   ('blockUntilReady(dialTimeout, kClient)', 'blockUntilReady(kuberootclock.Scale(dialTimeout), kClient)'),
+ ],
+ 'pkg/registry/core/rest/storage_core.go': [
+  ('case <-time.After(time.Minute):', 'case <-time.After(kuberootclock.Scale(time.Minute)):'),
+ ],
+ 'pkg/registry/flowcontrol/rest/storage_flowcontrol.go': [
+  ('contextFromChannelAndMaxWaitDuration(hookContext.Done(), 5*time.Minute)', 'contextFromChannelAndMaxWaitDuration(hookContext.Done(), kuberootclock.Scale(5*time.Minute))'),
  ],
  'pkg/registry/rbac/rest/storage_rbac.go': [
   ('wait.Poll(1*time.Second, 30*time.Second,', 'wait.Poll(1*time.Second, kuberootclock.Scale(30*time.Second),'),
@@ -41,6 +50,14 @@ patches = {
   ('context.WithTimeout(ctx, 10*time.Second)', 'context.WithTimeout(ctx, kuberootclock.Scale(10*time.Second))'),
  ],
 }
+# Mutating handlers impose a second 34s ceiling under --request-timeout.
+# Keep explicit shorter client contexts authoritative, but scale this ceiling.
+for operation in ('create', 'update', 'patch', 'delete'):
+ patches[f'staging/src/k8s.io/apiserver/pkg/endpoints/handlers/{operation}.go'] = [
+  ('context.WithTimeout(ctx, requestTimeoutUpperBound)',
+   'context.WithTimeout(ctx, kuberootclock.Scale(requestTimeoutUpperBound))'),
+ ]
+
 if len(sys.argv) == 3 and sys.argv[2] == '--restore':
  for name in patches:
   p = root / name

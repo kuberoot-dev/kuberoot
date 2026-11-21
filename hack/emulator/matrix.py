@@ -11,7 +11,7 @@ host=sys.argv[1]
 def control(action,body=None):
     request=Request(f'http://{host}:8090/{action}',data=json.dumps(body or {}).encode(),headers={'Content-Type':'application/json'},method='POST')
     with urlopen(request,timeout=60) as response: return json.load(response)
-for profile in ('baseline','emulator'):
+for profile in ('emulator','baseline'):
     start=control('start',{'profile':profile})
     print('START',profile,start,flush=True)
     try:
