@@ -1,0 +1,130 @@
+// Command kuberoot-control runs the Kubernetes components in one Go runtime.
+// It is built inside the pinned Kubernetes source tree, not this module.
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
+	kine "github.com/k3s-io/kine/pkg/app"
+	_ "github.com/k3s-io/kine/pkg/drivers/sqlite"
+	"github.com/spf13/cobra"
+	server "k8s.io/apiserver/pkg/server"
+	logsapi "k8s.io/component-base/logs/api/v1"
+	apiserver "k8s.io/kubernetes/cmd/kube-apiserver/app"
+	controller "k8s.io/kubernetes/cmd/kube-controller-manager/app"
+	proxy "k8s.io/kubernetes/cmd/kube-proxy/app"
+	scheduler "k8s.io/kubernetes/cmd/kube-scheduler/app"
+	kubelet "k8s.io/kubernetes/cmd/kubelet/app"
+)
+
+func main() {
+	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
+	ctx := server.SetupSignalContext()
+	commands := map[string]*cobra.Command{
+		"kube-apiserver":          apiserver.NewAPIServerCommand(),
+		"kube-controller-manager": controller.NewControllerManagerCommand(),
+		"kube-scheduler":          scheduler.NewSchedulerCommand(),
+		"kubelet":                 kubelet.NewKubeletCommand(context.Background()),
+		"kube-proxy":              proxy.NewProxyCommand(),
+	}
+	// Symlinks preserve the usual single-component CLI, including worker
+	// kubelet/proxy startup, --help, and --version.
+	name := filepath.Base(os.Args[0])
+	if name == "kine" {
+		if err := kine.New().RunContext(ctx, os.Args); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if cmd, ok := commands[name]; ok {
+		cmd.SetArgs(os.Args[1:])
+		if err := cmd.ExecuteContext(ctx); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if len(os.Args) != 2 {
+		log.Fatal("usage: kuberoot-control <components.json>")
+	}
+	raw, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+	var args map[string][]string
+	if err := json.Unmarshal(raw, &args); err != nil {
+		log.Fatal(err)
+	}
+	for name, argv := range args {
+		if name == "kine" {
+			continue
+		}
+		cmd, ok := commands[name]
+		if !ok {
+			log.Fatalf("unknown component %q", name)
+		}
+		cmd.SetArgs(argv)
+	}
+	results := make(chan error, len(args))
+	run := func(name string) {
+		cmd := commands[name]
+		go func() { results <- fmt.Errorf("%s stopped: %v", name, cmd.ExecuteContext(ctx)) }()
+	}
+	if argv, ok := args["kine"]; ok {
+		go func() {
+			results <- fmt.Errorf("kine stopped: %v", kine.New().RunContext(ctx, append([]string{"kine"}, argv...)))
+		}()
+	}
+	if _, ok := args["kube-apiserver"]; ok {
+		run("kube-apiserver")
+		client := &http.Client{Timeout: time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+		for {
+			resp, err := client.Get("https://127.0.0.1:6443/readyz")
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					break
+				}
+			}
+			select {
+			case err := <-results:
+				log.Fatal(err)
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+		}
+	}
+	for _, name := range []string{"kube-controller-manager", "kube-scheduler", "kubelet", "kube-proxy"} {
+		if _, ok := args[name]; ok {
+			run(name)
+		}
+	}
+	remaining := len(args)
+	select {
+	case err := <-results:
+		remaining--
+		if ctx.Err() == nil {
+			log.Fatal(err)
+		}
+	case <-ctx.Done():
+	}
+	// A normal component exit can race with cancellation. Give the other
+	// components time to drain instead of treating that race as a failure.
+	deadline := time.NewTimer(12 * time.Second)
+	defer deadline.Stop()
+	for ; remaining > 0; remaining-- {
+		select {
+		case <-results:
+		case <-deadline.C:
+			return
+		}
+	}
+}

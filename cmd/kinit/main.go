@@ -50,6 +50,9 @@ func boot() error {
 	_ = unix.Uname(&uts)
 	log.Printf("kuberoot booting, kernel %s, uptime %s", unix.ByteSliceToString(uts.Release[:]), uptime())
 
+	if err := setupZRAM(); err != nil {
+		log.Printf("zram swap: %v", err)
+	}
 	waitForEntropy()
 	cfg := loadCmdline()
 	podNetworkMode = cfg.podNetwork

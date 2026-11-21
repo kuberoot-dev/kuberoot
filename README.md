@@ -2,9 +2,9 @@
 
 [Русская версия](README.ru.md)
 
-kuberoot builds Kubernetes distributions that boot straight on hardware. Each one is a single image with its own Linux kernel, a small init that brings up Kubernetes, and a node that is managed through the Kubernetes API itself: there is no SSH, no shell and no separate node tool, `kubectl` reaches the node. Everything above the base is a [kubepkg](https://github.com/kuberoot-dev/kubepkg) package, so a distribution is a base plus a meta package, the way a Linux distribution is a kernel plus packages.
+kuberoot builds Kubernetes distributions that boot straight on hardware. Each one is a single image with its own Linux kernel, a small init that brings up Kubernetes, and a node that is managed through the Kubernetes API itself: there is no SSH, no shell and no separate node tool, `kubectl` reaches the node. Most distributions install everything above the base as a [kubepkg](https://github.com/kuberoot-dev/kubepkg) package, so a distribution is a base plus a meta package, the way a Linux distribution is a kernel plus packages.
 
-The repository builds eight distributions: `edge`, a general-purpose cluster for one to a few nodes; `router`, Kubernetes without containers that runs a network router; `hypervisor`, virtual machines on KVM with their disks replicated between nodes, moved off a node that fails; `ai`, language models served as processes of the nodes behind one OpenAI-compatible endpoint, with new versions rolled out and back by the cluster; `rt`, a real-time controller whose pods get whole CPUs with no timer tick on a fully preemptible kernel; `iot`, a gateway with no containers that reads devices over Modbus and sends on what they say, its changes undone by themselves when they cut a device off; `observability`, a monitoring cluster outside what it watches, which reads servers' BMCs, switches, PDUs and probes of services natively and tells the outside world, by its heartbeats, that it still works; and `workstation`, people's desktops as virtual machines of the cluster, opened from a browser or an RDP client.
+The repository builds nine distributions: `edge`, a general-purpose cluster for one to a few nodes; [`slim`](#the-slim-profile), a low-memory riscv64 node for the in-browser trainer; `router`, Kubernetes without containers that runs a network router; `hypervisor`, virtual machines on KVM with their disks replicated between nodes, moved off a node that fails; `ai`, language models served as processes of the nodes behind one OpenAI-compatible endpoint, with new versions rolled out and back by the cluster; `rt`, a real-time controller whose pods get whole CPUs with no timer tick on a fully preemptible kernel; `iot`, a gateway with no containers that reads devices over Modbus and sends on what they say, its changes undone by themselves when they cut a device off; `observability`, a monitoring cluster outside what it watches, which reads servers' BMCs, switches, PDUs and probes of services natively and tells the outside world, by its heartbeats, that it still works; and `workstation`, people's desktops as virtual machines of the cluster, opened from a browser or an RDP client.
 
 > Status: experimental. The `edge` distribution passes the Kubernetes conformance suite (462 of 462 on a three-node cluster, Kubernetes 1.37.2), but the API of the node and the layout of the state may still change.
 
@@ -20,7 +20,7 @@ kuberoot puts into practice the essay [The Inevitable Future of Kubernetes: why 
 - **Pod network**: VXLAN between nodes, or plain routes on a flat network, or none, for a CNI package such as Cilium.
 - **Container runtime**: containerd, or CRI-O for a distribution whose profile says `runtime: cri-o` and whose image carries it: CRI-O restores containers from checkpoints, which containerd's CRI does not.
 - **Alternative builds**: a profile may offer a service in several builds (`alternatives`, each its own program and arguments). On its first boot a node picks one at random and keeps it, so the nodes of a cluster run a mix of them. With `switch`, a build that keeps crashing (an exit kinit did not ask for, within a minute of starting, `crashes` times within `within`) is replaced by the next one, at most once per boot and once per `cooldown`, and never while the booted slot is on probation: a failing release is rolled back to the other slot instead. `nodeservices` shows the build in `status.alternative`, and the node is labelled `alternative.kuberoot.dev/<service>=<build>`.
-- **Packages**: the kubepkg operator runs on the control plane and installs the distribution's packages; the `edge` meta package and the platform packages live in [kubepkg-recipes](https://github.com/kuberoot-dev/kubepkg-recipes).
+- **Packages**: the kubepkg operator runs on the control plane and installs the distribution's packages; the `edge` meta package and the platform packages live in [kubepkg-recipes](https://github.com/kuberoot-dev/kubepkg-recipes). The slim profile bundles its two add-ons directly and does not run the package operator.
 
 ## The router distribution
 
@@ -515,7 +515,7 @@ The node comes back as the same node, with the same name, certificates and clust
 
 ## riscv64: a node for emulators
 
-The edge distribution is also built for riscv64, as a single node for virtual machines and emulators: the DevOps trainer's RV64 engine in the browser runs it. The machine it needs is RV64GC with Sv39 paging under OpenSBI, with neither the vector nor the hypervisor extension, devices on virtio over MMIO or PCI (block, network, console, entropy) and a clock (QEMU's goldfish RTC, or UEFI's). It boots two ways: from OpenSBI with the kernel and initrd given directly, or from UEFI firmware (EDK2) through systemd-boot, as other nodes do.
+The edge and slim distributions can be built for riscv64, as a single node for virtual machines and emulators: the DevOps trainer's RV64 engine in the browser runs it. The machine it needs is RV64GC with Sv39 paging under OpenSBI, with neither the vector nor the hypervisor extension, devices on virtio over MMIO or PCI (block, network, console, entropy) and a clock (QEMU's goldfish RTC, or UEFI's). It boots two ways: from OpenSBI with the kernel and initrd given directly, or from UEFI firmware (EDK2) through systemd-boot, as other nodes do.
 
 The image is smaller than the other architectures': a kernel with only the virt platform and virtio built in, no debug information and so no BTF, no DRBD and no modules; a root without etcd (kine is the store, so no control plane joins it), without the other distributions' programs, and with squashfs blocks of 16 KiB. Upstream publishes neither Kubernetes nor a pause image for riscv64: `scripts/build-kubernetes.sh` builds the release's own source, and the root carries a pause image of its own, which kinit imports into containerd. A node with less than 1.5 GiB runs its Go services with `GOGC=25`.
 
@@ -530,7 +530,7 @@ qemu-system-riscv64 -M virt -cpu rv64,v=false,h=false,sv39=on -smp 4 -m 1280 -no
   -device virtio-rng-device
 ```
 
-Measured in QEMU 10 without KVM (TCG, 4 vCPUs on an x86 server):
+Baseline edge measurements before slim and zram, in QEMU 10 without KVM (TCG, 4 vCPUs on an x86 server):
 
 | | |
 |---|---|
@@ -544,7 +544,40 @@ Measured in QEMU 10 without KVM (TCG, 4 vCPUs on an x86 server):
 | memory with the add-ons and a pod (1152 MiB) | 404 MiB anonymous, 744 MiB working set, 348 MiB available |
 | state (`/var`) with CoreDNS, local-path and busybox pulled | 174 MiB |
 
-At 1 GiB the node becomes Ready (120–150 s) but thrashes once its add-ons start: the page cache left for a dozen Go programs read from squashfs is too small. 1152 MiB is the least it runs at. The add-ons install as on other nodes; metrics-server stays in `ImagePullBackOff`, as upstream publishes no riscv64 image of it. Booted by EDK2, the node reaches kinit, but on QEMU the firmware's clock is not the host's time, so a node that already has certificates finds them not yet valid; the OpenSBI path reads the goldfish RTC and has the right time.
+In that baseline, at 1 GiB the node becomes Ready (120–150 s) but thrashes once its add-ons start: the page cache left for a dozen Go programs read from squashfs is too small. 1152 MiB was the lowest stable size in that test. The add-ons install as on other nodes; metrics-server stays in `ImagePullBackOff`, as upstream publishes no riscv64 image of it. Booted by EDK2, the node reaches kinit, but on QEMU the firmware's clock is not the host's time, so a node that already has certificates finds them not yet valid; the OpenSBI path reads the goldfish RTC and has the right time.
+
+
+### The slim profile
+
+`slim` is the small single-node trainer profile. Build it in the workshop builder:
+
+```sh
+KUBEROOT_DISTRO=slim hack/hetzner.sh build riscv64
+hack/hetzner.sh media riscv64
+```
+
+The API server, controller manager, scheduler, kubelet, kube-proxy and kine run in one `kuberoot-control` process, with one Go runtime, `GOGC=25` and a shared `GOMEMLIMIT` soft limit of 40% of usable RAM, capped at 300 MiB. kinit passes their normal rendered flags in a private JSON file; the agents start after the API server is ready. An exit of any component restarts the group. The usual component names are multicall symlinks and still accept their normal CLI flags; workers retain their separate agents and kubelet-certificate startup barrier. Logging and feature-gate settings are shared by the process.
+
+CoreDNS and the default local-path provisioner are bundled manifests with image digest pins, including the storage helper image. There is no metrics-server, package operator or intents controller. Pods, Deployments, Services, DNS, RBAC and PVCs use the normal Kubernetes APIs. Additional packages are not installed automatically.
+
+Below 1.5 GiB of usable RAM, kinit enables LZ4 zram swap: logical capacity is half `MemTotal`, with compressed backing memory capped at a quarter of `MemTotal`. The kernel and page metadata account for the difference between guest RAM and `MemTotal`. kubelet already permits host swap; the slim eviction threshold is 20 MiB available. The profile uses `vm.swappiness=180` and disables swap read-ahead to retain executable pages instead of repeatedly decompressing squashfs under TCG. `GOMEMLIMIT` covers Go runtime memory; SQLite's C allocations, the kernel and pod workloads are outside it.
+
+`scripts/build-slim.sh` uses the pinned Kubernetes and kine sources. Its source overlay makes the upstream signal context reusable; it preserves the component command implementations. SQLite uses cgo in a statically linked binary. LLVM lld >=18 is required for current riscv64 libc relocations; `hack/hetzner.sh` prepares LLVM 20 in its bookworm builder. Kubernetes build caches and temporaries stay under `WORK`, and Kubernetes commands are built sequentially with cache cleanup. Debug information that the final binary strips is not generated during compilation.
+
+The measurement harness is in `hack/slim/`: run its QEMU command only in the test pod, and `measure.py` in the builder. Each memory size uses a fresh live boot, including a fresh tmpfs `/var`; measurements cover settled CoreDNS/local-path, then three idle BusyBox pods, and 30 authenticated `GET /api/v1/nodes` requests in each phase. Ready time comes from the Node condition timestamp. The harness records node memory from kubelet's summary API, API errors, and service/pod restarts. It waits 180 seconds after the add-ons become ready and 120 seconds after all three load pods are running. RSS is anonymous resident memory, while working set includes active file pages and kernel memory; neither is a Go heap measurement. These are bounded smoke tests with idle BusyBox pods, not a capacity guarantee for arbitrary lesson workloads.
+
+Measured on 2026-11-21 with QEMU 10.0.0 TCG, 4 vCPUs, on an AMD EPYC 9454P host (test pod limited to 4 CPUs). Image: Linux 6.18.62, Kubernetes v1.37.2, kine v0.17.2. [Raw samples, restart counts and image hashes](hack/slim/results-2026-11-21.json) are checked in.
+
+| RAM MiB | Ready s | Idle RSS / WS MiB | 3 pods RSS / WS MiB | Idle API p50 / p95 ms | 3 pods API p50 / p95 ms | Result |
+|---:|---:|---:|---:|---:|---:|---|
+| 512 | 132.2 | — | — | — | — | API timeouts; incomplete |
+| 640 | 48.4 | 204.3 / 330.5 | — | 52.5 / 72.0 | — | API timeouts; incomplete |
+| 768 | 44.8 | 230.8 / 407.3 | 246.4 / 409.8 | 47.9 / 61.9 | 49.0 / 95.9 | pass |
+| 1024 | 46.1 | 267.5 / 548.2 | 288.0 / 588.8 | 50.1 / 64.6 | 35.8 / 51.1 | pass |
+
+At 768 and 1024 MiB, all 60 API requests per run succeeded, with no service or pod restarts. The 768 MiB run used 191.3 MiB of logical swap backed by 109.4 MiB of compressed RAM; the 1024 MiB run used no swap. Runs lasted 7.1 and 6.6 minutes respectively. The squashfs is about 142 MiB. Missing values mean the phase did not complete, not zero memory or latency.
+
+The minimum that completed both phases was **768 MiB**. At 512 MiB the node became Ready but the API timed out before the add-ons settled. At 640 MiB an idle sample was possible, but the three-pod phase failed with API timeouts. A Ready condition alone is therefore insufficient to qualify either smaller size.
 
 ## Layout
 
@@ -570,7 +603,7 @@ At 1 GiB the node becomes Ready (120–150 s) but thrashes once its add-ons star
 
 ## Building
 
-Builds run in a container with the toolchain, not on the workstation: `scripts/` hold the steps (kernel, DRBD, binaries, root filesystem, initramfs, bundle). An amd64 builder builds arm64 and riscv64 too: the kernel and DRBD with a cross compiler, Go without cgo, and the glibc runtime, systemd-boot and Alpine's programs from those distributions' packages for the architecture (systemd-boot for riscv64 from Debian trixie). `hack/hetzner.sh` drives a builder pod in a Kubernetes cluster and runs them there; `hack/hetzner/` has the builder, a registry and the VM definitions the author tests nodes with.
+Builds run in a container with the toolchain, not on the workstation: `scripts/` hold the steps (kernel, DRBD, binaries, root filesystem, initramfs, bundle). An amd64 builder builds arm64 and riscv64 too: the kernel and DRBD with a cross compiler, Go without cgo (except the slim shared runtime with static SQLite), and the glibc runtime, systemd-boot and Alpine's programs from those distributions' packages for the architecture (systemd-boot for riscv64 from Debian trixie). `hack/hetzner.sh` drives a builder pod in a Kubernetes cluster and runs them there; `hack/hetzner/` has the builder, a registry and the VM definitions the author tests nodes with.
 
 ```sh
 hack/hetzner.sh build amd64      # kernel if missing, binaries, root filesystem, initramfs

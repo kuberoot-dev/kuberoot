@@ -92,6 +92,12 @@ func switchRoot() error {
 			return fmt.Errorf("move %s: %w", dir, err)
 		}
 	}
+	// rootfs (the initial RAM filesystem) cannot be unmounted. Unlink its
+	// executable before execing stage two so it does not retain another full
+	// kinit binary in RAM for the lifetime of a small node.
+	if err := os.Remove("/init"); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("release initramfs executable: %w", err)
+	}
 	if err := unix.Chdir(newRoot); err != nil {
 		return err
 	}

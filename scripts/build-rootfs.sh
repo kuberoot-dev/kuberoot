@@ -42,8 +42,14 @@ apk add -q --root $r --arch $APK_ARCH --initdb --no-scripts --no-cache \
 rm -rf $r/etc/apk $r/lib/apk $r/var/cache/apk
 
 for b in kube-apiserver kube-controller-manager kube-scheduler kubelet kube-proxy kubectl; do
+  if [ "$DISTRO" = slim ] && [ "$b" != kubectl ]; then
+    mkdir -p "$r/usr/bin"
+    ln -s kuberoot-control "$r/usr/bin/$b"
+    continue
+  fi
   if [ "$ARCH" = riscv64 ]; then
-    [ "$(cat "$OUT/kubernetes/VERSION" 2>/dev/null)" = "$K8S_VERSION" ] || { echo "no Kubernetes $K8S_VERSION in $OUT/kubernetes (build-kubernetes.sh)" >&2; exit 1; }
+    marker=VERSION; [ "$DISTRO" != slim ] || marker=SOURCE
+    [ "$(cat "$OUT/kubernetes/$marker" 2>/dev/null)" = "$K8S_VERSION" ] || { echo "no Kubernetes $K8S_VERSION in $OUT/kubernetes (build-kubernetes.sh)" >&2; exit 1; }
     install -D -m 0755 "$OUT/kubernetes/$b" "$r/usr/bin/$b"
     continue
   fi
@@ -57,8 +63,12 @@ install -m 0755 "$CACHE/runc-$RUNC_VERSION" $r/usr/bin/runc
 fetch "https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-linux-$ARCH-$CNI_VERSION.tgz" "cni-$CNI_VERSION.tgz"
 mkdir -p $r/usr/libexec/cni
 tar -xzf "$CACHE/cni-$CNI_VERSION.tgz" -C $r/usr/libexec/cni ./bridge ./host-local ./loopback ./portmap
+if [ "$DISTRO" = slim ]; then
+  ln -s kuberoot-control "$r/usr/bin/kine"
+else
 fetch "https://github.com/k3s-io/kine/releases/download/$KINE_VERSION/kine-$ARCH" "kine-$KINE_VERSION"
 install -m 0755 "$CACHE/kine-$KINE_VERSION" $r/usr/bin/kine
+fi
 # etcd: the store of a control plane that others join; etcdutl restores its snapshots.
 if [ "$ARCH" != riscv64 ]; then
   fetch "https://github.com/etcd-io/etcd/releases/download/$ETCD_VERSION/etcd-$ETCD_VERSION-linux-$ARCH.tar.gz" "etcd-$ETCD_VERSION-$ARCH.tgz"
@@ -67,19 +77,30 @@ if [ "$ARCH" != riscv64 ]; then
 fi
 
 install -m 0755 "$OUT/kinit" $r/usr/sbin/kinit
+[ "$DISTRO" != slim ] || install -m 0755 "$OUT/kuberoot-control" $r/usr/bin/
 if [ "${KUBEROOT_STORE_LAB:-}" = 1 ]; then install -m 0755 "$OUT/kuberoot-store" $r/usr/bin/; fi
-bins="kuberoot-node kuberoot-installer kuberoot-intents kuberoot-fleet kubepkg kubepkg-operator"
-[ "$ARCH" = riscv64 ] || bins="$bins kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl"
+bins="kuberoot-node kuberoot-installer kuberoot-fleet"
+[ "$DISTRO" = slim ] || bins="$bins kuberoot-intents kubepkg kubepkg-operator"
+[ "$ARCH" = riscv64 ] || [ "$DISTRO" = slim ] || bins="$bins kuberoot-router kuberoot-vmctl kuberoot-aictl kuberoot-agent kuberoot-devices kuberoot-wsctl"
 for b in $bins; do install -m 0755 "$OUT/$b" $r/usr/bin/; done
 # The pause image, where upstream has none for the architecture: an OCI
 # archive kinit imports into containerd and names as the sandbox image.
 if [ "$ARCH" = riscv64 ]; then
   sh "$ROOT/scripts/pause-image.sh" "$OUT/kuberoot-pause" "$ARCH" "$r/usr/share/kuberoot/images"
 fi
-mkdir -p $r/usr/share/kuberoot/kubepkg/crds
-cp "$OUT"/kubepkg-crds/*.yaml $r/usr/share/kuberoot/kubepkg/crds/
+if [ "$DISTRO" != slim ]; then
+  mkdir -p $r/usr/share/kuberoot/kubepkg/crds
+  cp "$OUT"/kubepkg-crds/*.yaml $r/usr/share/kuberoot/kubepkg/crds/
+fi
 [ ! -d "$OUT/glibc" ] || cp -r "$OUT/glibc/." $r/
 cp -r "$ROOT/rootfs/." $r/
+if [ "$DISTRO" = slim ]; then
+  # The trainer uses standard Kubernetes resources; no intents controller or
+  # package operator runs here. Keep their CRDs/webhooks out of the API too.
+  rm -f "$r/usr/share/kuberoot/addons/10-intents-crds.yaml" \
+    "$r/usr/share/kuberoot/addons/15-intents-rbac.yaml" \
+    "$r/usr/share/kuberoot/addons/20-sealed-primitives.yaml"
+fi
 install -m 0644 "$ROOT/distros/$DISTRO/profile.yaml" $r/usr/share/kuberoot/profile.yaml
 # The distribution's own add-ons, next to the image's.
 if [ -d "$ROOT/distros/$DISTRO/addons" ]; then cp -r "$ROOT/distros/$DISTRO/addons/." $r/usr/share/kuberoot/addons/; fi

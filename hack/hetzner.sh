@@ -19,6 +19,7 @@
 #                                        kubeconfig is /work/kube/<cluster>.conf
 #   hack/hetzner.sh kc <cluster> args    kubectl in the builder against /work/kube/<cluster>.conf
 #   hack/hetzner.sh test                 sync, then go test ./... in the builder
+#   hack/hetzner.sh alpine-sh <cmd>    a command in the rootfs builder
 #   hack/hetzner.sh sh [cmd...]          a shell (or a command) in the builder
 #
 # KUBEROOT_NS names the tenant everything lives in (default tenant-kuberoot),
@@ -38,7 +39,7 @@ CTX=${KUBE_CONTEXT:-admin@workshop}
 # The tenant the builder and the stand nodes live in. Overridable so a second
 # stand can run beside the first, or beside a tenant left in a bad state.
 NS=${KUBEROOT_NS:-tenant-kuberoot}
-k() { kubectl --context "$CTX" -n "$NS" "$@"; }
+k() { local command=$1; shift; kubectl "$command" --context "$CTX" -n "$NS" "$@"; }
 tools() { k exec -i builder -c tools -- "$@"; }
 alpine() { k exec -i builder -c alpine -- "$@"; }
 
@@ -46,9 +47,22 @@ prepare() {
   tools sh -c 'command -v flex >/dev/null || { apt-get -qq update && apt-get -qq install -y flex bison bc libelf-dev libssl-dev cpio xz-utils zstd >/dev/null; }'
 }
 
+# The pinned builder is bookworm; its default linker predates the riscv64
+# libc relocations used by static SQLite. LLVM's signed bookworm repository
+# provides a current linker without replacing the builder's libc.
+prepare_slim() {
+  tools sh -ec '
+    command -v ld.lld-20 >/dev/null && exit 0
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/kuberoot-llvm.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/kuberoot-llvm.gpg] https://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-20 main" >/etc/apt/sources.list.d/kuberoot-llvm.list
+    apt-get -qq update
+    apt-get -qq install -y lld-20 >/dev/null
+  '
+}
+
 sync() {
   # Sources only: git-tracked and new files, no build output.
-  (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^SESSION_LOG.md$' |
+  (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv -e '^SESSION_LOG.md$' -e '^kinit$' |
     COPYFILE_DISABLE=1 tar --null -T - -czf -) |
     tools sh -c "rm -rf $SRC.new && mkdir -p $SRC.new && tar -xzf - -C $SRC.new && rm -rf $SRC && mv $SRC.new $SRC"
 }
@@ -65,9 +79,10 @@ case "${1:-}" in
     prepare; sync
     # The kernel is built again when the last one was another distribution's.
     distro=${KUBEROOT_DISTRO:-edge}
+    [ "$distro" != slim ] || prepare_slim
     flavour=base; [ -f "$ROOT/distros/$distro/kernel.config" ] && flavour=$distro
-    tools sh -c "[ -f /work/out/$arch/vmlinuz.efi ] && [ \"\$(cat /work/out/$arch/kernel.flavour 2>/dev/null || echo base)\" = $flavour ] || { $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-kernel.sh $arch && $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-drbd.sh $arch; }"
-    tools sh -c "cd $SRC && $ENV KUBEROOT_STORE_LAB=${KUBEROOT_STORE_LAB:-} scripts/build-binaries.sh $arch"
+    tools sh -c "[ -f /work/out/$arch/vmlinuz.efi ] && [ \"\$(cat /work/out/$arch/kernel.flavour 2>/dev/null || echo base)\" = $flavour ] && grep -qx CONFIG_ZRAM=y /work/out/$arch/kernel.config || { $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-kernel.sh $arch && $ENV KUBEROOT_DISTRO=$distro $SRC/scripts/build-drbd.sh $arch; }"
+    tools sh -c "cd $SRC && $ENV KUBEROOT_DISTRO=$distro KUBEROOT_STORE_LAB=${KUBEROOT_STORE_LAB:-} scripts/build-binaries.sh $arch"
     case "$distro" in
       ai) tools sh -c "$ENV $SRC/scripts/build-llama.sh $arch && $ENV $SRC/scripts/build-nvidia.sh $arch && $ENV $SRC/scripts/build-llama-cuda.sh $arch" ;;
       rt) tools sh -c "$ENV $SRC/scripts/build-rt-tests.sh $arch" ;;
@@ -124,6 +139,9 @@ case "${1:-}" in
   test)
     sync
     tools sh -c "cd $SRC && go test ./... 2>&1 | grep -v 'no test files'" ;;
+  alpine-sh)
+    shift
+    alpine sh -c "$*" ;;
   sh)
     shift
     if [ $# -eq 0 ]; then k exec -it builder -c tools -- bash; else tools sh -c "$*"; fi ;;
