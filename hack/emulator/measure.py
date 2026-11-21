@@ -18,7 +18,7 @@ node = ['/work/bin/kubectl', '--kubeconfig', str(work/'trust/admin.kubeconfig'),
 cluster = ['/work/bin/kubectl', '--kubeconfig', str(work/f'{profile}.conf'),
            '--server', f'https://{host}:6443', '--tls-server-name=10.0.2.15', '--request-timeout=120s', '-n', 'default']
 report = dict(profile=profile, timescale=1 if profile=='baseline' else 60,
-              cpu_limit_millicores=100, ram_mib=1024, success=False)
+              cpu_limit_millicores=100, vcpus=1, ram_mib=1024, success=False)
 deadline = boot + (900 if profile == 'baseline' else 2400)
 
 def run(args):
@@ -75,6 +75,12 @@ try:
         report['calibration'] = json.loads(calibration.stdout)
     else:
         report['calibration_error'] = calibration.stderr.decode()[-1000:]
+    def dns_ready():
+        items=get(['get','pods','-n','kube-system','-l','k8s-app=kube-dns','-o','json'])['items']
+        return bool(items) and all(any(c['type']=='Ready' and c['status']=='True'
+                   for c in p['status'].get('conditions',[])) for p in items)
+    poll(dns_ready,deadline)
+    report['dns'] = run(cluster+['exec','emulator-smoke','--','nslookup','kubernetes.default.svc.cluster.local'])
     report['pods'] = [{'name':p['metadata']['name'],'phase':p['status'].get('phase'),
                        'restarts':sum(c.get('restartCount',0) for c in p['status'].get('containerStatuses',[]))}
                       for p in get(['get','pods','-A','-o','json'])['items']]

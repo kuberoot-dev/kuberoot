@@ -663,5 +663,5 @@ configurable budgets but require the slim runtime for the internal overlay.
 
 `hack/emulator/` contains the sequential QEMU TCG comparison harness, run only
 in `tenant-kuberoot`. Its pod applies a 100m CPU quota with real guest clocks,
-using the same artifacts and 1024 MiB RAM for timescale 1 and emulator boots.
+using the same artifacts, one vCPU and 1024 MiB RAM for timescale 1 and emulator boots.
 CPU quota is a reproducible scheduling limit, not a calibrated MIPS claim.
