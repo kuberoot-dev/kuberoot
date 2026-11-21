@@ -655,7 +655,7 @@ apiserver TLS header/handshake deadlines, etcd/kine client dial and keepalive,
 and RBAC/scheduling/service allocator/APF bootstrap deadlines (including the
 outer service-repair guard). Mutating handlers' separate 34s ceiling is also
 scaled; a shorter explicit client context still wins. Node API background
-clients get matching TLS/dial budgets through private transport clones. These inner hook
+clients get matching TLS/dial budgets through private, uncached transports that retain certificate-rotation wrappers. These inner hook
 polls are hard-coded upstream; a longer launcher context alone cannot extend
 them. `build/kubernetes-slim/timing.py` checks each expected source fragment and
 restores the source after building. The service-only `KUBEROOT_TIMESCALE`

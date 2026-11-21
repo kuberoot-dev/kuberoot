@@ -1,12 +1,11 @@
 package nodeapi
 
 import (
-	"crypto/tls"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
+	"k8s.io/client-go/rest"
 	"net/http"
 	"testing"
 	"time"
-
-	"k8s.io/client-go/rest"
 )
 
 func TestInternalClientTiming(t *testing.T) {
@@ -14,16 +13,41 @@ func TestInternalClientTiming(t *testing.T) {
 		t.Setenv("KUBEROOT_TIMESCALE", factor)
 		cfg := &rest.Config{}
 		scaleInternalClient(cfg)
-		if cfg.WrapTransport != nil || cfg.Dial != nil {
+		if cfg.WrapTransport != nil || cfg.Dial != nil || cfg.Proxy != nil {
 			t.Fatalf("%q changed defaults", factor)
 		}
 	}
+	// Exercise the real client-go factory, including its private GC wrapper.
+	base := &rest.Config{Host: "https://verified.example", Timeout: 7 * time.Second,
+		TLSClientConfig: rest.TLSClientConfig{ServerName: "verified.example"}}
+	original, err := rest.TransportFor(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unwrap := func(rt http.RoundTripper) *http.Transport {
+		for {
+			if tr, ok := rt.(*http.Transport); ok {
+				return tr
+			}
+			wrapper, ok := rt.(utilnet.RoundTripperWrapper)
+			if !ok {
+				t.Fatalf("unexpected transport %T", rt)
+			}
+			rt = wrapper.WrappedRoundTripper()
+		}
+	}
 	t.Setenv("KUBEROOT_TIMESCALE", "60")
-	cfg := &rest.Config{}
+	cfg := rest.CopyConfig(base)
 	scaleInternalClient(cfg)
-	original := &http.Transport{TLSHandshakeTimeout: 10 * time.Second, TLSClientConfig: &tls.Config{ServerName: "verified.example"}}
-	scaled := cfg.WrapTransport(original).(*http.Transport)
-	if scaled == original || original.TLSHandshakeTimeout != 10*time.Second || scaled.TLSHandshakeTimeout != 10*time.Minute || scaled.TLSClientConfig.ServerName != "verified.example" || cfg.Dial == nil {
-		t.Fatal("transport scaling lost isolation or TLS verification")
+	scaled, err := rest.TransportFor(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, after := unwrap(original), unwrap(scaled)
+	if before == after || before.TLSHandshakeTimeout != 10*time.Second || after.TLSHandshakeTimeout != 10*time.Minute {
+		t.Fatal("transport scaling lost isolation")
+	}
+	if after.TLSClientConfig.ServerName != "verified.example" || after.TLSClientConfig.InsecureSkipVerify || cfg.Timeout != 7*time.Second {
+		t.Fatal("TLS verification or explicit request budget changed")
 	}
 }
