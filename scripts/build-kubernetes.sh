@@ -3,7 +3,10 @@
 # release's source, for an architecture dl.k8s.io publishes none for
 # (riscv64). Static, without cgo, stamped with the release's version as the
 # upstream build stamps it. Runs in the builder; the source stays in $WORK.
-# Usage: scripts/build-kubernetes.sh <arch>
+# Named binaries are built alone, next to those already built of the same
+# version, for a builder short of disk to empty its Go cache in between;
+# VERSION is written once all of them are there.
+# Usage: scripts/build-kubernetes.sh <arch> [binary...]
 set -euo pipefail
 
 ARCH=${1:?arch required}
@@ -12,6 +15,8 @@ WORK=${WORK:-/work}
 OUT=${KUBEROOT_OUT:-$ROOT/out}/$ARCH/kubernetes
 K8S_VERSION=$(sed -n 's/^K8S_VERSION=//p' "$ROOT/build/components.env")
 BINARIES="kube-apiserver kube-controller-manager kube-scheduler kubelet kube-proxy kubectl"
+shift
+want=${*:-$BINARIES}
 
 if [ "$(cat "$OUT/VERSION" 2>/dev/null)" = "$K8S_VERSION" ]; then
   echo "kubernetes: $K8S_VERSION for $ARCH already built"
@@ -42,13 +47,20 @@ for pkg in k8s.io/client-go/pkg/version k8s.io/component-base/version; do
   ldflags="$ldflags -X $pkg.gitTreeState=archive -X $pkg.buildDate=$date"
 done
 
-rm -rf "$OUT"
-mkdir -p "$OUT"
+# Binaries of another version go.
+if [ "$(cat "$OUT/SOURCE" 2>/dev/null)" != "$K8S_VERSION" ]; then
+  rm -rf "$OUT"
+  mkdir -p "$OUT"
+  echo "$K8S_VERSION" >"$OUT/SOURCE"
+fi
 cmds=""
-for b in $BINARIES; do cmds="$cmds ./cmd/$b"; done
+for b in $want; do cmds="$cmds ./cmd/$b"; done
 # The source vendors its modules: no -mod=mod from the builder's GOFLAGS.
 # shellcheck disable=SC2086
 (cd "$src" && GOFLAGS=-buildvcs=false GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 \
   go build -trimpath -ldflags="$ldflags" -o "$OUT/" $cmds)
+missing=""
+for b in $BINARIES; do [ -f "$OUT/$b" ] || missing="$missing $b"; done
+[ -z "$missing" ] || { echo "kubernetes: built $want; still to build:$missing"; exit 0; }
 echo "$K8S_VERSION" >"$OUT/VERSION"
 echo "kubernetes: $K8S_VERSION for $ARCH from source -> $OUT ($(du -sh "$OUT" | cut -f1))"
