@@ -14,7 +14,7 @@ node = ["/work/bin/kubectl", "--kubeconfig", str(work / "trust/admin.kubeconfig"
         "--request-timeout=5s"]
 config = work / "functional.conf"
 cluster = ["/work/bin/kubectl", "--kubeconfig", str(config),
-           "--tls-server-name=10.0.2.15", "--namespace=default", "--request-timeout=15s"]
+           "--tls-server-name=10.0.2.15", "--namespace=slim-smoke", "--request-timeout=15s"]
 
 
 def run(args, stdin=None):
@@ -38,6 +38,10 @@ for _ in range(90):
 else:
     raise RuntimeError("guest API did not become ready")
 run(cluster + ["wait", "node", "--all", "--for=condition=Ready", "--timeout=90s"])
+run(cluster + ["apply", "-f", "-"], json.dumps({
+    "apiVersion": "v1", "kind": "Namespace",
+    "metadata": {"name": "slim-smoke",
+                 "labels": {"pod-security.kubernetes.io/enforce": "privileged"}}}))
 manifest = {
     "apiVersion": "v1", "kind": "List", "items": [
         {"apiVersion": "v1", "kind": "PersistentVolumeClaim",
@@ -70,4 +74,4 @@ try:
     print(run(cluster + ["get", "pvc", "smoke", "-o", "wide"]), flush=True)
     print("FUNCTIONAL_OK", flush=True)
 finally:
-    print(run(cluster + ["delete", "pod/smoke", "pvc/smoke", "--ignore-not-found", "--wait=false"]), flush=True)
+    print(run(cluster + ["delete", "namespace/slim-smoke", "--ignore-not-found", "--wait=false"]), flush=True)
