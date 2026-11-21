@@ -194,7 +194,7 @@ func runService(ctx context.Context, s service, choice string, verbose bool) (un
 		args = s.alt.args[choice]
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = append(append([]string{}, servicePath...), s.env...)
+	cmd.Env = append(append(append([]string{}, servicePath...), memoryEnv()...), s.env...)
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	if s.console {
