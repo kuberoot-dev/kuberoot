@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds DRBD 9 against the kernel build-kernel.sh made and signs it with that
 # build's module key; the kernel accepts no other modules. Runs in the builder.
-# Usage: scripts/build-drbd.sh <arch: amd64|arm64>
+# Usage: scripts/build-drbd.sh <arch: amd64|arm64|riscv64>
 set -euo pipefail
 
 ARCH=${1:?arch required}
@@ -9,7 +9,15 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=${WORK:-/work}
 OUT=${KUBEROOT_OUT:-$ROOT/out}/$ARCH
 DRBD_VERSION=$(cat "$ROOT/kernel/DRBD_VERSION")
-case "$ARCH" in amd64) KARCH=x86_64 ;; arm64) KARCH=arm64 ;; *) echo "unknown arch $ARCH" >&2; exit 1 ;; esac
+case "$ARCH" in
+  amd64) KARCH=x86_64 ;;
+  arm64) KARCH=arm64 ;;
+  # The riscv64 node is a single node for emulators: nothing to replicate
+  # to, and no modules (the directory stays, empty, as the kernel's caches
+  # expect it).
+  riscv64) rm -rf "$OUT/modules" && mkdir -p "$OUT/modules"; echo "drbd: not built for riscv64"; exit 0 ;;
+  *) echo "unknown arch $ARCH" >&2; exit 1 ;;
+esac
 . "$ROOT/scripts/kernel-flavour.sh"
 O=$(kernel_build_dir "$WORK" "$KARCH")
 KREL=$(cat "$O/include/config/kernel.release")
