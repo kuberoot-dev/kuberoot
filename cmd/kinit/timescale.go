@@ -113,7 +113,7 @@ func scaledAddon(raw string, n int) (string, error) {
 				for key, child := range v {
 					if key == "livenessProbe" || key == "readinessProbe" || key == "startupProbe" {
 						if probe, ok := child.(map[string]any); ok {
-							for field, fallback := range map[string]float64{"timeoutSeconds": 1, "periodSeconds": 10, "initialDelaySeconds": 0} {
+							for field, fallback := range map[string]float64{"timeoutSeconds": 1, "initialDelaySeconds": 0} {
 								value, ok := probe[field].(float64)
 								if !ok {
 									value = fallback

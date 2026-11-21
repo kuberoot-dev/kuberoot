@@ -43,12 +43,12 @@ func TestTimingConfig(t *testing.T) {
 }
 
 func TestTimingPreservesUserProbes(t *testing.T) {
-	raw := "kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n      - name: dns\n        readinessProbe:\n          httpGet: {path: /ready, port: 8181}\n"
+	raw := "kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n      - name: dns\n        readinessProbe:\n          periodSeconds: 7\n          httpGet: {path: /ready, port: 8181}\n"
 	out, err := scaledAddon(raw, 60)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "timeoutSeconds: 60") || !strings.Contains(out, "periodSeconds: 600") {
+	if !strings.Contains(out, "timeoutSeconds: 60") || !strings.Contains(out, "periodSeconds: 7") {
 		t.Fatal(out)
 	}
 	if got, _ := scaledAddon(raw, 1); got != raw {

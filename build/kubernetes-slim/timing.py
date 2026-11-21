@@ -12,6 +12,9 @@ import sys
 root = Path(sys.argv[1])
 helper = root / 'staging/src/k8s.io/client-go/util/kuberootclock/clock.go'
 patches = {
+ 'pkg/kubelet/kubelet.go': [
+  ('kl.clock.Since(start) >= nodeReadyGracePeriod', 'kl.clock.Since(start) >= kuberootclock.Scale(nodeReadyGracePeriod)'),
+ ],
  'cmd/kubelet/app/server.go': [
   ('net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}', 'net.Dialer{Timeout: kuberootclock.Scale(30 * time.Second), KeepAlive: 30 * time.Second}'),
  ],
