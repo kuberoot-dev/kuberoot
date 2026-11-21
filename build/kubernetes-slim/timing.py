@@ -12,6 +12,9 @@ import sys
 root = Path(sys.argv[1])
 helper = root / 'staging/src/k8s.io/client-go/util/kuberootclock/clock.go'
 patches = {
+ 'pkg/proxy/node.go': [
+  ('os.Exit, time.Second, 30*time.Second, 5*time.Minute)', 'os.Exit, time.Second, kuberootclock.Scale(30*time.Second), kuberootclock.Scale(5*time.Minute))'),
+ ],
  'pkg/controlplane/instance.go': [
   ('cfg.Extra.MasterEndpointReconcileTTL = DefaultEndpointReconcilerTTL', 'cfg.Extra.MasterEndpointReconcileTTL = kuberootclock.Scale(DefaultEndpointReconcilerTTL)'),
  ],
