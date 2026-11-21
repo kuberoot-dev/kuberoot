@@ -100,6 +100,9 @@ func startServices(services []service, cfg bootConfig) {
 			defer genDone.Done()
 			supervise(ctx, s, cfg.verbose)
 		}()
+		if s.name == "containerd" {
+			go importBundledImages(ctx)
+		}
 	}
 }
 
