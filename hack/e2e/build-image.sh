@@ -4,8 +4,9 @@
 # kernel and DRBD unless <work>/out/<arch> already has them, the binaries, the
 # root filesystem, the initramfs and, with --bundle, a signed release bundle.
 # The release key is <work>/keys/release.{key,pub}, made if missing.
-# KUBEROOT_ARCH names the architecture (amd64 by default); it must be the
-# machine's own, as on GitHub's amd64 and arm64 runners.
+# KUBEROOT_ARCH names the architecture (amd64 by default); amd64 and arm64
+# must be the machine's own, as on GitHub's amd64 and arm64 runners, riscv64
+# is cross-built on an amd64 machine.
 # (Not ARCH: the kernel's makefiles read that from the environment.)
 # Usage: hack/e2e/build-image.sh <checkout> <work> <version> [--bundle]
 set -euo pipefail

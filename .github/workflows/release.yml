@@ -3,8 +3,9 @@ name: release
 # tag's GitHub release, for amd64 and arm64: what boot media is written from
 # (kernel, initrd, root filesystem, systemd-boot, VERSION), mkimage for
 # Linux, macOS and Windows, SHA256SUMS and kuberoot-edge.json, which lists
-# every file with its size and sha256 (hack/release/lab-assets.sh). Each
-# architecture is built on a runner of its own, natively.
+# every file with its size and sha256 (hack/release/lab-assets.sh). amd64
+# and arm64 are built on runners of their own, natively; riscv64, the single
+# node for emulators, is cross-built on amd64, Kubernetes from source.
 #
 # A pull request that changes how the release is made builds and packages it
 # the same way and keeps the assets as an artifact of the run instead.
@@ -64,6 +65,8 @@ jobs:
             runner: ubuntu-latest
           - arch: arm64
             runner: ubuntu-24.04-arm
+          - arch: riscv64
+            runner: ubuntu-latest
     name: build (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
@@ -128,7 +131,7 @@ jobs:
       - name: assets
         run: |
           mkdir -p out
-          for a in amd64 arm64; do mv "built/edge-$a" "out/$a"; done
+          for a in amd64 arm64 riscv64; do mv "built/edge-$a" "out/$a"; done
           # The built kernel's configuration says what the kernel has;
           # the Hyper-V guest drivers are checked here as they ship.
           for a in amd64 arm64; do
@@ -153,6 +156,6 @@ jobs:
         run: |
           if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
-              --notes "The edge distribution for amd64 and arm64: kuberoot-edge.json lists the files with their sizes and SHA256 sums."
+              --notes "The edge distribution for amd64, arm64 and riscv64 (a single node for emulators): kuberoot-edge.json lists the files with their sizes and SHA256 sums."
           fi
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber assets/*
