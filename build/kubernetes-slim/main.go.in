@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -41,27 +40,27 @@ func main() {
 	name := filepath.Base(os.Args[0])
 	if name == "kine" {
 		if err := kine.New().RunContext(ctx, os.Args); err != nil {
-			log.Fatal(err)
+			fatal(err)
 		}
 		return
 	}
 	if cmd, ok := commands[name]; ok {
 		cmd.SetArgs(os.Args[1:])
 		if err := cmd.ExecuteContext(ctx); err != nil {
-			log.Fatal(err)
+			fatal(err)
 		}
 		return
 	}
 	if len(os.Args) != 2 {
-		log.Fatal("usage: kuberoot-control <components.json>")
+		fatal("usage: kuberoot-control <components.json>")
 	}
 	raw, err := os.ReadFile(os.Args[1])
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 	var args map[string][]string
 	if err := json.Unmarshal(raw, &args); err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 	for name, argv := range args {
 		if name == "kine" {
@@ -69,7 +68,7 @@ func main() {
 		}
 		cmd, ok := commands[name]
 		if !ok {
-			log.Fatalf("unknown component %q", name)
+			fatal(fmt.Sprintf("unknown component %q", name))
 		}
 		cmd.SetArgs(argv)
 	}
@@ -96,7 +95,7 @@ func main() {
 			}
 			select {
 			case err := <-results:
-				log.Fatal(err)
+				fatal(err)
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second):
@@ -113,7 +112,7 @@ func main() {
 	case err := <-results:
 		remaining--
 		if ctx.Err() == nil {
-			log.Fatal(err)
+			fatal(err)
 		}
 	case <-ctx.Done():
 	}
@@ -128,4 +127,11 @@ func main() {
 			return
 		}
 	}
+}
+
+// Component logging setup may redirect the standard log package. Keep a
+// shared-process failure visible on the supervisor's captured stderr.
+func fatal(err any) {
+ fmt.Fprintln(os.Stderr, "kuberoot-control:", err)
+ os.Exit(1)
 }

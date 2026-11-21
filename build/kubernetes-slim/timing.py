@@ -12,7 +12,27 @@ import sys
 root = Path(sys.argv[1])
 helper = root / 'staging/src/k8s.io/client-go/util/kuberootclock/clock.go'
 patches = {
+ 'pkg/controlplane/instance.go': [
+  ('cfg.Extra.MasterEndpointReconcileTTL = DefaultEndpointReconcilerTTL', 'cfg.Extra.MasterEndpointReconcileTTL = kuberootclock.Scale(DefaultEndpointReconcilerTTL)'),
+ ],
+ 'pkg/controlplane/apiserver/peer.go': [
+  ('ttl := DefaultPeerEndpointReconcilerTTL', 'ttl := kuberootclock.Scale(DefaultPeerEndpointReconcilerTTL)'),
+ ],
+ 'cmd/kube-controller-manager/app/controllermanager.go': [
+  ('WaitForAPIServer(versionedClient, 10*time.Second)', 'WaitForAPIServer(versionedClient, kuberootclock.Scale(10*time.Second))'),
+ ],
+ 'staging/src/k8s.io/client-go/discovery/discovery_client.go': [
+  ('config.Timeout = defaultTimeout', 'config.Timeout = kuberootclock.Scale(defaultTimeout)'),
+ ],
+ 'pkg/volume/csi/csi_plugin.go': [
+  ('Duration: 30 * time.Millisecond,', 'Duration: kuberootclock.Scale(30 * time.Millisecond),'),
+ ],
+ 'pkg/volume/csi/nodeinfomanager/nodeinfomanager.go': [
+  ('Duration: 10 * time.Millisecond,', 'Duration: kuberootclock.Scale(10 * time.Millisecond),'),
+ ],
  'pkg/kubelet/kubelet.go': [
+  ('}, 100*time.Millisecond, stopCh)', '}, kuberootclock.Scale(100*time.Millisecond), stopCh)'),
+  ('func (kl *Kubelet) fastStaticPodsRegistration(ctx context.Context) {\n\tlogger := klog.FromContext(ctx)\n\tif err := wait.PollUntilContextCancel(ctx, 100*time.Millisecond,', 'func (kl *Kubelet) fastStaticPodsRegistration(ctx context.Context) {\n\tlogger := klog.FromContext(ctx)\n\tif err := wait.PollUntilContextCancel(ctx, kuberootclock.Scale(100*time.Millisecond),'),
   ('kl.clock.Since(start) >= nodeReadyGracePeriod', 'kl.clock.Since(start) >= kuberootclock.Scale(nodeReadyGracePeriod)'),
  ],
  'cmd/kubelet/app/server.go': [
@@ -53,6 +73,11 @@ patches = {
   ('context.WithTimeout(ctx, 10*time.Second)', 'context.WithTimeout(ctx, kuberootclock.Scale(10*time.Second))'),
  ],
 }
+for component in ('remote_runtime', 'remote_image'):
+ patches[f'staging/src/k8s.io/cri-client/pkg/{component}.go'] = [
+  ('connParams.MinConnectTimeout = minConnectionTimeout',
+   'connParams.MinConnectTimeout = kuberootclock.Scale(minConnectionTimeout)'),
+ ]
 # Mutating handlers impose a second 34s ceiling under --request-timeout.
 # Keep explicit shorter client contexts authoritative, but scale this ceiling.
 for operation in ('create', 'update', 'patch', 'delete'):

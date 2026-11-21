@@ -643,7 +643,7 @@ exactly the existing defaults.
 The profile scales API request/min-request, storage initialization and etcd
 health/readiness deadlines, kubelet runtime requests and node status/leases,
 controller node grace periods and leader election, containerd shim/task/image
-pull deadlines, and bundled add-on probes. CoreDNS gets a longer initial API
+pull deadlines, kine compaction, and bundled add-on probes. CoreDNS gets a longer initial API
 sync budget. Slow services use `GOGC=100`; slim keeps its existing shared soft
 memory limit, so this trades GC frequency for available heap without removing
 the memory budget. Static control-plane components are supervised host
@@ -653,7 +653,9 @@ extended; there are no static-pod liveness probes to disable.
 The slim source build also extends internal client-go TLS/dial deadlines,
 apiserver TLS header/handshake deadlines, etcd/kine client dial and keepalive,
 and RBAC/scheduling/service allocator/APF bootstrap deadlines (including the
-outer service-repair guard). Mutating handlers' separate 34s ceiling is also
+outer service-repair guard), discovery/CSI/CRI startup budgets and internal
+API endpoint leases. Kubelet startup polling also slows down to avoid
+spending the limited CPU on retries. Mutating handlers' separate 34s ceiling is also
 scaled; a shorter explicit client context still wins. Node API background
 clients get matching TLS/dial budgets through private, uncached transports that retain certificate-rotation wrappers. These inner hook
 polls are hard-coded upstream; a longer launcher context alone cannot extend
