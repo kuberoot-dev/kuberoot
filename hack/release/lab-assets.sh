@@ -32,7 +32,7 @@ add() { # <asset> <path> <arch> [os]
 }
 
 arches=()
-for arch in amd64 arm64; do
+for arch in amd64 arm64 riscv64; do
   [ -d "$out/$arch" ] || continue
   built=$(cat "$out/$arch/VERSION")
   [ "$built" = "$version" ] || { echo "$out/$arch was built as $built, not $version" >&2; exit 1; }

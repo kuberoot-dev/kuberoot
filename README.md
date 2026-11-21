@@ -14,7 +14,7 @@ kuberoot puts into practice the essay [The Inevitable Future of Kubernetes: why 
 
 ## What a node is
 
-- **Kernel**: Linux 6.18 built for the distribution, with every driver built in, for amd64 and arm64, the virtual hardware of KVM and Hyper-V (VMBus storage, network and video) included. The only modules a node loads are the ones its profile names (DRBD for replicated storage), signed with the build's key; after them, loading modules is switched off.
+- **Kernel**: Linux 6.18 built for the distribution, with every driver built in, for amd64 and arm64 (and riscv64, for emulators: see below), the virtual hardware of KVM and Hyper-V (VMBus storage, network and video) included. The only modules a node loads are the ones its profile names (DRBD for replicated storage), signed with the build's key; after them, loading modules is switched off.
 - **kinit**: PID 1. It mounts the read-only root and the state partition, brings up the network, issues the node's certificates and runs the services of the node's role: containerd, kubelet and kube-proxy everywhere, plus kine (the cluster store on SQLite), the API server, the controller manager and the scheduler on the control plane.
 - **Node API**: every node serves `node.kuberoot.dev`, aggregated into the cluster API, so `kubectl get disks`, `kubectl get bootentries` or `kubectl create upgrade` act on a node. It works before a cluster exists, which is how a node is installed.
 - **Pod network**: VXLAN between nodes, or plain routes on a flat network, or none, for a CNI package such as Cilium.
@@ -513,6 +513,39 @@ spec:
 
 The node comes back as the same node, with the same name, certificates and cluster. On etcd, the archive holds a snapshot of the store, and the restored node starts the store from it as its only member; the other control planes join it again.
 
+## riscv64: a node for emulators
+
+The edge distribution is also built for riscv64, as a single node for virtual machines and emulators: the DevOps trainer's RV64 engine in the browser runs it. The machine it needs is RV64GC with Sv39 paging under OpenSBI, with neither the vector nor the hypervisor extension, devices on virtio over MMIO or PCI (block, network, console, entropy) and a clock (QEMU's goldfish RTC, or UEFI's). It boots two ways: from OpenSBI with the kernel and initrd given directly, or from UEFI firmware (EDK2) through systemd-boot, as other nodes do.
+
+The image is smaller than the other architectures': a kernel with only the virt platform and virtio built in, no debug information and so no BTF, no DRBD and no modules; a root without etcd (kine is the store, so no control plane joins it), without the other distributions' programs, and with squashfs blocks of 16 KiB. Upstream publishes neither Kubernetes nor a pause image for riscv64: `scripts/build-kubernetes.sh` builds the release's own source, and the root carries a pause image of its own, which kinit imports into containerd. A node with less than 1.5 GiB runs its Go services with `GOGC=25`.
+
+```sh
+hack/hetzner.sh build riscv64    # cross-built in the amd64 builder
+hack/hetzner.sh media riscv64
+qemu-system-riscv64 -M virt -cpu rv64,v=false,h=false,sv39=on -smp 4 -m 1280 -nographic \
+  -kernel vmlinuz.efi -initrd initrd.cpio \
+  -append "kuberoot.root=PARTLABEL=KUBEROOT-MEDIA:/kuberoot/rootfs.squashfs console=ttyS0" \
+  -drive file=media.img,if=none,format=raw,id=d0,readonly=on -device virtio-blk-device,drive=d0 \
+  -netdev user,id=n0,hostfwd=tcp::50000-:50000,hostfwd=tcp::6443-:6443 -device virtio-net-device,netdev=n0 \
+  -device virtio-rng-device
+```
+
+Measured in QEMU 10 without KVM (TCG, 4 vCPUs on an x86 server):
+
+| | |
+|---|---|
+| kernel (`vmlinuz.efi`, the uncompressed Image) | 22 MiB, 6.3 MiB compressed with zstd |
+| `initrd.cpio` (kinit) | 20 MiB |
+| `rootfs.squashfs` | 273 MiB |
+| boot media | 413 MiB |
+| node API answers | 16–22 s after power-on |
+| node Ready | 82 s at 1152 MiB (86 s on a CPU with nothing beyond RV64GC: `imafdc`, Zicsr, Zifencei, Zicntr), 70 s at 1280 MiB, 71–78 s at 2 GiB |
+| a busybox pod Running | 7–16 s after `kubectl run` |
+| memory with the add-ons and a pod (1152 MiB) | 404 MiB anonymous, 744 MiB working set, 348 MiB available |
+| state (`/var`) with CoreDNS, local-path and busybox pulled | 174 MiB |
+
+At 1 GiB the node becomes Ready (120–150 s) but thrashes once its add-ons start: the page cache left for a dozen Go programs read from squashfs is too small. 1152 MiB is the least it runs at. The add-ons install as on other nodes; metrics-server stays in `ImagePullBackOff`, as upstream publishes no riscv64 image of it. Booted by EDK2, the node reaches kinit, but on QEMU the firmware's clock is not the host's time, so a node that already has certificates finds them not yet valid; the OpenSBI path reads the goldfish RTC and has the right time.
+
 ## Layout
 
 | Path | |
@@ -527,6 +560,7 @@ The node comes back as the same node, with the same name, certificates and clust
 | `cmd/kuberoot-devices` | the devices controller of the iot distribution |
 | `cmd/kuberoot-wsctl` | the workspaces controller and their gateway |
 | `cmd/kuberoot-fleet` | the center of a fleet of nodes |
+| `cmd/kuberoot-pause` | the pod sandbox process of riscv64 nodes |
 | `cmd/mkimage`, `cmd/kuberoot-release` | boot media and signed releases |
 | `pkg/` | the libraries behind them |
 | `distros/` | the distributions: services, modules, add-ons, packages |
@@ -536,19 +570,20 @@ The node comes back as the same node, with the same name, certificates and clust
 
 ## Building
 
-Builds run in a container with the toolchain, not on the workstation: `scripts/` hold the steps (kernel, DRBD, binaries, root filesystem, initramfs, bundle). An amd64 builder builds arm64 too: the kernel and DRBD with a cross compiler, Go without cgo, and the glibc runtime, systemd-boot and Alpine's programs from those distributions' arm64 packages. `hack/hetzner.sh` drives a builder pod in a Kubernetes cluster and runs them there; `hack/hetzner/` has the builder, a registry and the VM definitions the author tests nodes with.
+Builds run in a container with the toolchain, not on the workstation: `scripts/` hold the steps (kernel, DRBD, binaries, root filesystem, initramfs, bundle). An amd64 builder builds arm64 and riscv64 too: the kernel and DRBD with a cross compiler, Go without cgo, and the glibc runtime, systemd-boot and Alpine's programs from those distributions' packages for the architecture (systemd-boot for riscv64 from Debian trixie). `hack/hetzner.sh` drives a builder pod in a Kubernetes cluster and runs them there; `hack/hetzner/` has the builder, a registry and the VM definitions the author tests nodes with.
 
 ```sh
 hack/hetzner.sh build amd64      # kernel if missing, binaries, root filesystem, initramfs
 hack/hetzner.sh bundle amd64     # a signed release bundle
 hack/hetzner.sh media amd64      # boot media
 hack/hetzner.sh build arm64      # the same for arm64
+hack/hetzner.sh build riscv64    # riscv64, Kubernetes from source
 hack/hetzner.sh test             # go test ./...
 ```
 
 ### Releases
 
-A version tag (`v1.2.3`, pushed by the maintainer) runs `.github/workflows/release.yml`: the edge distribution is built for amd64 and arm64 on GitHub's runners of each architecture, and the tag's release gets what boot media is written from (`edge-<arch>-vmlinuz.efi`, `-initrd.cpio`, `-rootfs.squashfs`, `-systemd-boot.efi`, `-VERSION`), `mkimage` for Linux, macOS and Windows on amd64 and arm64, `SHA256SUMS`, and `kuberoot-edge.json` with the version, the Kubernetes version and each file's path in a build's output, size and sha256. Media is not published as such: whoever writes it does so with `mkimage -trust` of their own, so only their credentials reach the node. A manual run of the workflow publishes an existing tag again.
+A version tag (`v1.2.3`, pushed by the maintainer) runs `.github/workflows/release.yml`: the edge distribution is built for amd64 and arm64 on GitHub's runners of each architecture, and for riscv64 cross-built on amd64, and the tag's release gets what boot media is written from (`edge-<arch>-vmlinuz.efi`, `-initrd.cpio`, `-rootfs.squashfs`, `-systemd-boot.efi`, `-VERSION`), `mkimage` for Linux, macOS and Windows on amd64 and arm64, `SHA256SUMS`, and `kuberoot-edge.json` with the version, the Kubernetes version and each file's path in a build's output, size and sha256. Media is not published as such: whoever writes it does so with `mkimage -trust` of their own, so only their credentials reach the node. A manual run of the workflow publishes an existing tag again.
 
 The same assets can come from the builder instead, when the runners cannot build them:
 

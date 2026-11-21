@@ -23,6 +23,12 @@
 #
 # KUBEROOT_NS names the tenant everything lives in (default tenant-kuberoot),
 # so a second stand can run beside the first, or beside one left in a bad state.
+# KUBEROOT_SRC is where the builder keeps the sources (default
+# /work/src/kuberoot), so two checkouts can build there without overwriting
+# each other's.
+#
+# <arch> is amd64, arm64 or riscv64; riscv64 is cross-built (kernel with
+# gcc-riscv64-linux-gnu, Kubernetes from source by build-kubernetes.sh).
 
 set -euo pipefail
 
@@ -44,10 +50,10 @@ sync() {
   # Sources only: git-tracked and new files, no build output.
   (cd "$ROOT" && git ls-files -co --exclude-standard -z | grep -zv '^SESSION_LOG.md$' |
     COPYFILE_DISABLE=1 tar --null -T - -czf -) |
-    tools sh -c 'rm -rf /work/src/kuberoot.new && mkdir -p /work/src/kuberoot.new && tar -xzf - -C /work/src/kuberoot.new && rm -rf /work/src/kuberoot && mv /work/src/kuberoot.new /work/src/kuberoot'
+    tools sh -c "rm -rf $SRC.new && mkdir -p $SRC.new && tar -xzf - -C $SRC.new && rm -rf $SRC && mv $SRC.new $SRC"
 }
 
-SRC=/work/src/kuberoot
+SRC=${KUBEROOT_SRC:-/work/src/kuberoot}
 ENV="KUBEROOT_OUT=/work/out WORK=/work"
 case "${1:-}" in
   sync) sync ;;

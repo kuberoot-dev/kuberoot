@@ -4,7 +4,7 @@
 # distribution with a kernel fragment of its own (distros/<name>/kernel.config,
 # picked by KUBEROOT_DISTRO) gets a kernel of its own, built apart.
 # JOBS bounds the compilers run at once; all CPUs by default.
-# Usage: scripts/build-kernel.sh <arch: amd64|arm64> [extra fragment...]
+# Usage: scripts/build-kernel.sh <arch: amd64|arm64|riscv64> [extra fragment...]
 set -euo pipefail
 
 ARCH=${1:?arch required}
@@ -18,6 +18,9 @@ KVER=$(cat "$ROOT/kernel/VERSION")
 case "$ARCH" in
   amd64) KARCH=x86_64; IMAGE=arch/x86/boot/bzImage ;;
   arm64) KARCH=arm64; IMAGE=arch/arm64/boot/vmlinuz.efi ;;
+  # The uncompressed Image: OpenSBI and emulators load it as it is, and with
+  # the EFI stub it is an EFI program too.
+  riscv64) KARCH=riscv; IMAGE=arch/riscv/boot/Image ;;
   *) echo "unknown arch $ARCH" >&2; exit 1 ;;
 esac
 
@@ -35,7 +38,8 @@ kernel_cross "$KARCH"
 # information eBPF programs read at load time, and pahole is what does the
 # turning. Without it the build stops at the BTF step rather than quietly
 # producing a kernel Cilium cannot load.
-command -v pahole >/dev/null || { apt-get -qq update && apt-get -qq install -y dwarves >/dev/null; }
+# riscv64 has no debug information, and so no BTF (kernel/riscv64.config).
+[ "$ARCH" = riscv64 ] || command -v pahole >/dev/null || { apt-get -qq update && apt-get -qq install -y dwarves >/dev/null; }
 make -s ARCH=$KARCH O="$O" defconfig
 frags="$ROOT/kernel/base.config"
 for f in "$ARCH.config" "$@"; do [ -f "$ROOT/kernel/$f" ] && frags="$frags $ROOT/kernel/$f"; done
@@ -52,9 +56,15 @@ make -s ARCH=$KARCH O="$O" olddefconfig
 # load on a cluster that is already built, so check them here instead.
 # The Hyper-V drivers are among them for the same reason: a kernel without
 # them boots everywhere else and only fails on the machine that needed them.
+# riscv64 is a node for virtio machines and emulators: no Hyper-V and no BTF,
+# but every virtio device such a machine may have, and its clock.
 hyperv="CONFIG_HYPERV CONFIG_HYPERV_VMBUS CONFIG_HYPERV_STORAGE CONFIG_HYPERV_NET CONFIG_HYPERV_UTILS CONFIG_HYPERV_VSOCKETS CONFIG_PCI_HYPERV"
-case "$ARCH" in amd64) hyperv="$hyperv CONFIG_HYPERV_TIMER CONFIG_DRM_HYPERV" ;; arm64) hyperv="$hyperv CONFIG_FB_HYPERV" ;; esac
-for opt in CONFIG_DEBUG_INFO_BTF CONFIG_BLK_DEV_DM $hyperv; do
+case "$ARCH" in
+  amd64) required="CONFIG_DEBUG_INFO_BTF $hyperv CONFIG_HYPERV_TIMER CONFIG_DRM_HYPERV" ;;
+  arm64) required="CONFIG_DEBUG_INFO_BTF $hyperv CONFIG_FB_HYPERV" ;;
+  riscv64) required="CONFIG_VIRTIO_MMIO CONFIG_VIRTIO_PCI CONFIG_VIRTIO_BLK CONFIG_VIRTIO_NET CONFIG_VIRTIO_CONSOLE CONFIG_HW_RANDOM_VIRTIO CONFIG_RTC_DRV_GOLDFISH CONFIG_RTC_DRV_EFI CONFIG_EFI_STUB CONFIG_ACPI" ;;
+esac
+for opt in CONFIG_BLK_DEV_DM $required; do
   grep -qx "$opt=y" "$O/.config" || {
     echo "$opt was asked for in the fragments and is not in the resulting config: a dependency of it is unmet" >&2
     exit 1

@@ -131,10 +131,11 @@ var generators = map[string]func(roleContext) error{
 			// Image pulls stage layers under /var/tmp.
 			dirs = append(dirs, "/var/lib/containers", "/var/lib/crio", "/var/tmp")
 		default:
-			files["/etc/containerd/config.toml"] = containerdConfig
+			cfg := containerdConfig
 			if podNetworkMode == "none" {
-				files["/etc/containerd/config.toml"] = strings.Replace(containerdConfig, cniTemplateLine, "", 1)
+				cfg = strings.Replace(cfg, cniTemplateLine, "", 1)
 			}
+			files["/etc/containerd/config.toml"] = withSandboxImage(cfg, bundledSandboxImage())
 			dirs = append(dirs, "/var/lib/containerd")
 		}
 		if podNetworkMode != "none" {
