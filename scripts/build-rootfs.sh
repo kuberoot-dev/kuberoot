@@ -93,7 +93,13 @@ printf 'NAME="kuberoot"\nID=kuberoot\nPRETTY_NAME="kuberoot %s (%s)"\nVERSION_ID
 # /lib/modules: agents (Cilium) mount it from the host, even with no modules.
 mkdir -p $r/dev $r/proc $r/sys $r/run $r/tmp $r/var $r/etc/kubernetes $r/etc/cni/net.d $r/opt/cni/bin $r/lib/modules
 rm -f "$OUT/rootfs.squashfs"
-mksquashfs $r "$OUT/rootfs.squashfs" -comp zstd -all-root -noappend -quiet
+# riscv64 nodes are small emulated machines whose page cache is always
+# full: with small blocks, a page of a program read back after it was
+# dropped costs one small block to decompress, not 128 KiB of its neighbours.
+block=""
+[ "$ARCH" != riscv64 ] || block="-b 16384"
+# shellcheck disable=SC2086
+mksquashfs $r "$OUT/rootfs.squashfs" -comp zstd $block -all-root -noappend -quiet
 rm -rf $r
 echo "$VERSION" > "$OUT/VERSION"
 echo "rootfs: $OUT/rootfs.squashfs ($(du -h "$OUT/rootfs.squashfs" | cut -f1)), $DISTRO $VERSION"
