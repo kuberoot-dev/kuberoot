@@ -131,7 +131,7 @@ var generators = map[string]func(roleContext) error{
 			// Image pulls stage layers under /var/tmp.
 			dirs = append(dirs, "/var/lib/containers", "/var/lib/crio", "/var/tmp")
 		default:
-			cfg := containerdConfig
+			cfg := scaledContainerdConfig(containerdConfig, bootTimescale)
 			if podNetworkMode == "none" {
 				cfg = strings.Replace(cfg, cniTemplateLine, "", 1)
 			}
@@ -155,6 +155,10 @@ var generators = map[string]func(roleContext) error{
 			extra = activeProfile.Spec.Kubelet
 		}
 		cfg, err := withDistroKubelet(cfg, extra)
+		if err != nil {
+			return err
+		}
+		cfg, err = scaledKubeletConfig(cfg, bootTimescale)
 		if err != nil {
 			return err
 		}

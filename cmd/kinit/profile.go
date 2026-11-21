@@ -128,7 +128,11 @@ func renderRole(spec roleSpec, r roleContext, cfg bootConfig) ([]service, error)
 			return nil, fmt.Errorf("generator %s: %w", g, err)
 		}
 	}
-	return renderServices(spec, roleFacts(r, cfg))
+	services, err := renderServices(spec, roleFacts(r, cfg))
+	if err != nil {
+		return nil, err
+	}
+	return scaleServices(services, cfg.timeScale()), nil
 }
 
 // renderServices turns a role's service templates into services.

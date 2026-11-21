@@ -17,6 +17,7 @@ import (
 	_ "github.com/k3s-io/kine/pkg/drivers/sqlite"
 	"github.com/spf13/cobra"
 	server "k8s.io/apiserver/pkg/server"
+	clock "k8s.io/client-go/util/kuberootclock"
 	logsapi "k8s.io/component-base/logs/api/v1"
 	apiserver "k8s.io/kubernetes/cmd/kube-apiserver/app"
 	controller "k8s.io/kubernetes/cmd/kube-controller-manager/app"
@@ -84,7 +85,7 @@ func main() {
 	}
 	if _, ok := args["kube-apiserver"]; ok {
 		run("kube-apiserver")
-		client := &http.Client{Timeout: time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+		client := &http.Client{Timeout: clock.Scale(time.Second), Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 		for {
 			resp, err := client.Get("https://127.0.0.1:6443/readyz")
 			if err == nil {
@@ -118,7 +119,7 @@ func main() {
 	}
 	// A normal component exit can race with cancellation. Give the other
 	// components time to drain instead of treating that race as a failure.
-	deadline := time.NewTimer(12 * time.Second)
+	deadline := time.NewTimer(clock.Scale(12 * time.Second))
 	defer deadline.Stop()
 	for ; remaining > 0; remaining-- {
 		select {

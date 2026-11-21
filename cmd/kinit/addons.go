@@ -34,6 +34,10 @@ func renderAddons() error {
 			return err
 		}
 		out := strings.ReplaceAll(string(raw), "__CLUSTER_DNS__", activeNet.dnsIP().String())
+		out, err = scaledAddon(out, bootTimescale)
+		if err != nil {
+			return err
+		}
 		if err := os.WriteFile(filepath.Join(generatedAddonsDir, e.Name()), []byte(out), 0o644); err != nil {
 			return err
 		}
@@ -220,7 +224,7 @@ func runTool(ctx context.Context, args, env []string, timeout time.Duration) boo
 	case st := <-done:
 		return st.ExitStatus() == 0
 	case <-ctx.Done():
-	case <-time.After(timeout):
+	case <-time.After(scaleDuration(timeout)):
 	}
 	_ = cmd.Process.Kill()
 	<-done
@@ -283,7 +287,7 @@ func adminClient() (*http.Client, error) {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(caPEM)
 	return &http.Client{
-		Timeout:   5 * time.Second,
+		Timeout:   scaleDuration(5 * time.Second),
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{Certificates: []tls.Certificate{cert}, RootCAs: pool}},
 	}, nil
 }
