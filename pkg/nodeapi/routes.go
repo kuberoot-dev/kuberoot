@@ -288,6 +288,7 @@ func clientFrom(kubeconfig string) kubernetes.Interface {
 	if err != nil {
 		return nil
 	}
+	scaleInternalClient(cfg)
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil

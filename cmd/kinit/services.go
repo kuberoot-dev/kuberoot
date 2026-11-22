@@ -226,7 +226,7 @@ func runService(ctx context.Context, s service, choice string, verbose bool) (un
 	select {
 	case status := <-done:
 		return status, nil
-	case <-time.After(15 * time.Second):
+	case <-time.After(scaleDuration(15 * time.Second)):
 		_ = cmd.Process.Kill()
 		return <-done, nil
 	}

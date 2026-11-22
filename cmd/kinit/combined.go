@@ -56,6 +56,9 @@ func combineServicesFile(services []service, path string) ([]service, error) {
 	var info unix.Sysinfo_t
 	_ = unix.Sysinfo(&info)
 	env := controlMemoryEnv(uint64(info.Totalram) * uint64(info.Unit))
+	if bootTimescale > 1 {
+		env = append(env, "GOGC=100", fmt.Sprintf("KUBEROOT_TIMESCALE=%d", bootTimescale))
+	}
 	return append(kept, service{name: "kuberoot-control", args: []string{"/usr/bin/kuberoot-control", path}, env: env}), nil
 }
 

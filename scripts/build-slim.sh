@@ -33,9 +33,10 @@ signal=$src/staging/src/k8s.io/apiserver/pkg/server/signal.go
 cp "$signal" "$TMPDIR/signal.go"
 cp "$src/go.mod" "$TMPDIR/go.mod"
 cp "$src/go.sum" "$TMPDIR/go.sum"
-cleanup() { cp "$TMPDIR/signal.go" "$signal"; cp "$TMPDIR/go.mod" "$src/go.mod"; cp "$TMPDIR/go.sum" "$src/go.sum"; rm -rf "$src/cmd/kuberoot-control" "$GOCACHE" "$TMPDIR"; }
+cleanup() { python3 "$ROOT/build/kubernetes-slim/timing.py" "$src" --restore; cp "$TMPDIR/signal.go" "$signal"; cp "$TMPDIR/go.mod" "$src/go.mod"; cp "$TMPDIR/go.sum" "$src/go.sum"; rm -rf "$src/cmd/kuberoot-control" "$GOCACHE" "$TMPDIR"; }
 trap cleanup EXIT
 python3 "$ROOT/build/kubernetes-slim/overlay.py" "$src"
+python3 "$ROOT/build/kubernetes-slim/timing.py" "$src"
 mkdir -p "$src/cmd/kuberoot-control"
 cp "$ROOT/build/kubernetes-slim/main.go.in" "$src/cmd/kuberoot-control/main.go"
 # SQLite uses the same C implementation as the standalone kine release.

@@ -630,3 +630,43 @@ gh release upload v1.2.3 out/release-1.2.3/* -R kuberoot-dev/kuberoot --clobber
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE).
+
+### Slow CPU / browser emulator timing
+
+On a slim image, append `kuberoot.profile=emulator` to the kernel command line.
+It selects a 60× timing budget, independently of the built-in distribution.
+`kuberoot.timescale=N` explicitly selects a factor from 1 to 1000 and overrides
+that default; `kuberoot.profile=emulator kuberoot.timescale=1` restores normal
+timings and GC pacing. Invalid factors are logged and ignored. No option means
+exactly the existing defaults.
+
+The profile scales API request/min-request, storage initialization and etcd
+health/readiness deadlines, kubelet runtime requests and node status/leases,
+controller node grace periods and leader election, containerd shim/task/image
+pull deadlines, kine compaction, and bundled add-on probes. CoreDNS gets a longer initial API
+sync budget. Slow services use `GOGC=100`; slim keeps its existing shared soft
+memory limit, so this trades GC frequency for available heap without removing
+the memory budget. Static control-plane components are supervised host
+processes, not static pods: their readiness polling and shutdown budgets are
+extended; there are no static-pod liveness probes to disable.
+
+The slim source build also extends internal client-go TLS/dial deadlines,
+apiserver TLS header/handshake deadlines, etcd/kine client dial and keepalive,
+and RBAC/scheduling/service allocator/APF bootstrap deadlines (including the
+outer service-repair guard), discovery/CSI/CRI startup budgets and internal
+API endpoint leases. Kubelet startup polling also slows down to avoid
+spending the limited CPU on retries. Mutating handlers' separate 34s ceiling is also
+scaled; a shorter explicit client context still wins. Node API background
+clients get matching TLS/dial budgets through private, uncached transports that retain certificate-rotation wrappers. These inner hook
+polls are hard-coded upstream; a longer launcher context alone cannot extend
+them. `build/kubernetes-slim/timing.py` checks each expected source fragment and
+restores the source after building. The service-only `KUBEROOT_TIMESCALE`
+environment variable activates this overlay. Ordinary kubectl, workload
+probes, admission webhook timeouts, certificates and API objects keep standard
+Kubernetes semantics. Distributions using downloaded upstream binaries get the
+configurable budgets but require the slim runtime for the internal overlay.
+
+`hack/emulator/` contains the sequential QEMU TCG comparison harness, run only
+in `tenant-kuberoot`. Its pod applies a 100m CPU quota with real guest clocks,
+using the same artifacts, one vCPU and 1024 MiB RAM for timescale 1 and emulator boots.
+CPU quota is a reproducible scheduling limit, not a calibrated MIPS claim.

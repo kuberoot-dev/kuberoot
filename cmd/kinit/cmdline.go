@@ -3,11 +3,14 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 )
 
 // bootConfig holds the kuberoot.* kernel parameters.
 type bootConfig struct {
+	emulator  bool
+	timescale int
 	// dev prints the admin kubeconfig to the console; development builds only.
 	dev bool
 	// verbose streams every service's output to the console.
@@ -64,6 +67,8 @@ func parseCmdline(cmdline string) bootConfig {
 	var cfg bootConfig
 	for _, f := range strings.Fields(cmdline) {
 		switch f {
+		case "kuberoot.profile=emulator":
+			cfg.emulator = true
 		case "kuberoot.dev":
 			cfg.dev = true
 		case "kuberoot.verbose":
@@ -77,6 +82,14 @@ func parseCmdline(cmdline string) bootConfig {
 		case "kuberoot.store-tape":
 			cfg.storeTape = true
 		default:
+			if v, ok := strings.CutPrefix(f, "kuberoot.timescale="); ok {
+				n, err := strconv.Atoi(v)
+				if err != nil || n < 1 || n > 1000 {
+					log.Printf("ignoring invalid kuberoot.timescale=%q (expected 1..1000)", v)
+				} else {
+					cfg.timescale = n
+				}
+			}
 			if v, ok := strings.CutPrefix(f, "kuberoot.nameserver="); ok {
 				cfg.nameservers = append(cfg.nameservers, strings.Split(v, ",")...)
 			}

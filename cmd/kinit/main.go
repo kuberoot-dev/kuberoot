@@ -55,6 +55,8 @@ func boot() error {
 	}
 	waitForEntropy()
 	cfg := loadCmdline()
+	bootTimescale = cfg.timeScale()
+	log.Printf("timing profile: emulator=%t timescale=%d", cfg.emulator, bootTimescale)
 	podNetworkMode = cfg.podNetwork
 	activeProfile = loadProfileOrRescue()
 	loadModulesAndLock(activeProfile.Spec.Modules)
