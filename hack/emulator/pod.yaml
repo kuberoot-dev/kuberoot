@@ -13,7 +13,7 @@ spec:
     command: [sh, -c, 'apk add --no-cache qemu-system-riscv64 curl python3 && sleep infinity']
     resources:
       requests: {cpu: "100m", memory: 1536Mi, ephemeral-storage: 1Gi}
-      limits: {cpu: "100m", memory: 2Gi, ephemeral-storage: 2Gi}
+      limits: {cpu: "100m", memory: 4Gi, ephemeral-storage: 2Gi}
     volumeMounts:
     - {name: data, mountPath: /data}
   volumes:
