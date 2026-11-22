@@ -17,12 +17,16 @@ node = ['/work/bin/kubectl', '--kubeconfig', str(work/'trust/admin.kubeconfig'),
         '--server', f'https://{host}:50000', '--tls-server-name=kuberoot-node', '--request-timeout=120s']
 cluster = ['/work/bin/kubectl', '--kubeconfig', str(work/f'{profile}.conf'),
            '--server', f'https://{host}:6443', '--tls-server-name=10.0.2.15', '--request-timeout=120s', '-n', 'default']
+# kubectl defaults to no overall request deadline. Give slow workload operations
+# a bounded 10-minute budget; initial availability polling stays at 120s.
+workload = [arg.replace('--request-timeout=120s', '--request-timeout=600s') for arg in cluster]
 report = dict(profile=profile, timescale=1 if profile=='baseline' else 60,
               cpu_limit_millicores=100, vcpus=1, ram_mib=1024, success=False)
 deadline = boot + (900 if profile == 'baseline' else 7200)
 
-def run(args):
-    p = subprocess.run(args, capture_output=True, text=True, timeout=150)
+def run(args, input=None):
+    timeout = 650 if '--request-timeout=600s' in args else 150
+    p = subprocess.run(args, input=input, capture_output=True, text=True, timeout=timeout)
     if p.returncode: raise RuntimeError(p.stderr[-1500:])
     return p.stdout
 
@@ -58,34 +62,46 @@ try:
     name = poll(ready,deadline)
     report['ready_observed_s'] = round(time.time()-boot,1)
     print('READY',report['ready_observed_s'],flush=True)
-    report['service_restarts_at_ready'] = services()
+    report['service_restarts_at_ready'] = poll(services, deadline)
     started = time.time()
-    run(cluster+['run','emulator-smoke','--image=busybox:1.37.0','--restart=Never','--','sleep','3600'])
+    manifest = dict(apiVersion='v1', kind='Pod', metadata=dict(name='emulator-smoke'),
+                    spec=dict(restartPolicy='Never', containers=[dict(name='smoke',
+                              image='busybox:1.37.0', command=['sleep','7200'])]))
+    def create_pod():
+        try:
+            run(workload+['create','-f','-'], input=json.dumps(manifest))
+        except RuntimeError as error:
+            # A timed-out create may already have committed. Retrying is safe
+            # for this uniquely named pod in a fresh single-guest cluster.
+            if 'AlreadyExists' not in str(error): raise
+        return True
+    poll(create_pod, deadline)
     poll(lambda:get(['get','pod','emulator-smoke','-o','json'])['status'].get('phase')=='Running',deadline)
     report['pod_running_s'] = round(time.time()-started,1)
     report['pod_running_since_boot_s'] = round(time.time()-boot,1)
-    output=run(cluster+['exec','emulator-smoke','--','echo','EMULATOR_OK'])
+    print('POD_RUNNING',report['pod_running_since_boot_s'],flush=True)
+    output=poll(lambda:run(workload+['exec','emulator-smoke','--','echo','EMULATOR_OK']),deadline)
     if output.strip()!='EMULATOR_OK': raise RuntimeError(output)
     # Standard kubectl operation and DNS, without changes to user workloads.
     report['pod_exec'] = output.strip()
-    calibration = subprocess.run(cluster+['exec','-i','emulator-smoke','--','sh','-c',
-        'cat > /tmp/mips; chmod +x /tmp/mips; /tmp/mips'],
-        input=(work/'mips').read_bytes(), capture_output=True, timeout=150)
-    if calibration.returncode == 0:
-        report['calibration'] = json.loads(calibration.stdout)
-    else:
-        report['calibration_error'] = calibration.stderr.decode()[-1000:]
+    def calibrate():
+        result = subprocess.run(workload+['exec','-i','emulator-smoke','--','sh','-c',
+            'cat > /tmp/mips; chmod +x /tmp/mips; /tmp/mips'],
+            input=(work/'mips').read_bytes(), capture_output=True, timeout=650)
+        if result.returncode: raise RuntimeError(result.stderr.decode()[-1000:])
+        return json.loads(result.stdout)
+    report['calibration'] = poll(calibrate,deadline)
     def dns_ready():
         items=get(['get','pods','-n','kube-system','-l','k8s-app=kube-dns','-o','json'])['items']
         return bool(items) and all(any(c['type']=='Ready' and c['status']=='True'
                    for c in p['status'].get('conditions',[])) for p in items)
     poll(dns_ready,deadline)
-    report['dns'] = run(cluster+['exec','emulator-smoke','--','nslookup','kubernetes.default.svc.cluster.local'])
+    report['dns'] = poll(lambda:run(workload+['exec','emulator-smoke','--','nslookup','kubernetes.default.svc.cluster.local']),deadline)
     report['pods'] = [{'name':p['metadata']['name'],'phase':p['status'].get('phase'),
                        'restarts':sum(c.get('restartCount',0) for c in p['status'].get('containerStatuses',[]))}
-                      for p in get(['get','pods','-A','-o','json'])['items']]
-    report['service_restarts_final'] = services()
-    report['success'] = ready()==name and report['service_restarts_final']==report['service_restarts_at_ready']
+                      for p in poll(lambda:get(['get','pods','-A','-o','json']),deadline)['items']]
+    report['service_restarts_final'] = poll(services,deadline)
+    report['success'] = poll(ready,deadline)==name and report['service_restarts_final']==report['service_restarts_at_ready']
 except Exception as e:
     report['error'] = str(e)
     try: report['service_restarts_final']=services()
