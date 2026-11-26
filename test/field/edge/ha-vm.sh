@@ -27,14 +27,15 @@ PY
  test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"
  seed=${3:-}; if [[ -z $seed && -f $d/seed.iso ]]; then seed=$d/seed.iso; fi
  media=(); test -z "$seed" || media=(-drive "file=$seed,format=raw,if=virtio,snapshot=on")
+ boot=();test -z "${HA_BOOT_ISO:-}" || boot=(-cdrom "$HA_BOOT_ISO")
  qemu-system-x86_64 -name "field-edge-ha-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-  -drive "if=pflash,format=raw,file=$d/vars.fd" "${media[@]}" \
+  -drive "if=pflash,format=raw,file=$d/vars.fd" "${media[@]}" "${boot[@]}" \
   -drive "file=$d/system.raw,format=raw,if=virtio,cache=none" \
-  -netdev "user,id=management,hostfwd=tcp:127.0.0.1:25${id}00-:50000,hostfwd=tcp:127.0.0.1:26${id}43-:6443,hostfwd=tcp:127.0.0.1:22${id}22-:22" \
-  -device "virtio-net-pci,netdev=management,mac=52:54:00:79:01:0$id" \
+  -netdev "user,id=management,hostfwd=tcp:127.0.0.1:25${id}00-:50000,hostfwd=tcp:127.0.0.1:26${id}43-:6443,hostfwd=tcp:127.0.0.1:22${id}22-:22,hostfwd=tcp:127.0.0.1:2808${id}-:30080,hostfwd=tcp:127.0.0.1:2809${id}-:30081" \
+  -device "virtio-net-pci,netdev=management,mac=${HA_MANAGEMENT_MAC:-52:54:00:79:01:0$id}" \
   -netdev socket,id=peers,mcast=230.79.0.1:17901,localaddr=127.0.0.1 \
-  -device "virtio-net-pci,id=peer-nic,netdev=peers,mac=52:54:00:79:00:0$id" \
+  -device "virtio-net-pci,id=peer-nic,netdev=peers,mac=${HA_PEER_MAC:-52:54:00:79:00:0$id}" \
   -qmp "unix:$d/qmp.sock,server=on,wait=off" -serial "file:$d/serial.log" -display none -daemonize -pidfile "$d/pid"
  ;;
 stop) python3 "$FIELD_SCRIPTS/qmp.py" "$d/qmp.sock" quit ;;

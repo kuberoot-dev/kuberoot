@@ -6,7 +6,7 @@ set -euo pipefail
 S=$(cd "$(dirname "$0")" && pwd)
 kubectl create namespace field --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n field create configmap workload --from-file=workload.py="$S/workload.py" --dry-run=client -o yaml | kubectl apply -f -
-node=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+node=${WORKLOAD_NODE:-$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')}
 python3 - "$PYTHON_IMAGE" "$node" <<'PY' | kubectl apply -f -
 import json,sys
 image=sys.argv[1]

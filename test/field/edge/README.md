@@ -381,3 +381,37 @@ Bulk completed observer samples and record files are gzip-compressed by the publ
 Prepared E9 uses two real 600-second connectivity windows separated by a real hour, with a 2 Mbit/s gateway cap. Actual signed bundle size is recorded; unreachable requested 50/90% cuts are reported rather than fabricated. IPv4 forwarded byte counters and product download progress are separate metrics. Talos window comparison remains to be implemented/validated.
 
 Prepared E10 runs three real sites behind separate cloned Linux gateway VMs and distinct multicast groups. Sites have 3 GiB each, center datastore VM 2 GiB, four gateways including the retained shared fixture 512 MiB each: 13 GiB guest total. Two supervised native fleet-manager processes run in the owned pod against the center datastore. Their Lease takeover is a process-failure comparison within one physical failure domain. Guest vCPUs share the pod 6 CPU quota. Runtime checks include canary stopping, center VM restart, active manager kill, independently authenticated restricted inventory reader denied node proxy, and offline-site revocation/reconnect. E10 has not yet run.
+
+### E7 replacement and identity audit
+
+`run-replacement-tests.sh` reuses the stopped three-control-plane fixtures from
+E5 and creates a separate Talos three-control-plane fixture. The append volume
+is explicitly pinned to surviving node 1. `ha-vm.sh` uses multicast for peer
+traffic and QEMU user-net port forwards for observation. Removing the node-3
+6443 forward is an **API-path** fault, not a claim that kube-apiserver stopped.
+No workshop namespace labels or pod privileges are changed.
+
+`replace-kuberoot-node.sh`, `replace-talos-node.sh` and
+`replace-k3s-node.sh` retain the stopped original disk, install a new disk with
+new management/peer MACs, and use the respective node API or declared cloud-init
+provisioning. The k3s lane explicitly reuses its join token; the Talos lane reuses
+cluster secrets. Neither reuse is presented as credential rotation. Command and
+credential-type inventories are public; private configs remain on the PVC.
+
+`node-identity-probe.py collect` uses a declared diagnostic Pod with a read-only
+hostPath to collect the real old kubelet client certificate privately. This is
+privileged diagnostic access through the guest Kubernetes API, not an SSH repair
+shell. Only the **guest** `field` namespace permits those diagnostic Pods.
+After removal, `probe` sends a real SelfSubjectReview with the retained credential.
+Successful authentication disproves revocation; network failure or mere RBAC
+Forbidden does not prove it. Keys and certificates are excluded from publishing.
+`k3s-membership-audit.py` reads the authenticated embedded-etcd JSON gateway
+through another diagnostic Pod; Kubernetes Node count alone is insufficient.
+
+The Talos 1.14 HA config uses the schemas for
+[LinkConfig](https://docs.siderolabs.com/talos/v1.14/reference/configuration/network/linkconfig),
+[LinkAliasConfig](https://docs.siderolabs.com/talos/v1.14/reference/configuration/network/linkaliasconfig),
+[KubeNodeConfig](https://docs.siderolabs.com/talos/v1.14/reference/configuration/kubernetes/kubenodeconfig)
+and [KubeFlannelCNIConfig](https://docs.siderolabs.com/talos/v1.14/reference/configuration/kubernetes/kubeflannelcniconfig).
+Merged configuration is validated by the pinned `talosctl` before apply.
+These scripts are preparation until their actual result records exist.
