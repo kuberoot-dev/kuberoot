@@ -15,18 +15,18 @@ func TestAssessment(t *testing.T) {
 	running := []supervisor.ServiceStatus{{Name: "kubelet", State: supervisor.StateRunning}}
 	t.Run("third unrequested exit fails even if Ready", func(t *testing.T) {
 		a := Assessment{Start: start}
-		s := []supervisor.ServiceStatus{{Name: "broken", State: supervisor.StateRunning, UnrequestedExits: 3, Restarts: 3, LastExit: "code 1"}}
+		s := []supervisor.ServiceStatus{{Name: "broken", State: supervisor.StateRunning, UnrequestedExits: 5, Restarts: 5, LastExit: "code 1"}}
 		good, why := a.Observe(start.Add(4*time.Second), true, s)
-		if good || !strings.Contains(why, "broken: 3 unrequested exits; last exit: code 1") {
+		if good || !strings.Contains(why, "broken: 5 unrequested exits; last exit: code 1") {
 			t.Fatalf("%v %q", good, why)
 		}
 		if WatchdogFailure(4*time.Second, s) != why {
 			t.Fatal("watchdog disagrees")
 		}
 	})
-	t.Run("slow start and two transient exits recover", func(t *testing.T) {
+	t.Run("slow start and four transient exits recover", func(t *testing.T) {
 		a := Assessment{Start: start}
-		s := []supervisor.ServiceStatus{{Name: "kubelet", State: supervisor.StateWaiting, Restarts: 2, UnrequestedExits: 2}}
+		s := []supervisor.ServiceStatus{{Name: "kubelet", State: supervisor.StateWaiting, Restarts: 4, UnrequestedExits: 4}}
 		if good, why := a.Observe(start.Add(4*time.Minute), false, s); good || why != "" {
 			t.Fatalf("%v %q", good, why)
 		}
@@ -79,7 +79,7 @@ func TestFailedAttemptPersistence(t *testing.T) {
 			dir := t.TempDir()
 			writeEntry(t, dir, "kuberoot-a.conf", "old", "1")
 			writeEntry(t, dir, file, "new", "2")
-			reason := "service broken: 3 unrequested exits; last exit: code 1\nsecond line"
+			reason := "service broken: 5 unrequested exits; last exit: code 1\nsecond line"
 			reboot, err := failAttemptIn(dir, "b", reason)
 			if err != nil || !reboot {
 				t.Fatalf("%v %v", reboot, err)
@@ -137,7 +137,7 @@ func TestFailureLogIsBoundedAndSurvivesEncoding(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Repeat("x", 4096)+"\nlast line\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	statuses := []supervisor.ServiceStatus{{Name: "broken", UnrequestedExits: 3, LogFile: path}}
+	statuses := []supervisor.ServiceStatus{{Name: "broken", UnrequestedExits: 5, LogFile: path}}
 	reason := CrashLoop(statuses)
 	details := FailureDetails(reason, statuses)
 	if len(details) > len(reason)+len("; log tail: ")+2048 || !strings.HasSuffix(details, "last line\n") {

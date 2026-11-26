@@ -19,13 +19,17 @@ const (
 	ProbationDeadline = 5 * time.Minute
 	// WatchdogDeadline allows the node API time to start and assess readiness.
 	WatchdogDeadline = 8 * time.Minute
+	// CrashLoopExits is how many unrequested exits fail an attempt. Services
+	// that wait for the API server exit a couple of times on a healthy boot of
+	// slow hardware; with kinit's growing backoff, five take about a minute.
+	CrashLoopExits = 5
 )
 
 // CrashLoop counts unrequested exits, including exit zero and spawn failures:
 // supervised services are expected to stay up. Explicit restarts do not count.
 func CrashLoop(statuses []supervisor.ServiceStatus) string {
 	for _, s := range statuses {
-		if s.UnrequestedExits >= 3 {
+		if s.UnrequestedExits >= CrashLoopExits {
 			return fmt.Sprintf("service %s: %d unrequested exits; last exit: %s", s.Name, s.UnrequestedExits, s.LastExit)
 		}
 	}
@@ -130,7 +134,7 @@ func failAttemptIn(dir, current, reason string) (bool, error) {
 // or non-regular logs never delay a failure or turn it into an assessment error.
 func FailureDetails(reason string, statuses []supervisor.ServiceStatus) string {
 	for _, st := range statuses {
-		if st.UnrequestedExits < 3 {
+		if st.UnrequestedExits < CrashLoopExits {
 			continue
 		}
 		if st.LogFile == "" {
