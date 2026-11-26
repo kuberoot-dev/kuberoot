@@ -7,6 +7,11 @@ case "${1:?release|main|k3s|talos}" in
   export PRODUCT=kuberoot-v0.1.0 VM_DIR=$FIELD_ROOT/vm-1 KUBECONFIG=$FIELD_ROOT/kuberoot-release/kubeconfig
   export SOURCE_COMMIT=ffcc71a4c6c7d3aa36c37221f0cd1d19c22e99b0 IMAGE_DIGEST=sha256:29b12ff8abc63ebd05a085b6a1f2c9f131faf7d9ae57f92d6a5e1cc250ef01ce
   export NODE_KUBECONFIG=$FIELD_ROOT/kuberoot-release/trust/admin.kubeconfig ;;
+ release-testkey)
+  export PRODUCT=kuberoot-v0.1.0-testkey VM_DIR=$FIELD_ROOT/vm-release-testkey KUBECONFIG=$FIELD_ROOT/kuberoot-release-testkey/kubeconfig
+  export SOURCE_COMMIT=ffcc71a4c6c7d3aa36c37221f0cd1d19c22e99b0
+  export IMAGE_DIGEST=sha256:$(sha256sum /work/series/0.1.0-capture.1/rootfs.squashfs | cut -d' ' -f1)
+  export NODE_KUBECONFIG=$FIELD_ROOT/kuberoot-release-testkey/trust/admin.kubeconfig ;;
  main)
   export PRODUCT=kuberoot-main-1b29543 VM_DIR=$FIELD_ROOT/vm-main KUBECONFIG=$FIELD_ROOT/kuberoot-main/kubeconfig
   export SOURCE_COMMIT=1b29543967ae6fce971f0bf818000a6b04374b52 IMAGE_DIGEST=sha256:918c2b9c5d73fe103e1574de1d9e61815ba1b161ce52e5cad9c907be68ff2de0

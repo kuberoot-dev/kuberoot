@@ -20,6 +20,6 @@ for ax,key,title in zip(axes,['api_ready_seconds','node_ready_fresh_heartbeat_se
    ax.boxplot([measured],positions=[i],widths=.5,showfliers=False)
    ax.scatter([i+(j-(len(measured)-1)/2)*.025 for j in range(len(measured))],measured,s=45,alpha=.65)
   ax.text(i,.97,f'n={len(measured)}',transform=ax.get_xaxis_transform(),ha='center',va='top',fontsize=14)
- ax.set_xticks(range(4),labels);ax.set_ylabel('Seconds from power-on');ax.set_title(title);ax.set_ylim(bottom=0);ax.grid(axis='y',alpha=.2)
+ ax.set_xticks(range(4),labels);ax.set_ylabel('Seconds from power-on');ax.set_title(title);ax.set_ylim(0,ax.get_ylim()[1]*1.18);ax.grid(axis='y',alpha=.2)
 fig.suptitle('Installed cold boot · 2 vCPU / 4 GiB\n10 fresh clones / product · cached image',fontsize=23)
 fig.savefig(root/'captures/chart-cold-boots.png',dpi=150)

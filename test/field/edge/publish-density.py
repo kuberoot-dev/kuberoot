@@ -12,7 +12,7 @@ x=[r['ready_pods'] for r in points]
 axes[0].plot(x,[r['guest_memory']['workingSetBytes']/2**20 for r in points],'o-',label='Working set')
 axes[0].plot(x,[r['guest_memory']['usageBytes']/2**20 for r in points],'o-',label='Usage incl. cache')
 axes[0].set_ylabel('Guest RAM (MiB)');axes[0].legend()
-axes[1].plot(x,[r['api_p99_seconds']*1000 for r in points],'o-');axes[1].axhline(1000,color='red',linestyle='--',label='1 s threshold');axes[1].set_ylabel('API p99 (ms)');axes[1].set_xlabel('Ready test pods');axes[1].legend()
+axes[1].plot(x,[r['api_p99_seconds']*1000 for r in points],'o-');axes[1].axhline(1000,color='red',linestyle='--',label='1 s threshold');axes[1].set_yscale('log');axes[1].set_ylabel('API p99 (ms, log scale)');axes[1].set_xlabel('Ready test pods');axes[1].legend()
 for ax in axes:ax.grid(alpha=.3)
 fig.suptitle(product+'\nDensity, 2 vCPU / 4 GiB');fig.tight_layout();chart='chart-density-'+product+'.png';fig.savefig(root/'captures'/chart,dpi=150)
 name='t-E-B3-'+product;transfers={}

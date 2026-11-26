@@ -2,7 +2,7 @@
 
 The binding experiment plan is `kuberoot-articles/test-suites/edge.md`.
 This branch starts at kuberoot `b365f53` (origin/main fetched 2026-11-25).
-**The field suite is in progress; no complete test row is available yet.** Do not interpret observer self-tests as product
+**The field suite is in progress: E-B1, E-B2 and E-B3 have completed on all four products; E1 is running.** Do not interpret observer self-tests as product
 results, and do not substitute Phase 1 user-network/qcow2 measurements.
 
 ## Network and storage method (author-approved revision)
@@ -266,3 +266,36 @@ Phase-1 installer media whose every boot payload and trust file matches retained
 source artifacts. The public manifest retains original hashes, loader entries,
 and exact recreation commands; guest disks and credentials stay intact. FAT/GPT
 metadata of recreated media can differ. No cleanup runs during a measurement.
+
+## Current checkpoint (2026-11-26)
+
+The preceding preparation notes preserve implementation history; the authoritative
+per-run outcomes are `results/edge.jsonl` and the article's `RESULTS.md`. All four
+products now have 61 idle samples, ten valid v2 cold boots and density curves.
+Density stopped at the default 110-pod scheduling limit (107 workload pods on
+kuberoot/k3s, 103 on Talos), not demonstrated memory exhaustion. W and the
+authenticated ConfigMap observer are deployed and exercised.
+
+The release E1 run failed the strict zero-pre-reset-error criterion (18 HTTP/append
+timeouts); all acknowledged records survived, with 39.645 s recovery. This is
+preserved as a failed observation. Cumulative UDP receive-buffer drops on the
+multicast fabric need correlation before attributing the timeouts to a product.
+`fabric-monitor.py` samples network counters and individual multicast socket
+drops without changing the active fixture. No heavy build runs during these
+measurements.
+
+`prepare-negative-bundles.sh` creates distinct tampered and untrusted-signature
+fixtures. The tampered bundle retains its original signature but gets a fresh
+transport SHA256; the untrusted bundle has identical payload bytes and a
+different signing key, absent from the guest. Neither case bypasses validation.
+Private test keys stay in the owned PVC and are excluded from publication.
+
+The E2 kuberoot lane runner uses ten fresh clones per fault/trust case. It stops
+on an invalid injector, preserves all product failures, and snapshots stopped
+trial disks against an immutable forensic base. A bad network/content fixture
+keeps its init process alive; otherwise an accidental injector crash would
+confound application-health testing with init-service health. The release
+test-key lane is labelled separately from the published release, using the
+Phase-1 repack with unchanged release binaries and an explicit lab trust root.
+`bundle-server.py` serves only public bundle/signature/archive names and logs
+actual transmitted bytes and Range requests for later maintenance-window tests.

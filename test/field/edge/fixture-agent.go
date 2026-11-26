@@ -48,7 +48,9 @@ func main() {
    }
   }`)
 		log.Print("injected pod-network drop rules")
-		select {}
+		for {
+			time.Sleep(time.Hour)
+		}
 	case "wrong-content":
 		// Return incorrect application bytes while the real pods and API stay Ready.
 		// This volatile NAT rule disappears when the OS rolls back and reboots.
@@ -94,7 +96,9 @@ func main() {
 			log.Fatal(err)
 		}
 		log.Print("test state migrated incompatibly; original record 0 overwritten")
-		select {}
+		for {
+			time.Sleep(time.Hour)
+		}
 	default:
 		log.Fatal(fmt.Sprintf("unknown test fault %q", os.Args[1]))
 	}
