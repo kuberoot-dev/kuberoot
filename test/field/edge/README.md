@@ -625,3 +625,10 @@ success; no reboot, retry or repair is issued. All products use this rule.
 The observer runtime is extended accordingly; the native OS rollback budget
 is unchanged. V2 result, capture and observer filenames are separate, and only
 V2 repetitions count toward E2 matrix coverage.
+
+At stopped-DUT preservation boundaries, E2 may use a completed same-product
+forensic image as the immutable backing for the next trial, reducing duplicate
+OS payload storage. Its completed marker and absence of a live raw disk are
+required. Safe rebase and full logical-byte comparison are still mandatory
+before removing the new stopped raw disk. All backing images remain retained;
+this changes evidence storage only, never the fresh raw disks used for trials.

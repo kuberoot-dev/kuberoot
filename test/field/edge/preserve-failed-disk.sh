@@ -13,6 +13,7 @@ for p in pathlib.Path('/proc').glob('[0-9]*/cmdline'):
  if a[0].endswith('qemu-system-x86_64') and any(path in arg for path in sys.argv[1:] for arg in a):raise SystemExit('refusing to snapshot a running VM disk')
 PY
 base=${3:-$golden/cold-boot-forensic-base.qcow2}
+if [[ $# -lt 3 ]];then base=$(python3 "$FIELD_SCRIPTS/choose-e2-backing.py" "$failed" "$base");fi
 [[ $base == /work/field-edge/*.qcow2 ]] || exit 2
 if [[ $# -ge 3 ]]; then test -f "$base"; fi
 if ! test -f "$base"; then
@@ -24,6 +25,6 @@ fi
 out=${PRESERVED_DISK_OUTPUT:-${failed%/system.raw}/failed.qcow2}
 [[ $out == /work/field-edge/*.qcow2 ]] || exit 2
 test ! -e "$out"
-python3 "$FIELD_SCRIPTS/share-disk-blocks.py" "$failed" "$base" "$out" --source-format raw
+python3 "$FIELD_SCRIPTS/share-disk-blocks.py" "$failed" "$base" "$out" --source-format raw | tee "$out.preservation.jsonl"
 qemu-img compare -f raw -F qcow2 "$failed" "$out"
 rm -- "$failed"
