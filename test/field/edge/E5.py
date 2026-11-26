@@ -3,7 +3,7 @@
 import argparse,concurrent.futures,datetime,json,os,pathlib,shlex,subprocess,time
 from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--ha-root',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--leader',type=int,choices=[1,2,3]);a=p.parse_args()
-scripts=pathlib.Path(__file__).resolve().parent;d=a.ha_root/'E5';d.mkdir();env=dict(os.environ,HA_ROOT=str(a.ha_root));errors=[];rows=[];acked={};metrics={};leader=a.leader;recorder=None
+scripts=pathlib.Path(__file__).resolve().parent;d=a.ha_root/'E5';d.mkdir();env=dict(os.environ,HA_ROOT=str(a.ha_root));errors=[];rows=[];acked={};metrics={};leader=a.leader;recorder=None;baseline_valid=False
 assert str(a.ha_root).startswith('/work/field-edge/ha-')
 def stamp():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def typed(args):
@@ -70,6 +70,7 @@ try:
   r=kube(i,['get','nodes','-o','wide']);print(r.stdout+r.stderr,flush=True)
  phase('baseline',15,[1,2,3])
  if errors:raise RuntimeError('baseline invalid; no partition injected')
+ baseline_valid=True
  link(leader,False)
  phase('two-plus-one',60,[i for i in [1,2,3] if i!=leader])
  # Reboot the isolated former leader; peer link stays down from early firmware.
@@ -96,5 +97,5 @@ finally:
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=10)
   subprocess.run(['python3',str(scripts/'render-serial.py'),str(d/'serial.cast')],check=True)
-record={'scenario_id':'E5','product':a.product,'source_commit':os.environ.get('SOURCE_COMMIT'),'image_digest':os.environ.get('IMAGE_DIGEST'),'vcpu':2,'ram_mib':4096,'node_count':3,'topology':'3 real etcd control planes, 12 GiB guest RAM; dedicated multicast peer LAN; separate user-net management; shared pod 6 CPU limit','fault_seed':None,'fault_phase':'2+1, isolated leader reboot, heal, 1+1+1, heal','status':'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'only majority committed; acknowledged values agreed after heal','metrics':metrics,'manual_actions':[],'acknowledged_record_loss':None,'outage_seconds':None,'recovery_seconds':metrics.get('final-heal_agreement_seconds'),'time_utc':stamp(),'artifact_paths':[str(d)],'measurement_notes':['ConfigMap quorum assertions are distinct from application storage replication and W durability.']}
+record={'scenario_id':'E5','product':a.product,'source_commit':os.environ.get('SOURCE_COMMIT'),'image_digest':os.environ.get('IMAGE_DIGEST'),'vcpu':2,'ram_mib':4096,'node_count':3,'topology':'3 real etcd control planes, 12 GiB guest RAM; dedicated multicast peer LAN; separate user-net management; shared pod 6 CPU limit','fault_seed':None,'fault_phase':'2+1, isolated leader reboot, heal, 1+1+1, heal','status':'invalid-fixture' if not baseline_valid else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'only majority committed; acknowledged values agreed after heal','metrics':metrics,'manual_actions':[],'acknowledged_record_loss':None,'outage_seconds':None,'recovery_seconds':metrics.get('final-heal_agreement_seconds'),'time_utc':stamp(),'artifact_paths':[str(d)],'measurement_notes':['ConfigMap quorum assertions are distinct from application storage replication and W durability.']}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

@@ -5,7 +5,7 @@ server process. Replacement hooks must return measured public evidence only.
 """
 import argparse,datetime,json,os,pathlib,shlex,subprocess,time,urllib.request
 from qmp import command
-p=argparse.ArgumentParser();p.add_argument('--ha-root',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--replace-hook',type=pathlib.Path,required=True);a=p.parse_args();root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;h=a.ha_root;assert h.is_relative_to(root);d=h/'E7';d.mkdir();env=dict(os.environ,HA_ROOT=str(h),KUBECONFIG=str(h/'kubeconfig-1'),CASE_OUTPUT=str(d));errors=[];metrics={};observer=None;recorder=None
+p=argparse.ArgumentParser();p.add_argument('--ha-root',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--replace-hook',type=pathlib.Path,required=True);a=p.parse_args();root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;h=a.ha_root;assert h.is_relative_to(root);d=h/'E7';d.mkdir();env=dict(os.environ,HA_ROOT=str(h),KUBECONFIG=str(h/'kubeconfig-1'),CASE_OUTPUT=str(d));errors=[];metrics={};observer=None;recorder=None;fault_injected=False
 
 def typed(args):
  print('$ ',end='',flush=True)
@@ -33,7 +33,7 @@ try:
  initial=[json.loads(line) for line in (d/'observer.jsonl').read_text().splitlines() if line.endswith('}')]
  for kind in ['http','append','api']:
   if not any(r['kind']==kind and r.get('ok') for r in initial):raise RuntimeError('external '+kind+' baseline failed before E7 injection')
- typed(['date','-u']);subprocess.run(['date','-u']);typed(['python3',str(s/'qmp.py'),str(h/'n3/qmp.sock'),'quit']);command(str(h/'n3/qmp.sock'),'quit');fault=time.monotonic();service_success=0
+ typed(['date','-u']);subprocess.run(['date','-u']);typed(['python3',str(s/'qmp.py'),str(h/'n3/qmp.sock'),'quit']);command(str(h/'n3/qmp.sock'),'quit');fault_injected=True;fault=time.monotonic();service_success=0
  with (d/'node-detection.jsonl').open('x') as out:
   while time.monotonic()-fault<125:
    node=node3();http=False
@@ -86,5 +86,5 @@ finally:
  except Exception:pass
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=15);subprocess.run(['python3',str(s/'render-serial.py'),str(d/'serial.cast')],check=True)
-record={'scenario_id':'E7','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'node_count':3,'topology':'3 control planes; shared multicast peer LAN; separate user-net API observation; W via healthy node 1','fault_seed':None,'fault_phase':'stop node 3; block its observed Kube API path while host API remains; blank replacement with new MAC','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('replacement_ready_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':metrics.get('operator_actions',[]),'status':'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'fault detection, replacement, revocation and membership gates passed','time_utc':stamp(),'artifact_paths':[str(d)],'measurement_notes':['API-path fault removes only the QEMU management port forward. The API server process itself is not stopped.','Application append storage remains on surviving node 1; this is not a claim of replicated-PVC failover.']}
+record={'scenario_id':'E7','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'node_count':3,'topology':'3 control planes; shared multicast peer LAN; separate user-net API observation; W via healthy node 1','fault_seed':None,'fault_phase':'stop node 3; block its observed Kube API path while host API remains; blank replacement with new MAC','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('replacement_ready_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':metrics.get('operator_actions',[]),'status':'invalid-fixture' if not fault_injected else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'fault detection, replacement, revocation and membership gates passed','time_utc':stamp(),'artifact_paths':[str(d)],'measurement_notes':['API-path fault removes only the QEMU management port forward. The API server process itself is not stopped.','Application append storage remains on surviving node 1; this is not a claim of replicated-PVC failover.']}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)
