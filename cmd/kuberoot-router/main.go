@@ -29,6 +29,9 @@ func main() {
 	if err != nil {
 		klog.Fatalf("kubeconfig: %v", err)
 	}
+	// The API server is on this node. client-go's default of 5 requests a
+	// second turns the status of a thousand rules into minutes of writes.
+	cfg.QPS, cfg.Burst = 200, 400
 	client, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		klog.Fatalf("client: %v", err)

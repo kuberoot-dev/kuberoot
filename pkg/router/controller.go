@@ -55,6 +55,8 @@ type Controller struct {
 	ruleset               string
 	dnsmasqConf, birdConf string
 	listers               map[string]cache.GenericLister
+	// poke holds one pending signal that a resource's spec changed.
+	poke chan struct{}
 }
 
 // Run watches the resources and reconciles on every change, and every half
@@ -72,18 +74,21 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	c.trial.Load(c.confirmedFile())
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(c.Client, 10*time.Minute)
-	poke := make(chan struct{}, 1)
-	notify := func(any) {
-		select {
-		case poke <- struct{}{}:
-		default:
-		}
-	}
+	c.poke = make(chan struct{}, 1)
+	poke := c.poke
+	notify := func(any) { c.signal() }
 	c.listers = map[string]cache.GenericLister{}
 	for _, k := range kinds {
 		inf := factory.ForResource(resource(k.Plural))
 		_, _ = inf.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: notify, DeleteFunc: notify, UpdateFunc: func(_, o any) { notify(o) },
+			AddFunc: notify, DeleteFunc: notify,
+			// The controller's own status writes must not start another
+			// full reconcile: only a new generation (a spec change) does.
+			UpdateFunc: func(old, o any) {
+				if specChanged(old, o) {
+					c.signal()
+				}
+			},
 		})
 		c.listers[k.Kind] = inf.Lister()
 	}
@@ -246,13 +251,59 @@ func (c *Controller) reconcile(ctx context.Context) {
 	}
 	sessions := c.sessions(ctx)
 	leases := c.leases()
-	for _, l := range all {
+	c.reportAll(all, func(l listed) {
 		err := failed[Ref{l.ref.Kind, "*"}]
 		if err == nil {
 			err = failed[l.ref]
 		}
 		c.report(ctx, l, problems[l.ref], err, ok, sessions, leases)
+	})
+}
+
+// reportAll writes the status of every resource, unless a spec changes on
+// the way: then the node is brought up to date first, and the rest of the
+// statuses wait for the next pass. With thousands of rules the status
+// writes take far longer than applying them, and an edit must not queue
+// behind them.
+func (c *Controller) reportAll(all []listed, report func(listed)) {
+	for i, l := range all {
+		if c.changePending() {
+			klog.V(1).Infof("a spec changed; %d statuses wait for the next pass", len(all)-i)
+			return
+		}
+		report(l)
 	}
+}
+
+// signal records that a spec changed; one pending signal is enough.
+func (c *Controller) signal() {
+	select {
+	case c.poke <- struct{}{}:
+	default:
+	}
+}
+
+// changePending tells whether a spec changed since the pass began, and
+// leaves the signal in place for the loop in Run.
+func (c *Controller) changePending() bool {
+	select {
+	case <-c.poke:
+		c.signal()
+		return true
+	default:
+		return false
+	}
+}
+
+// specChanged tells whether an update carries a new generation. Status
+// and metadata updates keep the generation; spec updates raise it.
+func specChanged(old, updated any) bool {
+	o, ok1 := old.(*unstructured.Unstructured)
+	n, ok2 := updated.(*unstructured.Unstructured)
+	if !ok1 || !ok2 {
+		return true
+	}
+	return o.GetGeneration() != n.GetGeneration() || (o.GetDeletionTimestamp() == nil) != (n.GetDeletionTimestamp() == nil)
 }
 
 func (c *Controller) confirmedFile() string { return filepath.Join(c.StateDir, "confirmed.json") }
