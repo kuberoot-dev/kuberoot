@@ -90,6 +90,7 @@ def main():
                 expected = data[:20] if data else b'W' * 1024
                 record['ok'] = response.status == 200 and body == expected
                 record['status'] = response.status
+                record['response_date'] = response.headers.get('Date')
                 record['acknowledged'] = kind == 'append' and record['ok']
                 if not record['ok']:
                     record['error'] = 'unexpected response'

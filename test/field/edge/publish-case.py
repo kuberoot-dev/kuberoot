@@ -11,7 +11,7 @@ for ext in ['gif','png','txt','cast','timing.json']:
 verified=root/'captures'/(a.capture+'-verification.json')
 subprocess.run(['python3',str(scripts/'verify-capture.py'),str(root/'captures'/a.capture)],check=True,stdout=verified.open('w'))
 transfers['02-edge/raw/'+verified.name]=str(verified)
-public=['result.json','observations.jsonl','observer.jsonl','probes.jsonl','records','bootentries-before.json','bootentries-after.json','upgrade-request.json','serial.log','serial.cast','serial.gif','serial-verification.json','recovery.cast','recovery.gif','recovery-verification.json','before-cut-serial.log','isolated-leader-before-reboot.log','isolated-leader-recovery.log','first-heal-agreement.json','final-heal-agreement.json','node-after.json']
+public=['ca-expiry.json','api-diagnosis.jsonl','guest-clock.txt','guest-http-clock.json','wrong-rtc-serial.log','manual-time-correction.txt','fault-service.log','block-counters.json','fault-epoch','relief-epoch','result.json','observations.jsonl','observer.jsonl','probes.jsonl','records','bootentries-before.json','bootentries-after.json','upgrade-request.json','serial.log','serial.cast','serial.gif','serial-verification.json','recovery.cast','recovery.gif','recovery-verification.json','before-cut-serial.log','isolated-leader-before-reboot.log','isolated-leader-recovery.log','first-heal-agreement.json','final-heal-agreement.json','node-after.json']
 for filename in public:
  f=d/filename
  if not f.exists():continue

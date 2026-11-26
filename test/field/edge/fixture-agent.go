@@ -41,7 +41,13 @@ func main() {
     tcp dport { 53, 8080 } counter drop
     udp dport 53 counter drop
    }
+   chain output {
+    type filter hook output priority 0; policy accept;
+    tcp dport { 53, 8080 } counter drop
+    udp dport 53 counter drop
+   }
   }`)
+		log.Print("injected pod-network drop rules")
 		select {}
 	case "wrong-content":
 		// Return incorrect application bytes while the real pods and API stay Ready.
@@ -51,7 +57,12 @@ func main() {
     type nat hook prerouting priority -110; policy accept;
     tcp dport 30080 counter redirect to :18080
    }
+   chain output {
+    type nat hook output priority -110; policy accept;
+    tcp dport 30080 counter redirect to :18080
+   }
   }`)
+		log.Print("injected wrong-content NAT rule")
 		http.HandleFunc("/http", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(bytes.Repeat([]byte("X"), 1024))

@@ -244,3 +244,18 @@ against `cold-boot-forensic-base.qcow2`. That backing snapshot is independent of
 the original golden raw disk, so later workload preparation cannot invalidate
 forensic images. Successful cold-boot clones are disposable; their raw measured
 outputs and complete captures remain. No running VM disk is compressed.
+
+`clock-drift-trials.py` records the requested RTC separately from observed guest
+wall time (HTTP Date, guest date where supported, serial/VGA). Each case blocks
+WAN/NTP, preserves strict certificate verification, corrects RTC by power cycle,
+and requires both W and authenticated ConfigMap operations to recover. Ubuntu
+may require an explicitly logged SSH `date` correction if persisted time defeats
+the RTC change. The public server-CA expiry is read from the actual kubeconfig;
+private keys are never emitted. Every manual recovery remains in the result.
+
+Fault evidence is mandatory: E2 records the injected service log and verifies
+wrong HTTP bytes or failed workload connectivity while the Kubernetes API still
+answers. A missing/nonfunctional injector is `invalid-fixture`, never a product
+rollback pass. Network faults affect both forwarded pod traffic and host-origin
+workload/DNS traffic; wrong-content NAT targets only the HTTP NodePort in both
+prerouting and output. The append NodePort and API port remain separate.

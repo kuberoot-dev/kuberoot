@@ -10,4 +10,7 @@ scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="
  -i "$FIELD_ROOT/gateway/key" -P 2222 /work/bin/kubectl "$FIELD_SCRIPTS/observer.py" observer@127.0.0.1:/home/observer/
 scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$FIELD_ROOT/gateway/known_hosts" \
  -i "$FIELD_ROOT/gateway/key" -P 2222 "$config" observer@127.0.0.1:/home/observer/kubeconfig
-"$FIELD_SCRIPTS/gateway-command.sh" 'sudo install -m 755 /home/observer/kubectl /usr/local/bin/kubectl; chmod 600 /home/observer/kubeconfig; KUBECONFIG=/home/observer/kubeconfig kubectl get nodes; curl --fail --max-time 5 http://10.78.0.11:30080/http | wc -c'
+"$FIELD_SCRIPTS/gateway-command.sh" 'sudo install -m 755 /home/observer/kubectl /usr/local/bin/kubectl; chmod 600 /home/observer/kubeconfig'
+if [[ ${1:-} != --config-only ]]; then
+ "$FIELD_SCRIPTS/gateway-command.sh" 'KUBECONFIG=/home/observer/kubeconfig kubectl get nodes; curl --fail --max-time 5 http://10.78.0.11:30080/http | wc -c'
+fi
