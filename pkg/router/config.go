@@ -70,13 +70,6 @@ func Check(c Config) (Config, Problems) {
 		routeOf[key] = r.Name
 		ok.Routes = append(ok.Routes, r)
 	}
-	for _, n := range c.NAT {
-		if err := checkNAT(n.Spec); err != nil {
-			p[Ref{"NATRule", n.Name}] = err.Error()
-			continue
-		}
-		ok.NAT = append(ok.NAT, n)
-	}
 	zones := map[string]bool{}
 	zoneOf := map[string]string{}
 	for _, z := range c.Zones {
@@ -95,6 +88,35 @@ func Check(c Config) (Config, Problems) {
 			if !zones[to] {
 				p[Ref{"FirewallZone", z.Name}] = fmt.Sprintf("forwards to zone %s, which does not exist", to)
 			}
+		}
+	}
+	// Report port forwards hidden by the management exemption as invalid,
+	// instead of claiming that the node runs them. Keep the nftables
+	// exemption too: it protects the API independently of this validation.
+	management := map[string]string{}
+	for _, z := range ok.Zones {
+		if z.Spec.Management {
+			for _, link := range z.Spec.Links {
+				management[link] = z.Name
+			}
+		}
+	}
+	for _, n := range c.NAT {
+		if err := checkNAT(n.Spec); err != nil {
+			p[Ref{"NATRule", n.Name}] = err.Error()
+			continue
+		}
+		if f := n.Spec.PortForward; f != nil && f.Protocol == "tcp" {
+			if zone, protected := management[f.InLink]; protected {
+				for _, port := range ManagementPorts {
+					if f.Port == int32(port) {
+						p[Ref{"NATRule", n.Name}] = fmt.Sprintf("TCP port %d on link %s is reserved for the router API by management zone %s", port, f.InLink, zone)
+					}
+				}
+			}
+		}
+		if _, invalid := p[Ref{"NATRule", n.Name}]; !invalid {
+			ok.NAT = append(ok.NAT, n)
 		}
 	}
 	for _, r := range c.Rules {
