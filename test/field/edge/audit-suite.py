@@ -15,7 +15,7 @@ def check(scenario,product,n,phase=None,protocol=None):
 for product in products:
  check('E-B1',product,1);check('E-B2',product,10,protocol='boot-readiness-v2');check('E-B3',product,1);check('E1',product,1,protocol='wan-gateway-conntrack-v2')
 for product in upgrade:
- for phase in ['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted']:check('E2',product,10,phase)
+ for phase in ['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted']:check('E2',product,10,phase,protocol='upgrade-client-disconnect-v2')
  check('E3',product,30)
 for product in products:
  for phase in ['100-iops','20-iops','full-90','full-95','full-100','eio']:check('E4',product,1,phase)

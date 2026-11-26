@@ -613,3 +613,15 @@ the maximum of the ten measured E-B2 power-on-to-new-pod times), separately
 from the driver safety timeout. The reference product and allowance are stored
 in each applicable result. Fixed-main reruns use the same original-main
 reference; release-testkey uses the unchanged release baseline.
+
+E2 protocol `upgrade-client-disconnect-v2` corrects a measured harness issue:
+the original fixed 65-second tail included normal workload startup after slot A
+returned, leaving less than a full minute of healthy traffic. That original
+trial and its result are retained. V2 starts checking after 65 seconds and
+continues until a complete fresh 60-second HTTP/append/API window succeeds,
+with a 240-second observation limit. This allows up to 180 seconds for service
+recovery plus 60 seconds of confirmation. Only external observer records decide
+success; no reboot, retry or repair is issued. All products use this rule.
+The observer runtime is extended accordingly; the native OS rollback budget
+is unchanged. V2 result, capture and observer filenames are separate, and only
+V2 repetitions count toward E2 matrix coverage.

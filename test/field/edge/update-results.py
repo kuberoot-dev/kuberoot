@@ -55,22 +55,25 @@ for ident in ids:
    values=[pair(k) for k in ['api_ready_seconds','node_ready_fresh_heartbeat_seconds','coredns_answer_seconds','new_pod_serves_seconds']]
    lines.append('| '+product+' | '+str(len(runs))+' / '+str(sum(r.get('status')=='failed' for r in runs))+' | '+' | '.join(values)+' |')
   lines+=['','p95 — nearest rank; десять повторов дают слабую оценку хвоста. Таблица использует исправленный boot-readiness-v2, если он есть; ранние обрывы старого драйвера сохранены ниже и не смешиваются с новой выборкой. Все неудачи и измеренные этапы сохранены по отдельности.','']
+ if ident=='E2':
+  lines+=['Сводка E2 учитывает только upgrade-client-disconnect-v2. Первый v1 сохранён как история ошибки окна наблюдения: ОС откатилась и ACK сохранились, но фиксированные 65 секунд после возврата API не оставили полных 60 секунд устойчивой работы W. Это не доказательство дефекта отката; v2 ожидает устойчивое окно адаптивно, максимум 240 секунд.','']
  if ident not in ['E-B1','E-B2','E-B3','E1']:
-  lines+=['| Продукт / случай | Записей / invalid | Passed / failed | Recovery median / p95, s | Максимум acked lost |','|---|---:|---:|---:|---:|']
+  lines+=['| Продукт / случай | Записей / вне сводки | Passed / failed | Recovery median / p95, s | Максимум acked lost |','|---|---:|---:|---:|---:|']
   groups={}
   for item in selected:groups.setdefault((item['product'],item.get('fault_phase','—')),[]).append(item)
   for (product,phase),items in groups.items():
-   valid=[v for v in items if not str(v.get('status','')).startswith('invalid')]
+   valid=[v for v in items if not str(v.get('status','')).startswith('invalid') and (ident!='E2' or v.get('measurement_protocol')=='upgrade-client-disconnect-v2')]
    values=sorted(v['recovery_seconds'] for v in valid if isinstance(v.get('recovery_seconds'),(int,float)))
    duration='—' if not values else f'{statistics.median(values):.2f} / {values[max(0,math.ceil(.95*len(values))-1)]:.2f}'
    losses=[v['acknowledged_record_loss'] for v in valid if isinstance(v.get('acknowledged_record_loss'),(int,float))]
    passed=sum(str(v.get('status','')).startswith('passed') for v in valid);failed=sum(v.get('status')=='failed' for v in valid)
    label=(product+' / '+str(phase)).replace('|','\\|').replace('\n',' ')
    lines.append(f'| {label} | {len(items)} / {len(items)-len(valid)} | {passed} / {failed} | {duration} | {max(losses) if losses else "—"} |')
-  lines+=['','Invalid — сбой fixture, не результат DUT. Отсутствующее время не заменяется нулём; measured/unsupported/not measured не считаются passed. Все исходные записи и причины ниже.','']
+  lines+=['','Вне сводки — сбои fixture и прежний протокол E2; это не итоговый результат DUT. Отсутствующее время не заменяется нулём; measured/unsupported/not measured не считаются passed. Все исходные записи и причины ниже.','']
  for r in selected:
   label=r['product']+(f", repetition {r['repetition']}" if 'repetition' in r else '')
   lines+=[f"### {label}",'',f"Статус: **{r.get('status','не указан')}**. {r.get('reason','')}",'']
+  if ident=='E2':lines += ['Протокол: `'+r.get('measurement_protocol','не указан')+'`.','']
   if r.get('metrics'):
    lines+=['| Метрика | Измерение |','|---|---|']
    for key,val in r['metrics'].items():lines.append(f'| `{key}` | {table_value(val)} |')

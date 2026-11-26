@@ -2,7 +2,7 @@
 """Real APT trust/integrity and k3s A→B trials with declared lab fault packaging."""
 import argparse,datetime,hashlib,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
-from upgrade_observations import evaluate as evaluate_service
+from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--repetition',type=int,required=True);p.add_argument('--deadline',type=int,default=1500);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;golden=root/'k3s-upgrade-a';d=a.output;assert d.is_relative_to(root)
 assert shutil.disk_usage(root).free>(golden/'system.raw').stat().st_blocks*512+1024**3
@@ -112,7 +112,7 @@ try:
  else:
   after=inventory();(d/'package-after.txt').write_text(after);metrics['boot_and_binary_unchanged']=after==before
   if after!=before:errors.append('negative package changed boot ID, kernel/boot files or k3s binary')
- time.sleep(65);gateway(f'touch /home/observer/{name}.stop');time.sleep(4)
+ settle_metrics,settle_errors=wait_for_service(gateway,name);metrics.update(settle_metrics);errors.extend(settle_errors);gateway(f'touch /home/observer/{name}.stop');time.sleep(4)
  (d/'observer.jsonl').write_text(gateway(f'cat /home/observer/{name}.jsonl').stdout)
  service_metrics,service_errors=evaluate_service(d/'observer.jsonl');metrics.update(service_metrics);errors.extend(service_errors)
  r=gateway('curl --fail --max-time 20 http://10.78.0.11:30081/records')
@@ -134,5 +134,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(s/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':'k3s-v1.37.1-to-v1.37.2-lab-package','source_commit':'f6973cb850e9b245585363d15bde80904ac862fd','image_digest':'sha256:'+metrics['target_binary_sha256'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh Ubuntu/k3s A raw+UEFI; actual signed APT test package; multicast/gateway','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'APT rejected negative package and retained boot state and acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v2','scenario_id':'E2','product':'k3s-v1.37.1-to-v1.37.2-lab-package','source_commit':'f6973cb850e9b245585363d15bde80904ac862fd','image_digest':'sha256:'+metrics['target_binary_sha256'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh Ubuntu/k3s A raw+UEFI; actual signed APT test package; multicast/gateway','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'APT rejected negative package and retained boot state and acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

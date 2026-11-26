@@ -5,7 +5,7 @@ A manual rollback is never counted as automatic recovery.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
-from upgrade_observations import evaluate as evaluate_service
+from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--image',required=True);p.add_argument('--repetition',type=int,required=True);p.add_argument('--deadline',type=int,default=1500);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;d=a.output
 assert d.is_relative_to(root) and a.golden.is_relative_to(root)
@@ -56,7 +56,7 @@ try:
  (d/'talos-before.json').write_text(json.dumps(snapshot(),indent=2))
  typed(['export','KUBECONFIG='+env['KUBECONFIG']]);typed(['kubectl','-n','field','get','pods']);print(kube('-n','field','get','pods').stdout,flush=True)
  observer=f'/home/observer/{name}'
- r=gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds {a.deadline+240} --stop-file {observer}.stop --output {observer}.jsonl >{observer}.log 2>&1 </dev/null &')
+ r=gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds {a.deadline+400} --stop-file {observer}.stop --output {observer}.jsonl >{observer}.log 2>&1 </dev/null &')
  if r.returncode:raise RuntimeError(r.stderr)
  time.sleep(10)
  serial=shlex.join(['python3',str(s/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds',str(a.deadline+120)])
@@ -116,7 +116,7 @@ try:
  if not finished:errors.append('no automatic rollback within 1500-second observation budget')
  metrics['target_boot_observed']=target_seen;metrics['fault_verified']=fault_verified
  if not negative and not fault_verified:errors.append('injected fault not verified; no product conclusion')
- time.sleep(65);gateway(f'touch {observer}.stop');time.sleep(4)
+ settle_metrics,settle_errors=wait_for_service(gateway,name);metrics.update(settle_metrics);errors.extend(settle_errors);gateway(f'touch {observer}.stop');time.sleep(4)
  (d/'observer.jsonl').write_text(gateway(f'cat {observer}.jsonl').stdout)
  service_metrics,service_errors=evaluate_service(d/'observer.jsonl');metrics.update(service_metrics);errors.extend(service_errors)
  r=gateway('curl --fail --max-time 20 http://10.78.0.11:30081/records')
@@ -148,5 +148,5 @@ finally:
   subprocess.run(['python3',str(s/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
  if vga:assert vga.wait(timeout=60)==0, 'VGA recorder failed; repair capture before publication'
-record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':os.environ['PRODUCT'],'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real Talos installer extension; multicast/gateway; default image policy','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'automatic rollback or integrity rejection and acknowledged-record gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v2','scenario_id':'E2','product':os.environ['PRODUCT'],'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real Talos installer extension; multicast/gateway; default image policy','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'automatic rollback or integrity rejection and acknowledged-record gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

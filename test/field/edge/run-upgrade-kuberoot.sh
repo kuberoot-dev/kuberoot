@@ -16,8 +16,8 @@ for REPETITION in $(seq 1 10); do
  [[ $CASE != tampered && $CASE != untrusted ]] || export TARGET_VERSION=0.1.0-field-$lane-wrong-content
  export BUNDLE_URL=http://10.0.2.2:15004/0.1.0-field-$lane-$CASE.tar
  export BUNDLE_SHA256=$(cut -d' ' -f1 "$base-$CASE.tar.sha256")
-  export REPETITION CASE_OUTPUT=$FIELD_ROOT/results/E2-$PRODUCT-$CASE-$REPETITION
-  name=t-E2-$PRODUCT-$CASE-$REPETITION
+  export REPETITION CASE_OUTPUT=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-$REPETITION
+  name=t-E2-v2-$PRODUCT-$CASE-$REPETITION
   if test -f "$CASE_OUTPUT/published"; then continue; fi
   if test -e "$CASE_OUTPUT"; then
    printf 'Interrupted case requires evidence review: %s\n' "$CASE_OUTPUT" >&2;exit 2
@@ -28,7 +28,7 @@ for REPETITION in $(seq 1 10); do
   # Preserve every failed state using an independently pinned backing snapshot.
   # Successful clones are also retained until reviewed; remove no measured state.
   backing=()
-  first=$FIELD_ROOT/results/E2-$PRODUCT-$CASE-1/failed.qcow2
+  first=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-1/failed.qcow2
   if [[ $REPETITION != 1 ]]; then backing=("$first"); fi
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN" "${backing[@]}"
   python3 - "$CASE_OUTPUT/result.json" <<'PYCASE'

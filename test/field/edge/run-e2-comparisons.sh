@@ -8,7 +8,7 @@ python3 - "$FIELD_ROOT/results.jsonl" <<'PY'
 import json,sys
 rows=[json.loads(line) for line in open(sys.argv[1])]
 for phase in ['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted']:
- done={r.get('repetition') for r in rows if r.get('scenario_id')=='E2' and r.get('product')=='kuberoot-main-1b29543' and r.get('fault_phase')==phase and not r.get('status','').startswith('invalid')}
+ done={r.get('repetition') for r in rows if r.get('scenario_id')=='E2' and r.get('measurement_protocol')=='upgrade-client-disconnect-v2' and r.get('product')=='kuberoot-main-1b29543' and r.get('fault_phase')==phase and not r.get('status','').startswith('invalid')}
  assert set(range(1,11))<=done,'E2 main lane is incomplete: '+phase
 PY
 # Markers mean a preparation command returned successfully. If interrupted,
