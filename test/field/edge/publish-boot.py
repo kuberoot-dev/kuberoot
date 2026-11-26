@@ -14,5 +14,9 @@ for filename in ['serial.log','result.json']:
 if rep=='1':
  transfers['02-edge/img/'+name+'-serial.gif']=str(d/'serial.gif')
  transfers['02-edge/raw/'+name+'-serial.cast']=str(d/'serial.cast')
+if (d/'vga/console.gif').exists():
+ transfers['02-edge/img/'+name+'-vga.gif']=str(d/'vga/console.gif')
+ transfers['02-edge/img/'+name+'-vga.png']=str(d/'vga/console.png')
+ transfers['02-edge/raw/'+name+'-vga-timing.json']=str(d/'vga/timing.json')
 r['artifact_transfers']=transfers;r['artifact_paths']=list(transfers)
 with (root/'results.jsonl').open('a') as f:f.write(json.dumps(r)+'\n')

@@ -18,11 +18,13 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
  for f in ['system.raw','vars.fd']:
   subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
  env=dict(os.environ,VM_DIR=str(d))
- recorder=None
+ recorder=None;vga=None
  if repetition==1:
   (d/'serial.log').touch()
   shell=shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--stop-file',str(d/'serial.stop')])
   recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',shell,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+ if repetition==1 and a.product.startswith('talos'):
+  vga=subprocess.Popen(['python3',str(scripts/'vga-capture.py'),'--qmp',str(d/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop')],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
  t0=time.monotonic();utc0=datetime.datetime.now(datetime.timezone.utc)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(scripts)],env=env,check=True)
  metrics={};errors=[]
@@ -65,7 +67,9 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
   if recorder:
    (d/'serial.stop').touch()
    recorder.wait(timeout=10)
+   if vga:vga.wait(timeout=60)
    timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
+   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
    hold=str(max(5,15.1-timing['playback_seconds']))
    subprocess.run(['/work/bin/agg','--font-size','16','--theme','monokai','--last-frame-duration',hold,str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
  result={'scenario_id':'E-B2','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'fault_seed':None,'fault_phase':'installed cold boot','outage_seconds':None,'acknowledged_record_loss':None,'recovery_seconds':metrics.get('new_pod_serves_seconds'),'manual_actions':[],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'reason':'all four boot milestones measured' if not errors else '; '.join(errors),'repetition':repetition,'start_utc':utc0.isoformat(),'metrics':metrics,'errors':errors,'status':'measured' if not errors else 'failed','vcpu':2,'ram_mib':4096,'topology':'same multicast LAN and gateway; fresh raw disk and OVMF vars clone','workload_image':a.image,'artifact_paths':[str(d/'serial.log')]}

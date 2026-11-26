@@ -19,7 +19,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
  rng=random.Random(a.seed+repetition)
  phase=phases[repetition%len(phases)];name=f'E3-{a.product}-{repetition+1:02d}';d=a.output/name;d.mkdir()
  run(['qemu-img','convert','-f','qcow2','-O','raw',base,d/'system.raw']);run(['cp',a.golden/'vars.fd',d/'vars.fd'])
- env=dict(os.environ,VM_DIR=str(d));errors=[];metrics={};cut_epoch=None;recorder=None
+ env=dict(os.environ,VM_DIR=str(d));errors=[];metrics={};cut_epoch=None;recorder=None;vga=None;offset=None
  try:
   run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',scripts],env=env)
   deadline=time.monotonic()+300
@@ -35,6 +35,8 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   offset=rng.uniform(2,8) if phase=='writes' else rng.uniform(0,.25)
   time.sleep(offset)
   recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop')]),str(d/'recovery.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+  if a.product.startswith('talos'):
+   vga=subprocess.Popen(['python3',str(scripts/'vga-capture.py'),'--qmp',str(d/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop')],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
   time.sleep(.2)
   kill_command=['kill','-9',str(int((d/'pid').read_text()))]
   print('$ ',end='',flush=True)
@@ -68,6 +70,18 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   if r.returncode:errors.append('acknowledged record loss or corruption')
   after=json.loads(kube('get','nodes','-o','json'))['items'][0]['status']['nodeInfo']['bootID'];metrics['fresh_boot_id']=after!=before
   if after==before:errors.append('fresh bootID not observed')
+  if a.product.startswith('kuberoot'):
+   node_env=dict(os.environ,KUBECONFIG=os.environ['NODE_KUBECONFIG'])
+   slots=json.loads(subprocess.check_output(['kubectl','--request-timeout=5s','get','bootentries','-o','json'],text=True,env=node_env,timeout=8))
+   (d/'bootentries-after.json').write_text(json.dumps(slots,indent=2))
+   booted=[s for s in slots['items'] if s.get('status',{}).get('booted')]
+   metrics['valid_boot_slot']=len(booted)==1 and booted[0]['status']['state']=='Good'
+   if not metrics['valid_boot_slot']:errors.append('no single booted Good slot after sustained W recovery')
+  else:
+   node=json.loads(kube('get','nodes','-o','json'))['items'][0]
+   (d/'node-after.json').write_text(json.dumps(node,indent=2))
+   metrics['booted_os_image']=node['status']['nodeInfo']['osImage']
+   metrics['slot_observation']='fresh bootID and running OS version; no inferred A/B slot status'
   recovery=metrics.get('recovery_seconds_first_60s_sustained_success')
   if recovery is None or recovery>180:errors.append('no sustained W recovery within 180 seconds')
   if metrics.get('driver_overloads'):errors.append('observer dispatch overload; run invalid')
@@ -80,10 +94,12 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   time.sleep(2)
   if recorder:
    (d/'serial.stop').touch();recorder.wait(timeout=10)
+   if vga:vga.wait(timeout=60)
    timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'recovery.cast')],text=True))
+   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'recovery.retimed.cast')],check=True,stdout=(d/'recovery-speed.json').open('w'))
    hold=str(max(5,15.1-timing['playback_seconds']))
    run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',hold,d/'recovery.retimed.cast',d/'recovery.gif'])
- result={'scenario_id':'E3','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'repetition':repetition+1,'fault_seed':a.seed,'fault_phase':phase,'fault_epoch':cut_epoch,'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone + fresh OVMF vars; same multicast LAN/gateway; observer outside DUT','metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'failed' if errors else 'passed-W','reason':'; '.join(errors) if errors else 'W and bootID gates passed; product boot-slot state requires separate verification','artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+ result={'scenario_id':'E3','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'repetition':repetition+1,'fault_seed':a.seed+repetition,'seed_base':a.seed,'fault_offset_seconds':offset,'fault_phase':phase,'fault_epoch':cut_epoch,'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone + fresh OVMF vars; same multicast LAN/gateway; observer outside DUT','metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'failed' if errors else 'passed-W','reason':'; '.join(errors) if errors else 'W and bootID gates passed; product boot-slot state requires separate verification','artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
  (d/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
  with (a.output/'runs.jsonl').open('a') as f:f.write(json.dumps(result)+'\n')
  if errors:

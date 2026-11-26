@@ -174,3 +174,27 @@ and deliberately labels a W-only success as a subcase: upgrade safety must be
 checked separately before E4 as a whole can pass. The guest-local ENOSPC
 injector is a critical-priority pod with an independent HTTP relief endpoint;
 it mounts the DUT state directory, never the workshop host/PVC.
+
+Talos 1.14 generates multi-document configs. The single-node patch removes the
+control-plane NoSchedule taint in `KubeNodeConfig` and removes `HostnameConfig.auto`
+with `$patch: delete` before setting the static hostname. Legacy v1alpha1 fields
+conflict with generated documents; `auto: null` does not delete the default.
+The rejected configurations were preparation failures, not baseline results.
+See [Talos 1.14 workload scheduling](https://docs.siderolabs.com/talos/v1.14/deploy-and-manage-workloads/workloads-on-controlplane)
+and [HostnameConfig](https://docs.siderolabs.com/talos/v1.14/reference/configuration/network/hostnameconfig).
+
+For Talos's default `console=tty0`, `vga-capture.py` additionally records the real
+QEMU framebuffer and its UTC/monotonic frame timing. Serial captures remain
+available and are not filled with invented kernel output. `bound-cast.py` caps
+long playback after idle retiming by scaling timestamps uniformly; it preserves
+every event and never rewrites the original asciicast.
+
+The test-only `fixture-agent.go` refuses to run outside an installed kuberoot
+root. Fault bundles use it for a crashing init service, volatile nft pod/DNS
+drops, a volatile wrong-content HTTP redirect, and an incompatible rewrite of
+the dedicated W record file. `build-fault-bundles.sh` signs them with the existing
+lab key only after matching the baked trusted public key. These bundles and
+`E2-kuberoot.py` still await runtime execution; they are not production changes
+or evidence that rollback/application health gates work. The `/health` endpoint
+on W can expose incompatible record formatting without changing its append/HTTP
+contract. An OS rollback cannot undo arbitrary persistent-data migrations.

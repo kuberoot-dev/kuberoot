@@ -22,6 +22,10 @@ for ext in ['gif','png','txt','cast','timing.json']:
 for filename in ['observer.jsonl','durability.json','recovery.json','missing-image.json','before-cut-serial.log','recovery-serial.log','fault-epoch','power-cut-epoch']:
  transfers['02-edge/raw/'+name+'-'+filename]=str(d/filename)
 transfers['02-edge/img/'+capture+'-serial.gif']=str(d/'recovery.gif');transfers['02-edge/raw/'+name+'-serial.cast']=str(d/'recovery.cast')
+if (d/'vga/console.gif').exists():
+ transfers['02-edge/img/'+capture+'-vga.gif']=str(d/'vga/console.gif')
+ transfers['02-edge/img/'+capture+'-vga.png']=str(d/'vga/console.png')
+ transfers['02-edge/raw/'+name+'-vga-timing.json']=str(d/'vga/timing.json')
 record={'scenario_id':'E1','product':product,'image_digest':os.environ['IMAGE_DIGEST'],'source_commit':os.environ['SOURCE_COMMIT'],'vcpu':2,'ram_mib':4096,'topology':'single multicast LAN; gateway WAN/DNS blackhole; local observer in gateway','fault_seed':None,'fault_phase':'60 min WAN blackhole; power cut at minute 10','outage_seconds':None,'acknowledged_record_loss':metrics['acknowledged_record_loss'],'recovery_seconds':r,'manual_actions':[],'metrics':metrics,'status':'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'all E1 service, recovery, durability and missing-image gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_transfers':transfers,'artifact_paths':list(transfers)}
 (d/'result.json').write_text(json.dumps(record,indent=2))
 with (root/'results.jsonl').open('a') as f:f.write(json.dumps(record)+'\n')

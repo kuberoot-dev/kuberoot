@@ -8,6 +8,7 @@ D=$FIELD_ROOT/results/$RUN_NAME
 mkdir "$D"
 G=$FIELD_SCRIPTS/gateway-command.sh
 # Observer and credentials were copied to the gateway during fixture preparation.
+show export "KUBECONFIG=$KUBECONFIG"
 show date -u
 show kubectl -n field get pods -o wide
 "$G" "nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 4020 --output /home/observer/$RUN_NAME.jsonl >/home/observer/$RUN_NAME.log 2>&1 </dev/null &"
@@ -20,10 +21,15 @@ show date -u
 date +%s > "$D/power-cut-epoch"
 show kill -9 "$(cat "$VM_DIR/pid")"
 cp "$VM_DIR/serial.log" "$D/before-cut-serial.log"
-show vm_start 1
+show "$FIELD_SCRIPTS/boot-node.sh" 1
 # Record the actual serial stream of the recovery, separately from the API view.
 asciinema rec --cols 110 --rows 30 -q -c "python3 '$FIELD_SCRIPTS/serial-follow.py' '$VM_DIR/serial.log' --stop-file '$D/serial.stop' --max-seconds 180" "$D/recovery.cast" > "$D/serial-recorder.log" 2>&1 &
 serial_recorder=$!
+vga_recorder=
+if [[ ${PRODUCT:-} == talos* ]]; then
+ python3 "$FIELD_SCRIPTS/vga-capture.py" --qmp "$VM_DIR/qmp.sock" --output "$D/vga" --stop-file "$D/serial.stop" --seconds 180 > "$D/vga-capture.log" 2>&1 &
+ vga_recorder=$!
+fi
 show date -u
 # Keep the blackhole for a full hour measured from the fault, including reboot.
 remain=$((fault+3600-$(date +%s)))
@@ -45,6 +51,8 @@ cp "$VM_DIR/serial.log" "$D/recovery-serial.log"
 python3 "$FIELD_SCRIPTS/analyse-observer.py" "$D/observer.jsonl" --fault-epoch "$(cat "$D/power-cut-epoch")" | tee "$D/recovery.json"
 
 wait "$serial_recorder"
+if [[ -n $vga_recorder ]]; then wait "$vga_recorder"; fi
 python3 /work/scripts/render.py "$D/recovery.cast" > "$D/recovery-timing.json"
+python3 "$FIELD_SCRIPTS/bound-cast.py" "$D/recovery.retimed.cast" > "$D/recovery-speed.json"
 hold=$(python3 -c 'import json,sys;print(max(5,15.1-json.load(open(sys.argv[1]))["playback_seconds"]))' "$D/recovery-timing.json")
 agg -q --font-size 16 --theme monokai --last-frame-duration "$hold" "$D/recovery.retimed.cast" "$D/recovery.gif"

@@ -53,6 +53,17 @@ while True:
    if outcome.returncode:raise RuntimeError(outcome.stderr)
    copy('/work/field-edge/captures/'+chart,root/'02-edge/img'/chart)
    r['artifact_paths'].append('02-edge/img/'+chart)
+   vm='vm-1' if r['product']=='kuberoot-v0.1.0' else 'vm-main' if r['product'].startswith('kuberoot-main') else 'k3s' if r['product'].startswith('k3s') else 'talos'
+   outcome=remote('python3','/work/field-edge/scripts/collect-footprint.py',r['product'],'/work/field-edge/'+vm,source+'/footprint.json')
+   if outcome.returncode:raise RuntimeError(outcome.stderr)
+   footprint=json.loads(outcome.stdout)
+   footprint_path='02-edge/raw/'+stem+'-footprint.json'
+   copy(source+'/footprint.json',root/footprint_path)
+   r['artifact_paths'].append(footprint_path)
+   r['metrics']['raw_disk_host_allocated_bytes']=footprint['raw_disk_host_allocated_bytes']
+   r['metrics']['named_boot_assets_bytes']=footprint['asset_bytes_sum']
+   r['footprint_observation_utc']=footprint['utc']
+   r['measurement_notes']=footprint['notes']+['Guest filesystem used is the filesystem reported by kubelet; for kuberoot it excludes read-only root/ESP. Raw allocation is a separate whole-disk host measurement.']
    # Every scene is rendered and copied before the result is published.
    record=root/'02-edge/raw'/f'{stem}-published-result.json'
    record.write_text(json.dumps(r,indent=2)+'\n')

@@ -6,11 +6,17 @@ require_stand
 D=$FIELD_ROOT/talos
 mkdir -p "$D"
 cat > "$D/patch.yaml" <<'YAML'
-cluster:
-  allowSchedulingOnControlPlanes: true
-machine:
-  network:
-    hostname: edge-talos
+apiVersion: v1alpha1
+kind: HostnameConfig
+auto:
+  $patch: delete
+hostname: edge-talos
+---
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete
 YAML
 talosctl gen config edge-field https://10.78.0.11:6443 --install-disk /dev/vda \
  --talos-version v1.14.7 --kubernetes-version 1.37.1 --additional-sans 127.0.0.1 \
@@ -28,7 +34,12 @@ for i in $(seq 1 120); do
  if "$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 version'; then break; fi
  sleep 5
 done
-"$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 bootstrap'
+bootstrapped=false
+for i in $(seq 1 120); do
+ if "$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 bootstrap'; then bootstrapped=true; break; fi
+ sleep 5
+done
+$bootstrapped || { echo 'Talos did not accept bootstrap; inspect services/install logs' >&2; exit 1; }
 for i in $(seq 1 120); do
  if "$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 kubeconfig --merge=false -' > "$D/kubeconfig"; then break; fi
  sleep 5

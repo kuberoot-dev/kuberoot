@@ -100,6 +100,7 @@ finally:
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=10)
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
+  subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
 record={'scenario_id':'E4','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone; QEMU throttle/blkdebug; guest-local fallocate; gateway observer','fault_seed':None,'fault_phase':a.case,'metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'failed' if errors else 'passed-W-subcase','reason':'; '.join(errors) if errors else 'storage/W subcase passed; upgrade safety is a separate mandatory lane','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'upgrade_hook_executed':bool(a.upgrade_hook),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

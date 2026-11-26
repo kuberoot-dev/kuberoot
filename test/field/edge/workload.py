@@ -41,6 +41,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/http':
             self.respond(200, BODY)
+        elif self.path == '/health':
+            if self.server.records is None:
+                self.respond(200, b'healthy')
+                return
+            with LOCK:
+                data = self.server.records.read_bytes()
+            records = [data[i:i+1024] for i in range(0, len(data), 1024)]
+            valid = all(len(r) == 1024 and r[:20].isdigit() and r[20:] == b'W' * 1004 for r in records)
+            self.respond(200 if valid else 503, b'healthy' if valid else b'incompatible record format')
         elif self.path == '/records' and self.server.records is not None:
             with LOCK:
                 data = self.server.records.read_bytes()
