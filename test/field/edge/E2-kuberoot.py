@@ -59,7 +59,7 @@ try:
  seen_target=False;last_print=None;finished=False
  with (d/'observations.jsonl').open('x') as out:
   while time.monotonic()-start<a.deadline:
-   row={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds':time.monotonic()-start}
+   row={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds':time.monotonic()-start,'pvc_free_bytes':shutil.disk_usage(root).free}
    try:
     slots=slot_snapshot();row['bootentries']=slots;current=next(s for s in slots['items'] if s['status'].get('booted'))['status'];row['booted']=current
     if current['release']==a.target_version:

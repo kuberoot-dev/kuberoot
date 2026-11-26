@@ -19,6 +19,9 @@ SCENES = {
 
 def describe(path, scenario):
  name=Path(path).name
+ if 'storage-diagnosis' in name:return 'E2: фактический preboot Upgrade EIO, исходный слот A и восемь ошибок записи QEMU; целевой fault не достигнут'
+ if 'storage-probe' in name:return 'E2: проверка отдельного scratch-файла на PVC через cache=none: восемь write/flush/pattern-read; причина исходного EIO не установлена'
+ if 'host-resources' in name:return 'Свободные байты PVC и счётчики памяти pod с UTC каждые пять секунд'
  if name.endswith('.integrity.json'):return 'SHA256 и размеры для проверки точности gzip-архива'
  if 'measurement-summary' in name:return 'Читаемая сводка фактически измеренных E2 величин из result.json'
  if 'bootentries-before-view' in name or 'bootentries-after-view' in name:return 'Проекция сохранённого BootEntry с указанием исходного файла: имя слота и полный status'
