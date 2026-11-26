@@ -2,7 +2,7 @@
 
 The binding experiment plan is `kuberoot-articles/test-suites/edge.md`.
 This branch starts at kuberoot `b365f53` (origin/main fetched 2026-11-25).
-**The field suite is in progress: E-B1, E-B2 and E-B3 have completed on all four products; E1 is running.** Do not interpret observer self-tests as product
+**The field suite is in progress: E-B1, E-B2, E-B3 and corrected E1 have completed on all four products; E2 main repetitions are running.** Do not interpret observer self-tests as product
 results, and do not substitute Phase 1 user-network/qcow2 measurements.
 
 ## Network and storage method (author-approved revision)
@@ -84,9 +84,14 @@ remain separate from completed suite results.
 ## Execution status and next stages
 
 The baseline rows E-B1, E-B2 and E-B3 are complete for all four products.
-Corrected E1 release and main passed; k3s and Talos remain in the sequential queue.
-`after-wan-prepare.sh` waits for all four corrected records and the E1 queue to
-exit, then builds and runs E2 main. It does not yet chain every remaining lane.
+Corrected E1 release, main and k3s passed. Talos failed the offline recovery gate;
+its native time-sync wait, WAN-assisted recovery and retained records are captured.
+`continue-after-main.py` waits for all sixty main E2 v2 cases before starting
+`run-table-tail.sh`: other E2 products, separate health-fix reruns, then E3–E10
+in table order, with a coverage audit after every row. Product failures are
+retained; incomplete fixtures require explicit review. PR #63 contains the
+proposed application-health fix, still awaiting fixed-image runtime validation.
+Historical preparation notes below do not override current machine records.
 Use the article STAND_LOG and machine records for the current runtime position.
 Do not open the completion PR before the entire table and required fixes finish.
 
@@ -591,7 +596,7 @@ with `build-health-image.sh`, install a fresh fixed A with
 `prepare-health-golden.sh`, then run
 `build-fault-bundles.sh /work/field-edge/build-health/out/amd64 health` and
 `run-health-upgrade-tests.sh`. The latter runs ten fresh clones each of a
-healthy control, wrong content, and incompatible state. Both A and B contain
+healthy control, broken pod network, wrong content, and incompatible state. Both A and B contain
 the health-gate implementation. The control has its own release version and
 no fault service; its successful acceptance is a separate observation.
 
