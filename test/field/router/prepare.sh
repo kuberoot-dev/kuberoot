@@ -4,8 +4,10 @@ set -euo pipefail
 [[ -d /work/vms && -c /dev/kvm ]] || exit 1
 export TMPDIR=/work/tmp
 mkdir -p /work/field/{images,raw,casts,img}
+mkdir -p /work/apt-cache/archives/partial
+printf 'Dir::Cache "/work/apt-cache";\n' > /etc/apt/apt.conf.d/99-field-cache
 apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq cloud-image-utils python3-matplotlib iperf3 vde2 > /work/field/raw/packages.log
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends cloud-image-utils python3-matplotlib iperf3 vde2 > /work/field/raw/packages.log
 cd /work/field/images
 fetch() { [[ -s $2 ]] || curl -fL --retry 3 "$1" -o "$2.partial" && { [[ -s $2 ]] || mv "$2.partial" "$2"; }; }
 fetch https://downloads.openwrt.org/releases/24.10.8/targets/x86/64/openwrt-24.10.8-x86-64-generic-squashfs-combined-efi.img.gz openwrt-24.10.8.img.gz
