@@ -7,13 +7,13 @@ lane=${1:?main or release-testkey}
 source "$FIELD_SCRIPTS/select-product.sh" "$lane"
 export GOLDEN=$VM_DIR
 base=$FIELD_ROOT/www/0.1.0-field-$lane
-for CASE in init-crash pod-network wrong-content incompatible-state tampered untrusted; do
+for REPETITION in $(seq 1 10); do
+ for CASE in init-crash pod-network wrong-content incompatible-state tampered untrusted; do
  export CASE TARGET_VERSION=0.1.0-field-$lane-$CASE
  # Negative fixtures use the same wrong-content payload, rejected before boot.
  [[ $CASE != tampered && $CASE != untrusted ]] || export TARGET_VERSION=0.1.0-field-$lane-wrong-content
  export BUNDLE_URL=http://10.0.2.2:15004/0.1.0-field-$lane-$CASE.tar
  export BUNDLE_SHA256=$(cut -d' ' -f1 "$base-$CASE.tar.sha256")
- for REPETITION in $(seq 1 10); do
   export REPETITION CASE_OUTPUT=$FIELD_ROOT/results/E2-$PRODUCT-$CASE-$REPETITION
   name=t-E2-$PRODUCT-$CASE-$REPETITION
   if test -f "$CASE_OUTPUT/published"; then continue; fi

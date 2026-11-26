@@ -25,7 +25,8 @@ PY
  mkdir -p "$d"
  test -f "$d/system.raw" || qemu-img create -f raw "$d/system.raw" 32G
  test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"
- media=(); test -z "${3:-}" || media=(-drive "file=$3,format=raw,if=virtio,snapshot=on")
+ seed=${3:-}; if [[ -z $seed && -f $d/seed.iso ]]; then seed=$d/seed.iso; fi
+ media=(); test -z "$seed" || media=(-drive "file=$seed,format=raw,if=virtio,snapshot=on")
  qemu-system-x86_64 -name "field-edge-ha-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive "if=pflash,format=raw,file=$d/vars.fd" "${media[@]}" \

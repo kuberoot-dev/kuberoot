@@ -299,3 +299,27 @@ test-key lane is labelled separately from the published release, using the
 Phase-1 repack with unchanged release binaries and an explicit lab trust root.
 `bundle-server.py` serves only public bundle/signature/archive names and logs
 actual transmitted bytes and Range requests for later maintenance-window tests.
+
+`after-wan-prepare.sh` waits for all four E1 captures and the WAN queue to finish,
+then audits the full WAN windows, prepares capacity and builds only the main
+fault lane before running its E2 trials. It does not prebuild all competitors
+on the shared 40-GiB PVC. Future lanes remain required; queue completion is not
+suite completion. `prepare-ha-k3s.sh` prepares three actual embedded-etcd servers
+on fresh Ubuntu raw disks, binds peer/advertise addresses to the peer-only LAN
+and records the observed leader through authenticated etcd metrics. It still
+requires runtime validation in E5. No secrets are printed or published.
+
+The E1 evaluator now checks both pre-reset continuity and the remaining WAN
+window after the first sustained 60-second recovery; whole-window audits retain
+every failed request. The original release run is already failed and has a
+supplementary audit under the same criterion. `chart-wan.py` plots actual
+per-minute failures and client latency, including timeouts, alongside the real
+power-cut timestamp.
+
+`upgrade-power-phase.py` is an unexecuted E3 hook: it observes an actual Upgrade
+phase, waits the seeded offset, confirms the phase again and pauses QEMU before
+the recorded kill. Both pause and kill timestamps are retained; recovery starts
+from the earlier effective outage. Download shaping and a 5-MiB/s write cap make
+the respective phases observable; both are confined to the fixture. A missed
+phase is not counted as a successful injection. The other products need their
+own real upgrade hooks before upgrade-phase coverage can be claimed.

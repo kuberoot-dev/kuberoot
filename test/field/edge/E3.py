@@ -13,13 +13,17 @@ def run(args,**kw):return subprocess.run([str(x) for x in args],check=True,**kw)
 def gateway(cmd,check=True):return subprocess.run([str(scripts/'gateway-command.sh'),cmd],capture_output=True,text=True,timeout=20,check=check)
 def kube(*args):return subprocess.check_output(['kubectl','--request-timeout=5s',*args],text=True,timeout=8)
 base=a.golden/'system.qcow2'
-if not base.exists():run(['qemu-img','convert','-c','-f','raw','-O','qcow2',a.golden/'system.raw',base])
+if not base.exists():
+ run(['qemu-img','convert','-c','-f','raw','-O','qcow2',a.golden/'system.raw',base])
+ run(['qemu-img','compare','-f','raw','-F','qcow2',a.golden/'system.raw',base])
 phases=['writes','download','inactive-write','boot-selection','probation'] if a.phase_hook else ['writes']
 for repetition in ([a.repetition-1] if a.repetition else range(30)):
  rng=random.Random(a.seed+repetition)
  phase=phases[repetition%len(phases)];name=f'E3-{a.product}-{repetition+1:02d}';d=a.output/name;d.mkdir()
  run(['qemu-img','convert','-f','qcow2','-O','raw',base,d/'system.raw']);run(['cp',a.golden/'vars.fd',d/'vars.fd'])
- env=dict(os.environ,VM_DIR=str(d));errors=[];metrics={};cut_epoch=None;recorder=None;vga=None;offset=None
+ env=dict(os.environ,VM_DIR=str(d));
+ if a.phase_hook:env['BLOCK_FAULTS']='1'
+ errors=[];metrics={};cut_epoch=None;recorder=None;vga=None;offset=None
  try:
   run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',scripts],env=env)
   deadline=time.monotonic()+300
@@ -32,9 +36,9 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   before=json.loads(kube('get','nodes','-o','json'))['items'][0]['status']['nodeInfo']['bootID']
   gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 600 --stop-file /home/observer/{name}.stop --output /home/observer/{name}.jsonl >/home/observer/{name}.log 2>&1 </dev/null &')
   time.sleep(5)
-  if phase!='writes':run([a.phase_hook,phase],env=env)
   offset=rng.uniform(2,8) if phase=='writes' else rng.uniform(0,.25)
-  time.sleep(offset)
+  if phase!='writes':run([a.phase_hook,phase],env=dict(env,FIELD_PHASE_DELAY=str(offset)))
+  else:time.sleep(offset)
   recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop')]),str(d/'recovery.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
   if a.product.startswith('talos'):
    vga=subprocess.Popen(['python3',str(scripts/'vga-capture.py'),'--qmp',str(d/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop')],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
@@ -42,7 +46,9 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   kill_command=['kill','-9',str(int((d/'pid').read_text()))]
   print('$ ',end='',flush=True)
   for ch in shlex.join(kill_command): print(ch,end='',flush=True);time.sleep(.01)
-  print(flush=True);cut_epoch=time.time()
+  print(flush=True);power_cut_epoch=time.time();cut_epoch=power_cut_epoch
+  if (d/'phase-evidence.json').exists():
+   evidence=json.loads((d/'phase-evidence.json').read_text());cut_epoch=evidence['pause_epoch'];metrics['phase_evidence']=evidence;metrics['power_cut_epoch']=power_cut_epoch
   run(kill_command)
   print(json.dumps({'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'phase':phase,'seeded_delay_seconds':offset}),flush=True)
   time.sleep(2)
@@ -56,7 +62,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
    (d/'observer.jsonl').write_text(rows)
    r=subprocess.run(['python3',str(scripts/'analyse-observer.py'),str(d/'observer.jsonl'),'--fault-epoch',str(cut_epoch)],capture_output=True,text=True)
    if r.returncode==0:
-    metrics=json.loads(r.stdout)
+    metrics.update(json.loads(r.stdout))
     if metrics['recovery_seconds_first_60s_sustained_success'] is not None:break
    time.sleep(5)
   gateway(f'touch /home/observer/{name}.stop')
