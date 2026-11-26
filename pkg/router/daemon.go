@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -82,12 +83,19 @@ func (d *Daemon) Running() bool {
 
 func (d *Daemon) loop(ctx context.Context, done chan struct{}) {
 	defer close(done)
+	// The parent-death signal belongs to the thread that started the
+	// program: keep this goroutine on one thread for the program's life.
+	runtime.LockOSThread()
 	backoff := time.Second
 	for ctx.Err() == nil {
 		cmd := exec.CommandContext(ctx, d.Args[0], d.Args[1:]...)
 		var tail lastLine
 		cmd.Stdout, cmd.Stderr = os.Stdout, io.MultiWriter(os.Stderr, &tail)
 		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+		// If kuberoot-router dies (killed, crashed), the program goes with
+		// it. An orphaned bird keeps the control socket, and the restarted
+		// router cannot run its own: "I found another BIRD running".
+		cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGTERM}
 		cmd.WaitDelay = 10 * time.Second
 		start := time.Now()
 		err := cmd.Run()
