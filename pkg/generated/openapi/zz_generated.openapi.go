@@ -280,6 +280,13 @@ func schema_pkg_apis_node_v1alpha1_BootEntryStatus(ref common.ReferenceCallback)
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
+					"failure": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Failure is the last failed boot attempt, retained across reboots.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"release": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},

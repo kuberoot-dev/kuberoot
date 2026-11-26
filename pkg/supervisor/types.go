@@ -16,14 +16,15 @@ const Socket = "/run/kuberoot/kinit.sock"
 
 // ServiceStatus is the observed state of one supervised service.
 type ServiceStatus struct {
-	Name      string    `json:"name"`
-	State     string    `json:"state"` // Running or Restarting
-	PID       int       `json:"pid,omitempty"`
-	Restarts  int       `json:"restarts"`
-	StartedAt time.Time `json:"startedAt,omitempty"`
-	LastExit  string    `json:"lastExit,omitempty"`
-	Cgroup    string    `json:"cgroup"`
-	LogFile   string    `json:"logFile"`
+	Name             string    `json:"name"`
+	State            string    `json:"state"` // Running or Restarting
+	PID              int       `json:"pid,omitempty"`
+	UnrequestedExits int       `json:"unrequestedExits"`
+	Restarts         int       `json:"restarts"`
+	StartedAt        time.Time `json:"startedAt,omitempty"`
+	LastExit         string    `json:"lastExit,omitempty"`
+	Cgroup           string    `json:"cgroup"`
+	LogFile          string    `json:"logFile"`
 	// Alternative is the build the node runs, for a service with
 	// alternatives in the profile.
 	Alternative string `json:"alternative,omitempty"`

@@ -4,42 +4,44 @@ import (
 	"log"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/kuberoot-dev/kuberoot/pkg/upgrade"
+	"golang.org/x/sys/unix"
 )
 
-// probationDeadline is how long a slot on probation may take to be declared
-// good. The node API usually decides within minutes; this covers the case
-// where it never even starts.
-const probationDeadline = 8 * time.Minute
-
-// probationWatchdog reboots a node whose boot slot is still on probation after
-// the deadline, so systemd-boot spends an attempt and eventually falls back.
+// Watch for crashes even when the node API cannot start. The eight-minute
+// watchdog remains a backstop for a missing assessor, not its readiness timer.
 func probationWatchdog() {
-	if upgrade.CurrentSlot() == "" || !onProbation() {
+	if upgrade.CurrentSlot() == "" {
 		return
 	}
-	log.Printf("slot %s is on probation; rebooting unless it is good within %s", upgrade.CurrentSlot(), probationDeadline)
-	time.Sleep(probationDeadline)
-	if onProbation() {
-		log.Printf("slot %s did not become good in time", upgrade.CurrentSlot())
-		shutdown(unix.LINUX_REBOOT_CMD_RESTART, "probation deadline")
+	start := time.Now()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		statuses := serviceStatuses()
+		reason := upgrade.WatchdogFailure(now.Sub(start), statuses)
+		if reason == "" {
+			continue
+		}
+		reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses))
+		if err != nil {
+			log.Printf("boot watchdog: %v", err)
+			continue
+		}
+		if reboot {
+			shutdown(unix.LINUX_REBOOT_CMD_RESTART, reason)
+		}
+		return // Good, or no known-good fallback: do not reboot forever.
 	}
 }
 
+// Also used by alternatives: probation is resolved by slot rollback, not a
+// per-service alternative switch.
 func onProbation() bool {
 	entries, err := upgrade.Entries()
 	if err != nil {
-		// The EFI partition may be busy with the node API; when in doubt, do not reboot.
 		return false
 	}
-	for _, e := range entries {
-		if e.Booted {
-			// Bad: systemd-boot spent the last attempt on this boot. It is
-			// still on probation, and the reboot lands on the other slot.
-			return e.State != upgrade.StateGood
-		}
-	}
-	return false
+	on, _ := upgrade.Probation(entries)
+	return on
 }

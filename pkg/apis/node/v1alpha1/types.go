@@ -217,6 +217,8 @@ type BootEntrySpec struct {
 }
 
 type BootEntryStatus struct {
+	// Failure is the last failed boot attempt, retained across reboots.
+	Failure string `json:"failure,omitempty"`
 	Release string `json:"release,omitempty"`
 	// State is Good, Trying (on probation, with boot attempts left) or Bad.
 	State       string `json:"state,omitempty"`

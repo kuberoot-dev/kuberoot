@@ -4,6 +4,7 @@
 package upgrade
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,15 +37,17 @@ const (
 
 // Entry is the boot entry of one slot as found on the EFI partition.
 type Entry struct {
-	Slot    string
-	File    string // file name, including any boot counter
-	Version int    // sort version: the highest good-or-trying entry boots by default
-	Release string // kuberoot release in the title
-	State   string
-	Left    int
-	Done    int
-	Booted  bool
-	Default bool
+	Failure       string
+	failedAttempt int
+	Slot          string
+	File          string // file name, including any boot counter
+	Version       int    // sort version: the highest good-or-trying entry boots by default
+	Release       string // kuberoot release in the title
+	State         string
+	Left          int
+	Done          int
+	Booted        bool
+	Default       bool
 }
 
 var counter = regexp.MustCompile(`^kuberoot-([ab])(?:\+(\d+)(?:-(\d+))?)?\.conf$`)
@@ -74,6 +77,19 @@ func otherSlot(slot string) string {
 func withESP(fn func() error) error {
 	mu.Lock()
 	defer mu.Unlock()
+	// Serialise with the other process (kinit or node API), too.
+	if err := os.MkdirAll(filepath.Dir(efiMount), 0o755); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile("/run/kuberoot/upgrade.lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+		return err
+	}
+	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 	dev := installer.PartitionOn("", bootdisk.EFILabel)
 	if dev == "" {
 		return fmt.Errorf("no EFI partition: not an installed system")
@@ -127,6 +143,12 @@ func readEntriesIn(dir, current string) ([]Entry, error) {
 		}
 		raw, _ := os.ReadFile(filepath.Join(dir, f.Name()))
 		for _, line := range strings.Split(string(raw), "\n") {
+			if v, ok := strings.CutPrefix(line, failurePrefix); ok {
+				var f attemptFailure
+				if json.Unmarshal([]byte(v), &f) == nil {
+					e.Failure, e.failedAttempt = f.Message, f.Attempt
+				}
+			}
 			if v, ok := strings.CutPrefix(line, "version "); ok {
 				e.Version, _ = strconv.Atoi(strings.TrimSpace(v))
 			}
@@ -268,6 +290,9 @@ func markGoodIn(dir, current string) (bool, error) {
 	}
 	for _, e := range entries {
 		if e.Booted && e.State != StateGood {
+			if e.Failure != "" && e.failedAttempt == e.Done {
+				return false, fmt.Errorf("attempt already failed: %s", e.Failure)
+			}
 			return true, os.Rename(filepath.Join(dir, e.File), filepath.Join(dir, "kuberoot-"+e.Slot+".conf"))
 		}
 	}
@@ -307,6 +332,15 @@ func preferIn(dir, slot, current string) error {
 		return err
 	}
 	lines := strings.Split(string(raw), "\n")
+	if !chosen.Booted {
+		kept := lines[:0]
+		for _, line := range lines {
+			if !strings.HasPrefix(line, failurePrefix) {
+				kept = append(kept, line)
+			}
+		}
+		lines = kept
+	}
 	for i, line := range lines {
 		if strings.HasPrefix(line, "version ") {
 			lines[i] = "version " + strconv.Itoa(top+1)
