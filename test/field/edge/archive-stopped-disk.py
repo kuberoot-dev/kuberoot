@@ -2,7 +2,7 @@
 """Stream an owned, stopped Phase-1 disk to Mac; verify SHA256 before PVC removal.
 No VM tools run locally. The local archive is a reversible capacity workaround.
 """
-import datetime,hashlib,json,os,pathlib,subprocess,sys
+import datetime,hashlib,json,os,pathlib,shlex,subprocess,sys
 source=sys.argv[1];destination=pathlib.Path(sys.argv[2]);assert source.startswith('/work/') and source.endswith('/sys.qcow2');assert not destination.exists()
 env=dict(os.environ,KUBECONFIG='/Users/tym83/workshop.txt')
 base=['kubectl','--context','admin@workshop','-n','tenant-kuberoot','exec','kr-edge-stand','--']
@@ -25,7 +25,7 @@ assert digest.hexdigest()==expected,'archive digest mismatch; original preserved
 partial.rename(destination)
 subprocess.run(base+['python3','-c',guard,source],env=env,check=True)
 assert subprocess.check_output(base+['sha256sum',source],env=env,text=True).split()[0]==expected
-manifest={'source_pod':'kr-edge-stand','source':source,'archive':str(destination),'bytes':size,'sha256':expected,'verified_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'restore':'kubectl cp archive kr-edge-stand:'+source,'original_removed':False}
+manifest={'source_pod':'kr-edge-stand','source':source,'archive':str(destination),'bytes':size,'sha256':expected,'verified_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'restore':'KUBECONFIG=~/workshop.txt kubectl --context admin@workshop -n tenant-kuberoot cp '+shlex.quote(str(destination))+' kr-edge-stand:'+source,'original_removed':False}
 manifest_path=destination.with_suffix('.json');manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
 subprocess.run(base+['rm','--',source],env=env,check=True)
 manifest['original_removed']=True;manifest_path.write_text(json.dumps(manifest,indent=2)+'\n');print(json.dumps(manifest),flush=True)
