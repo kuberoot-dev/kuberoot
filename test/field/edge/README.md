@@ -342,3 +342,26 @@ durability and missing-image gate separately; isolated connect timeouts do not
 establish total service loss or its cause. `capture-tcp-handshakes.py` captures
 only SYN/RST headers for W's two ports inside the gateway VM, never API traffic
 or application payload. It changes no network settings.
+
+## Corrected gateway fixture (2026-11-26, 09:31 UTC)
+
+The 512-MiB Debian gateway defaulted to only 4096 conntrack entries. Real kernel
+logs show table-full packet drops from 06:39 onward, overlapping the release,
+main and partial k3s E1 observations. Those measurements are retained with
+explicit `wan-gateway-v1-invalid` fixture-audit records; they cannot establish
+a DUT defect. The k3s run was stopped after diagnosis, with its partial capture
+and disk preserved. Talos was not run under the known-broken gateway.
+
+The fix is entirely inside the gateway VM: persist
+`net.netfilter.nf_conntrack_max=65536`. All products repeat the same full hour as
+`E1-gateway-v2-*`, using fresh raw clones and unchanged W/fault timings.
+`gateway-monitor.py` samples occupancy/limit/drop counters each second; any new
+conntrack drop invalidates the run. No host sysctl, namespace capability or
+network label changes are involved. E2 waits for all four corrected E1 runs.
+
+The TLS registry preparation uses the validated `controlplane-fixed.yaml`, which
+retains the static edge-talos hostname and scheduling configuration; the older
+generated controlplane file and intermediate without-legacy file are not the
+active config. The registry CA is a laboratory transport CA, not an image
+signature policy. The real Distribution registry/cosign preparation script is
+unexecuted and remains separate from completed product tests.

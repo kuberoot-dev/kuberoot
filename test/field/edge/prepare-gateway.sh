@@ -22,6 +22,7 @@ write_files:
   - path: /etc/sysctl.d/90-forward.conf
     content: |
       net.ipv4.ip_forward=1
+      net.netfilter.nf_conntrack_max=65536
   - path: /etc/dnsmasq.d/field.conf
     content: |
       interface=lan0

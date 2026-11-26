@@ -7,9 +7,12 @@ source "$(dirname "$0")/lib.sh"
 D=$FIELD_ROOT/results/$RUN_NAME
 mkdir "$D"
 G=$FIELD_SCRIPTS/gateway-command.sh
-# Observer and credentials were copied to the gateway during fixture preparation.
+# Refresh credentials for this product even when its cached golden is reused.
+bash "$FIELD_SCRIPTS/prepare-observer.sh"
 show export "KUBECONFIG=$KUBECONFIG"
 show date -u
+show "$G" '/usr/sbin/sysctl net.netfilter.nf_conntrack_count net.netfilter.nf_conntrack_max; test "$(cat /proc/sys/net/netfilter/nf_conntrack_max)" -ge 65536'
+"$G" "nohup python3 /home/observer/gateway-monitor.py --seconds 4200 --stop-file /home/observer/$RUN_NAME-monitor.stop --output /home/observer/$RUN_NAME-monitor.jsonl >/home/observer/$RUN_NAME-monitor.log 2>&1 </dev/null &"
 show kubectl -n field get pods -o wide
 "$G" "nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 4020 --output /home/observer/$RUN_NAME.jsonl >/home/observer/$RUN_NAME.log 2>&1 </dev/null &"
 sleep 60
@@ -42,6 +45,9 @@ show kubectl -n field get pod uncached-image -o yaml
 show "$FIELD_SCRIPTS/wan-impairment.sh" clean
 sleep 340
 show date -u
+"$G" "touch /home/observer/$RUN_NAME-monitor.stop"
+sleep 2
+"$G" "cat /home/observer/$RUN_NAME-monitor.jsonl" > "$D/gateway-monitor.jsonl"
 "$G" "cat /home/observer/$RUN_NAME.jsonl" > "$D/observer.jsonl"
 "$G" 'curl --fail --max-time 10 http://10.78.0.11:30081/records' > "$D/recovered-records"
 python3 "$FIELD_SCRIPTS/check-records.py" "$D/observer.jsonl" "$D/recovered-records" > "$D/durability.json" || true

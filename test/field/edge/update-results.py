@@ -25,6 +25,17 @@ for ident in ids:
   for r in selected:
    lines.append(f"| {r['product']} | {r.get('samples_ok','—')}/{r.get('samples_total','—')} | {metric(r,'guest_memory_usageBytes_median',2**20)} / {metric(r,'guest_memory_workingSetBytes_median',2**20)} | {metric(r,'cpu_cores')} | {metric(r,'guest_filesystem_used_bytes',2**20)} | {metric(r,'raw_disk_host_allocated_bytes',2**20)} | {metric(r,'virtual_block_write_bytes_per_hour',2**20)} |")
   lines+=['','Reported guest FS — filesystem из kubelet stats: у kuberoot это state, у других продуктов область может отличаться. Host raw показывает весь sparse disk; подробности ниже.','']
+ if ident=='E1':
+  if any(r.get('measurement_protocol')=='wan-gateway-v1-invalid' for r in selected):
+   lines+=['Первые release/main и частичный k3s признаны invalid-fixture: gateway с лимитом conntrack 4096 отбрасывал пакеты (dmesg сохранён). Исходные failed остаются ниже как история; их нельзя считать доказательством дефекта DUT. Все четыре продукта повторяются на одинаковом gateway с лимитом 65536 и ежесекундным контролем drops.','']
+  valid=[r for r in selected if r.get('measurement_protocol')=='wan-gateway-conntrack-v2']
+  if valid:
+   lines+=['| Продукт, исправленный fixture | Recovery, s | Acked lost | Ошибки до / после reset | Gateway drops | Статус |','|---|---:|---:|---:|---:|---|']
+   for item in valid:
+    m=item.get('metrics',{});v=item.get('recovery_seconds');recovery='—' if v is None else f'{v:.2f}'
+    lines.append(f"| {item['product']} | {recovery} | {item.get('acknowledged_record_loss','—')} | {m.get('wan_blackhole_before_reset_failures','—')} / {m.get('wan_blackhole_after_recovery_failures','—')} | {m.get('gateway_conntrack_drop_delta','—')} | {item['status']} |")
+   lines+=['']
+  lines+=['Непрерывность здесь имеет строгий лабораторный zero-error gate. Recovery — начало 60 s непрерывного успеха W; интервал самого reboot исключён из continuity. ACK durability и missing-image error проверяются отдельно.','']
  if ident=='E-B2':
   lines+=['| Продукт | Запусков / ошибок | API median / p95, s | Fresh Ready median / p95, s | DNS median / p95, s | New pod median / p95, s |','|---|---:|---:|---:|---:|---:|']
   for product in dict.fromkeys(r['product'] for r in selected):

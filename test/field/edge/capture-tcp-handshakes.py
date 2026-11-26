@@ -3,7 +3,7 @@
 import argparse,datetime,json,pathlib,socket,struct,time
 p=argparse.ArgumentParser();p.add_argument('--seconds',type=int,default=1200);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
 assert socket.gethostname()=='edge-gateway','Capture only inside the dedicated gateway VM'
-s=socket.socket(socket.AF_PACKET,socket.SOCK_RAW,socket.htons(0x0800));s.bind(('lan0',0));s.settimeout(1)
+s=socket.socket(socket.AF_PACKET,socket.SOCK_RAW,socket.htons(0x0003));s.bind(('lan0',0));s.settimeout(1)
 end=time.monotonic()+a.seconds;count=0
 with a.output.open('x') as f:
  while time.monotonic()<end:

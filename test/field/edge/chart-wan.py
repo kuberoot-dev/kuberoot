@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Plot measured W errors and latency during the real one-hour WAN outage."""
-import collections,datetime,json,math,pathlib,sys
+import collections,datetime,json,math,os,pathlib,sys
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -27,7 +27,7 @@ for d in directories:
  axes[0].legend(fontsize=14)
  fig.suptitle(record['product']+'\nW: 20 HTTP + 10 fsync appends/s',fontsize=21)
  fig.savefig(d/'wan-curve.png',dpi=150);plt.close(fig)
-all_cases=[root/'results'/('E1-'+p) for p in ['kuberoot-v0.1.0','kuberoot-main-1b29543','k3s-v1.37.2-k3s1','talos-v1.14.7']]
+all_cases=[root/'results'/('E1-'+os.environ.get('WAN_RUN_LABEL','gateway-v2')+'-'+p) for p in ['kuberoot-v0.1.0','kuberoot-main-1b29543','k3s-v1.37.2-k3s1','talos-v1.14.7']]
 if all((d/'result.json').exists() for d in all_cases):
  rows=[json.loads((d/'result.json').read_text()) for d in all_cases]
  fig,ax=plt.subplots(figsize=(11,7),layout='constrained');labels=['kuberoot\nrelease','kuberoot\nmain','k3s +\nUbuntu','Talos']
@@ -37,4 +37,4 @@ if all((d/'result.json').exists() for d in all_cases):
   ax.bar(i,value,color='#3b788c');ax.text(i,value+4,f'{value:.1f} s',ha='center')
  ax.set_xticks(range(4),labels);ax.set_ylabel('Recovery after power cut (s)');ax.axhline(180,color='red',linestyle='--',label='180 s threshold');ax.legend();ax.set_ylim(bottom=0);ax.grid(axis='y',alpha=.2)
  ax.set_title('E1: first 60 s of sustained W success\nOne observation per product; continuity errors reported separately')
- fig.savefig(root/'captures/chart-wan-recovery.png',dpi=150)
+ fig.savefig(root/'captures'/('chart-wan-'+os.environ.get('WAN_RUN_LABEL','gateway-v2')+'-recovery.png'),dpi=150)
