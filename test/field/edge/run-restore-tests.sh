@@ -14,6 +14,9 @@ for CASE in valid wrong-key truncated s3-down; do
  python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
  touch "$CASE_OUTPUT/published"
  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$VM_DIR"
+ if test -f "$CASE_OUTPUT/credential-clone/system.raw";then
+  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/credential-clone/system.raw" "$VM_DIR"
+ fi
 done
 source "$FIELD_SCRIPTS/select-product.sh" talos
 name=t-E8-talos-v1.14.7-valid

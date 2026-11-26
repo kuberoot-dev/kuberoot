@@ -7,8 +7,12 @@ for product in release main k3s talos; do
  export GOLDEN=$VM_DIR
  for CASE in minus-24h plus-400d beyond-ca; do
   export CASE CASE_OUTPUT=$FIELD_ROOT/results/E6-$PRODUCT-$CASE
+  test ! -f "$CASE_OUTPUT/published" || continue
+  if test -e "$CASE_OUTPUT";then printf 'Review interrupted clock trial: %s\n' "$CASE_OUTPUT" >&2;exit 2;fi
   name=t-E6-$PRODUCT-$CASE
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E6-scene.sh"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
+  touch "$CASE_OUTPUT/published"
+  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
  done
 done

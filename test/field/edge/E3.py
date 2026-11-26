@@ -33,7 +33,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
    time.sleep(2)
   else:raise RuntimeError('W did not become healthy before injection')
   subprocess.run(['bash',str(scripts/'prepare-observer.sh')],env=env,check=True)
-  before=json.loads(kube('get','nodes','-o','json'))['items'][0]['status']['nodeInfo']['bootID']
+  before_node=json.loads(kube('get','nodes','-o','json'))['items'][0];before=before_node['status']['nodeInfo']['bootID'];metrics['kubelet_version_before']=before_node['status']['nodeInfo']['kubeletVersion']
   gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 2400 --stop-file /home/observer/{name}.stop --output /home/observer/{name}.jsonl >/home/observer/{name}.log 2>&1 </dev/null &')
   time.sleep(5)
   offset=rng.uniform(2,8) if phase=='writes' else rng.uniform(0,.25)
@@ -87,7 +87,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   else:
    node=json.loads(kube('get','nodes','-o','json'))['items'][0]
    (d/'node-after.json').write_text(json.dumps(node,indent=2))
-   metrics['booted_os_image']=node['status']['nodeInfo']['osImage']
+   metrics['booted_os_image']=node['status']['nodeInfo']['osImage'];metrics['kubelet_version_after']=node['status']['nodeInfo']['kubeletVersion']
    metrics['slot_observation']='fresh bootID and running OS version; no inferred A/B slot status'
   recovery=metrics.get('recovery_seconds_first_60s_sustained_success')
   if recovery is None or recovery>180:errors.append('no sustained W recovery within 180 seconds')
