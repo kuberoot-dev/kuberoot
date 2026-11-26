@@ -9,7 +9,7 @@ root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().p
 assert a.output.is_relative_to(root) and a.golden.is_relative_to(root)
 d=a.output;d.mkdir(parents=True,exist_ok=False);name=f'E4-{a.product}-{a.case}'
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
-env=dict(os.environ,VM_DIR=str(d),BLOCK_FAULTS='1');errors=[];metrics={};relieved=None;fault=None;recorder=None;fault_active=False
+env=dict(os.environ,VM_DIR=str(d),BLOCK_FAULTS='1');errors=[];metrics={};relieved=None;fault=None;recorder=None;fault_active=False;churn=None
 G=str(scripts/'gateway-command.sh')
 def gateway(cmd,check=True):return subprocess.run([G,cmd],check=check,text=True,capture_output=True,timeout=45)
 def show(args):
@@ -36,6 +36,8 @@ try:
   if r.returncode==0:break
   time.sleep(2)
  else:raise RuntimeError('W unavailable before storage injection')
+ show(['python3',scripts/'storage-churn.py','deploy','--output',d/'churn-deployment.json'])
+ churn=subprocess.Popen(['python3',str(scripts/'storage-churn.py'),'run','--output',str(d/'churn.jsonl'),'--stop-file',str(d/'churn.stop')],env=env,stdout=(d/'churn-commands.txt').open('w'),stderr=subprocess.STDOUT)
  subprocess.run(['bash',str(scripts/'prepare-observer.sh')],env=env,check=True)
  # The injector is preloaded on the golden disk, with a critical priority and
  # independent HTTP endpoint so relief does not depend on a responsive API.
@@ -105,6 +107,10 @@ try:
  if metrics.get('driver_overloads'):errors.append('observer dispatch overload')
 except Exception as exc:errors.append(str(exc))
 finally:
+ if churn:
+  (d/'churn.stop').touch()
+  try:churn.wait(timeout=20)
+  except subprocess.TimeoutExpired:churn.terminate();churn.wait(timeout=5)
  try:
   if fault_active:
    if a.case in ['100-iops','20-iops']:block('unthrottle')
@@ -120,5 +126,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'scenario_id':'E4','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone; QEMU throttle/blkdebug; guest-local fallocate; gateway observer','fault_seed':None,'fault_phase':a.case,'metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture-capacity' if metrics.get('host_capacity_guard') else 'failed' if errors else 'passed-W-subcase','reason':'; '.join(errors) if errors else 'storage/W subcase passed; upgrade safety is a separate mandatory lane','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'upgrade_hook_executed':bool(a.upgrade_hook),'artifact_paths':[str(d)]}
+record={'scenario_id':'E4','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone; W + 50 log pods at about 1 KiB/s each; one pod replacement/10 s; QEMU throttle/blkdebug; guest-local fallocate; gateway observer','fault_seed':None,'fault_phase':a.case,'metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture-capacity' if metrics.get('host_capacity_guard') else 'failed' if errors else 'passed-W-subcase','reason':'; '.join(errors) if errors else 'storage/W subcase passed; upgrade safety is a separate mandatory lane','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'upgrade_hook_executed':bool(a.upgrade_hook),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

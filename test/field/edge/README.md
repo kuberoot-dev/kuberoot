@@ -323,3 +323,22 @@ from the earlier effective outage. Download shaping and a 5-MiB/s write cap make
 the respective phases observable; both are confined to the fixture. A missed
 phase is not counted as a successful injection. The other products need their
 own real upgrade hooks before upgrade-phase coverage can be claimed.
+
+`storage-churn.py` implements the S07 background load: 50 pods each write about
+1 KiB/s to stdout, and one oldest Ready pod is replaced every ten seconds.
+Its actual ready counts, replacement commands and errors are retained. These
+pods are additional to W and system components. E4 still needs live execution
+and its upgrade-safety checks; a script's presence is not coverage.
+
+`s3-presign.py` creates private SigV4 GET URLs without printing their query
+strings. Against the real rclone S3 fixture, exact object bytes were returned
+for a valid URL and a modified signature received HTTP 403. This enables E8 to
+fetch directly from S3 instead of exporting an object to an unrelated HTTP
+server. StateBackup/restore itself has not yet run in this suite.
+
+E1's zero-error continuity gate is a deliberately strict laboratory interpretation
+of local-service survival. Report the observed error rate and each recovery,
+durability and missing-image gate separately; isolated connect timeouts do not
+establish total service loss or its cause. `capture-tcp-handshakes.py` captures
+only SYN/RST headers for W's two ports inside the gateway VM, never API traffic
+or application payload. It changes no network settings.
