@@ -5,6 +5,7 @@ No hook means ordinary writes only; this does NOT claim upgrade-phase coverage.
 """
 import argparse,datetime,json,os,pathlib,random,shlex,signal,subprocess,sys,time
 from qmp import command
+from block_observations import collect as collect_block_observations
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--image-digest',required=True);p.add_argument('--source-commit',required=True);p.add_argument('--seed',type=int,default=20261125);p.add_argument('--phase-hook',type=pathlib.Path);p.add_argument('--repetition',type=int,choices=range(1,31));a=p.parse_args()
 scripts=pathlib.Path(__file__).resolve().parent;root=pathlib.Path('/work/field-edge')
 assert a.output.is_relative_to(root) and a.golden.is_relative_to(root)
@@ -43,6 +44,11 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   if a.product.startswith('talos'):
    vga=subprocess.Popen(['python3',str(scripts/'vga-capture.py'),'--qmp',str(d/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop')],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
   time.sleep(.2)
+  before_io={};io_errors=[]
+  collect_block_observations(d,before_io,io_errors)
+  if (d/'block-counters.json').exists():(d/'block-counters.json').rename(d/'block-counters-before-cut.json')
+  metrics['before_power_cut_block_io_failures']=before_io.get('unexpected_block_io_failures')
+  if io_errors:raise RuntimeError('Unexpected block I/O errors before power cut; isolated power-loss outcome unavailable')
   kill_command=['kill','-9',str(int((d/'pid').read_text()))]
   print('$ ',end='',flush=True)
   for ch in shlex.join(kill_command): print(ch,end='',flush=True);time.sleep(.01)
@@ -96,6 +102,10 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
  finally:
   try:gateway(f'touch /home/observer/{name}.stop',check=False)
   except Exception:pass
+  after_io={};io_errors=[];collect_block_observations(d,after_io,io_errors)
+  metrics['after_power_cut_block_io_failures']=after_io.get('unexpected_block_io_failures')
+  metrics['unexpected_block_io_failures']=(metrics.get('before_power_cut_block_io_failures') or 0)+(after_io.get('unexpected_block_io_failures') or 0)
+  if metrics['unexpected_block_io_failures']:errors.append('Unexpected block I/O errors confound the isolated power-loss trial')
   try:command(str(d/'qmp.sock'),'quit')
   except Exception:pass
   time.sleep(2)
@@ -106,7 +116,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
    subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'recovery.retimed.cast')],check=True,stdout=(d/'recovery-speed.json').open('w'))
    hold=str(max(5,15.1-timing['playback_seconds']))
    run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',hold,d/'recovery.retimed.cast',d/'recovery.gif'])
- result={'scenario_id':'E3','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'repetition':repetition+1,'fault_seed':a.seed+repetition,'seed_base':a.seed,'fault_offset_seconds':offset,'fault_phase':phase,'fault_epoch':cut_epoch,'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone + fresh OVMF vars; same multicast LAN/gateway; observer outside DUT','metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture' if cut_epoch is None or metrics.get('driver_overloads') else 'failed' if errors else 'passed-W','reason':'; '.join(errors) if errors else 'external W, acknowledged-record and fresh bootID gates passed; native slot/version observations retained','artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+ result={'scenario_id':'E3','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'repetition':repetition+1,'fault_seed':a.seed+repetition,'seed_base':a.seed,'fault_offset_seconds':offset,'fault_phase':phase,'fault_epoch':cut_epoch,'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone + fresh OVMF vars; same multicast LAN/gateway; observer outside DUT','metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture' if cut_epoch is None or metrics.get('driver_overloads') or metrics.get('unexpected_block_io_failures') else 'failed' if errors else 'passed-W','reason':'; '.join(errors) if errors else 'external W, acknowledged-record and fresh bootID gates passed; native slot/version observations retained','artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
  (d/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
  with (a.output/'runs.jsonl').open('a') as f:f.write(json.dumps(result)+'\n')
  if errors:
