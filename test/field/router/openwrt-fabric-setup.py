@@ -11,6 +11,11 @@ from pathlib import Path
 
 raw = Path('/work/field/raw')
 key = Path('/work/field/private/id_ed25519.pub').read_text().strip()
+import secrets
+pwf = Path('/work/field/private/openwrt-root-password')
+if not pwf.exists():
+    pwf.write_text(secrets.token_urlsafe(18)); pwf.chmod(0o600)
+pw = pwf.read_text().strip()
 
 print('booting openwrt on fabric', flush=True)
 subprocess.run(['bash', '/work/field/fabric-competitor.sh', 'openwrt'],
@@ -32,7 +37,19 @@ uci set network.observer.device='eth2'
 uci set network.observer.proto='dhcp'
 uci set network.observer.defaultroute='0'
 uci set network.observer.peerdns='0'
-uci add_list firewall.@zone[1].network='observer'
+uci set firewall.observer=zone
+uci set firewall.observer.name='observer'
+uci set firewall.observer.network='observer'
+uci set firewall.observer.input='ACCEPT'
+uci set firewall.observer.output='ACCEPT'
+uci set firewall.observer.forward='REJECT'
+uci set firewall.field_ssh_wan=rule
+uci set firewall.field_ssh_wan.name='field-ssh-wan'
+uci set firewall.field_ssh_wan.src='wan'
+uci set firewall.field_ssh_wan.proto='tcp'
+uci set firewall.field_ssh_wan.dest_port='22'
+uci set firewall.field_ssh_wan.target='ACCEPT'
+printf 'PWPLACEHOLDER\nPWPLACEHOLDER\n' | passwd root
 uci set dhcp.lan.start='100'
 uci set dhcp.lan.limit='100'
 uci commit network
@@ -46,13 +63,13 @@ sleep 5
 /etc/init.d/dnsmasq restart
 /etc/init.d/firewall restart
 /etc/init.d/dropbear restart
-'''.replace('KEYPLACEHOLDER', key)
+'''.replace('KEYPLACEHOLDER', key).replace('PWPLACEHOLDER', pw)
 
 print('applying base config via serial', flush=True)
 p = subprocess.run(['python3', '/work/field/console.py', 'openwrt', setup, '--timeout', '120'],
                    capture_output=True, text=True, timeout=150)
-print(p.stdout + p.stderr, flush=True)
-(raw / 'openwrt-fabric-setup-serial.txt').write_text(p.stdout + p.stderr)
+print((p.stdout + p.stderr).replace(pw, '***'), flush=True)
+(raw / 'openwrt-fabric-setup-serial.txt').write_text((p.stdout + p.stderr).replace(pw, '***'))
 
 print('waiting for observer SSH', flush=True)
 for _ in range(60):

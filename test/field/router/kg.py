@@ -126,7 +126,8 @@ def row_detach():
     kubectl(['delete', 'interface', 'g-lan', 'g-wan', 'g-wan20', '--ignore-not-found'])
     kubectl(['delete', 'route', 'g-sink', '--ignore-not-found']); kubectl(['delete', 'firewallzone', 'g-lan', 'g-wan', '--ignore-not-found'])
     kubectl(['delete', 'natrule', 'g-masq', '--ignore-not-found']); kubectl(['delete', 'dhcpserver', 'g-lan', '--ignore-not-found'])
-    kubectl(['delete', 'bgppeer', 'g-u1', 'g-u2', '--ignore-not-found'])
+    kubectl(['delete', 'bgppeer', 'g-u1', 'g-u2', 'g-u1v6', 'g-u2v6', '--ignore-not-found'])
+    kubectl(['patch', 'bgprouter', 'default', '--type=merge', '-p', '{"spec":{"asn":65002}}'])
     restart(base); wait_api(); say('r2 back on the phase-1 topology only')
 
 
@@ -189,7 +190,7 @@ def row_r4():
 def row_r5():
     for vm in ['client', 'sink']:
         code = base64.b64encode(Path('/work/field/tcp-flows.py').read_bytes()).decode(); guest(vm, f'echo {code} | base64 -d >/tmp/tcp-flows.py', quiet=True)
-    guest('sink', 'pkill -f "tcp-flows.py server"; nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null &')
+    guest('sink', 'pkill -f "[t]cp-flows.py server"; nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null &')
     summary = {}
     for count, rate in [(1000, 1000), (10000, 1000), (100000, 10000)]:
         name = f'R5-r2-{count}-{rate}'; t0 = time.monotonic()

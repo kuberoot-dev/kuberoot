@@ -317,11 +317,28 @@ def r6_rules(n, marker):
     return '\n'.join(lines) + '\n'
 
 
+def strip_block(text, name):
+    out, depth, skip = [], 0, False
+    for line in text.splitlines(keepends=True):
+        if depth == 0 and line.startswith(name + ' {'):
+            skip = True
+        if skip:
+            depth += line.count('{') - line.count('}')
+            if depth == 0:
+                skip = False
+            continue
+        out.append(line)
+    return ''.join(out)
+
+
 def r6_apply(n, marker):
     text = r6_rules(n, marker)
     if product == 'vyos':
-        put_dut('/tmp/r6.conf', text)
-        return cfg(['delete firewall ipv4 forward filter', 'merge /tmp/r6.conf'], show=f'delete firewall ipv4 forward filter; merge /tmp/r6.conf ({n} rules)')
+        # Native atomic replace: load a full config whose firewall section is the new set
+        # (merge refuses uncommitted changes, and delete+commit+merge would open a window).
+        cur = sh('cat /config/config.boot', quiet=True).stdout
+        put_dut('/tmp/r6.boot', strip_block(cur, 'firewall') + text)
+        return cfg(['load /tmp/r6.boot'], show=f'load /tmp/r6.boot (running config with {n} forward rules)')
     put_dut('/tmp/r6.sh', text)
     return cfg(['sh /tmp/r6.sh', 'uci commit firewall', 'fw4 reload'], show=f'sh /tmp/r6.sh ({n} uci rules); uci commit firewall; fw4 reload')
 
@@ -470,7 +487,7 @@ def row_r4():
 def row_r5():
     for vm in ['client', 'sink']:
         code = base64.b64encode(Path('/work/field/tcp-flows.py').read_bytes()).decode(); guest(vm, f'echo {code} | base64 -d >/tmp/tcp-flows.py', quiet=True)
-    guest('sink', 'pkill -f "tcp-flows.py server"; nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null &')
+    guest('sink', 'pkill -f "[t]cp-flows.py server"; nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null &')
     sh('cat /proc/sys/net/netfilter/nf_conntrack_max; grep -E "MemTotal|MemAvailable" /proc/meminfo')
     summary = {}
     for count, rate in [(1000, 1000), (10000, 1000), (100000, 10000)]:
@@ -585,4 +602,65 @@ def qdev():
     raise SystemExit('no system disk qdev')
 
 
-{'boot': row_boot, 'cap': row_cap, 'b2prof': row_b2prof, 'r6': row_r6, 'r4': row_r4, 'r5': row_r5, 'r11': row_r11}[row]()
+# ---------------------------------------------------------------- R7 (OpenWrt + bird2)
+def row_r7():
+    import ipaddress
+    counts = [int(x) for x in args[0].split(',')] if args else [10000, 100000]
+    ipv6 = int(args[1]) if len(args) > 1 else 0
+    p = sh('command -v bird || (opkg update >/tmp/opkg-update.log 2>&1; opkg install bird2 bird2c 2>&1 | tail -3); bird --version 2>&1; ls -la $(command -v bird)')
+    sh("""ip link add link eth0 name eth0.20 type vlan id 20 2>/dev/null; ip addr replace 198.18.20.1/24 dev eth0.20; ip link set eth0.20 up
+ip -6 addr replace fd42:1::1/64 dev eth0; ip -6 addr replace fd42:2::1/64 dev eth0.20
+nft insert rule inet fw4 input tcp dport 179 accept comment field-bgp 2>/dev/null || true
+cat > /etc/bird.conf <<'CONF'
+router id 198.18.0.1;
+protocol device {}
+protocol kernel k4 { ipv4 { export all; import none; }; merge paths on; }
+protocol kernel k6 { ipv6 { export all; import none; }; }
+protocol bgp u1 { local 198.18.0.1 as 65000; neighbor 198.18.0.2 as 65001; hold time 9; keepalive time 3; ipv4 { import all; export none; }; }
+protocol bgp u2 { local 198.18.20.1 as 65000; neighbor 198.18.20.2 as 65002; hold time 9; keepalive time 3; ipv4 { import all; export none; }; }
+protocol bgp u1v6 { local fd42:1::1 as 65000; neighbor fd42:1::2 as 65001; hold time 9; keepalive time 3; ipv6 { import all; export none; }; }
+protocol bgp u2v6 { local fd42:2::1 as 65000; neighbor fd42:2::2 as 65002; hold time 9; keepalive time 3; ipv6 { import all; export none; }; }
+CONF
+/etc/init.d/bird restart 2>/dev/null || (killall bird; bird -c /etc/bird.conf); sleep 2; birdc show protocols""")
+    guest('gateway', 'pkill bird; sleep 1; ip netns add upstream2 2>/dev/null; ip netns exec upstream2 ip link show upstream2 >/dev/null 2>&1 || { ip link add link test0 name upstream2 type vlan id 20; ip link set upstream2 netns upstream2; }; '
+          'ip netns exec upstream2 ip link set lo up; ip netns exec upstream2 ip addr replace 198.18.20.2/24 dev upstream2; ip netns exec upstream2 ip link set upstream2 up; '
+          'ip netns exec upstream2 ip route replace default via 198.18.20.1; ip -6 addr replace fd42:1::2/64 dev test0; ip netns exec upstream2 ip -6 addr replace fd42:2::2/64 dev upstream2; mkdir -p /run/field-bird')
+    for count in counts:
+        tag = f'{count}' + (f'-v6-{ipv6}' if ipv6 else '')
+        for side, local in [(1, '198.18.0.2'), (2, '198.18.20.2')]:
+            path = f'/work/field/upstream-{product}-{side}.conf'
+            subprocess.run(['python3', '/work/field/bgp-prefix-generator.py', path, '--ipv4', str(count), '--ipv6', str(ipv6), '--asn', str(65000 + side),
+                            '--local', local, '--peer', '198.18.0.1' if side == 1 else '198.18.20.1'], check=True)
+            put('gateway', f'/tmp/upstream-{product}-{side}.conf', Path(path).read_text())
+        guest('gateway', 'pkill bird; sleep 1; true', quiet=True)
+        t0 = time.monotonic()
+        for side in (1, 2):
+            pre = '' if side == 1 else 'ip netns exec upstream2 '
+            guest('gateway', f'{pre}bird -c /tmp/upstream-{product}-{side}.conf -s /run/field-bird/{product}-{side}.ctl -P /run/field-bird/{product}-{side}.pid')
+        rows = []; fib = None
+        while time.monotonic() - t0 < 900:
+            q = sh("ip -4 route show proto bird | wc -l; ip -6 route show proto bird | wc -l; grep MemAvailable /proc/meminfo; birdc show protocols | grep -E '^u'", quiet=True, timeout=60)
+            v = q.stdout.split()
+            try:
+                fib, fib6 = int(v[0]), int(v[1])
+            except (IndexError, ValueError):
+                fib, fib6 = None, None
+            rows.append({'elapsed_s': time.monotonic() - t0, 'fib4': fib, 'fib6': fib6, 'text': q.stdout})
+            say(f'{time.monotonic() - t0:.0f}s fib4={fib} fib6={fib6} {" ".join(v[2:4])}')
+            if fib == count and (fib6 or 0) >= ipv6:
+                break
+            time.sleep(5)
+        ok = fib == count and (rows[-1]['fib6'] or 0) >= ipv6
+        addrs = [str(ipaddress.IPv4Address(int(ipaddress.IPv4Address('10.64.0.0')) + i * max(1, count // 1000))) for i in range(1000)]
+        for side in (1, 2):
+            pre = '' if side == 1 else 'ip netns exec upstream2 '
+            put('gateway', f'/tmp/R7-samples-{side}.sh', '\n'.join(pre + 'ip addr replace ' + a + '/32 dev lo' for a in addrs) + '\n')
+            guest('gateway', f'sh /tmp/R7-samples-{side}.sh', quiet=True)
+        guest('client', 'ip route replace 10.64.0.0/10 via 192.168.10.1', quiet=True)
+        put('client', '/tmp/R7-samples.txt', '\n'.join(addrs) + '\n')
+        sp = guest('client', 'fping -c 1 -t 1000 -i 2 -f /tmp/R7-samples.txt 2>&1 | tail -3', 90)
+        save(f'R7-{product}-{tag}.json', {'count': count, 'ipv6': ipv6, 'converged_s': rows[-1]['elapsed_s'] if ok else None, 'rows': rows, 'samples': sp.stdout + sp.stderr})
+        guest('gateway', 'pkill bird; true', quiet=True)
+
+
+{'r7': row_r7, 'boot': row_boot, 'cap': row_cap, 'b2prof': row_b2prof, 'r6': row_r6, 'r4': row_r4, 'r5': row_r5, 'r11': row_r11}[row]()

@@ -77,10 +77,12 @@ def ruleset(n, marker):
 def delete_all():
     t = time.monotonic()
     p = kubectl(['delete', '--raw', '/apis/router.kuberoot.dev/v1alpha1/firewallrules?labelSelector=field%3Dr6'])
-    for _ in range(600):
+    for i in range(600):
         c = kubectl(['get', 'firewallrules', '-l', 'field=r6', '-o', 'name'], quiet=True)
         if c.returncode == 0 and not c.stdout.strip():
             break
+        if i % 30 == 29:  # a collection delete cut by the client timeout stops server-side; issue it again
+            kubectl(['delete', '--raw', '/apis/router.kuberoot.dev/v1alpha1/firewallrules?labelSelector=field%3Dr6'], quiet=True)
         time.sleep(1)
     return time.monotonic() - t, p.returncode
 

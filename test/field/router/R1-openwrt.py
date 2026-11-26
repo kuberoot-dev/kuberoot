@@ -21,13 +21,20 @@ def production(cmd, timeout=12):
 def observer(cmd, timeout=15):
     return subprocess.run(['/work/field/openwrt-command', cmd], capture_output=True, text=True, timeout=timeout)
 
-def inject(uci_lines):
-    # Stage the change, then apply with a 60 s rollback timer via native rpcd.
-    script = '\n'.join(uci_lines) + "\nubus call uci apply '{\"timeout\":60}'\n"
-    print('$ ssh openwrt-production (uci stage + rpcd apply timeout=60)', flush=True)
-    print(script, flush=True)
+def inject(ubus_calls):
+    # LuCI's own path: an rpcd session stages the change, then
+    # `uci apply {rollback:true, timeout:60}` applies it with an armed rollback.
+    # No `uci confirm` follows, so rpcd must restore the previous config.
+    lines = ['S=$(ubus call session login \'{"username":"root","password":"%s"}\' | jsonfilter -e @.ubus_rpc_session)' % PW]
+    for method, arg in ubus_calls:
+        arg = dict(arg)
+        lines.append("ubus call uci %s \"$(printf '%%s' '%s' | sed \"s/SID/$S/\")\"" % (method, json.dumps(dict(ubus_rpc_session='SID', **arg))))
+    lines.append("ubus call uci apply \"$(printf '%%s' '%s' | sed \"s/SID/$S/\")\"; echo apply_exit=$?" % json.dumps({'ubus_rpc_session': 'SID', 'rollback': True, 'timeout': 60}))
+    script = '\n'.join(lines) + '\n'
+    print('$ ssh openwrt-production sh -s  # rpcd session: uci set ...; uci apply rollback=true timeout=60', flush=True)
+    print('\n'.join(lines[1:]).replace(PW, '***'), flush=True)
     try:
-        p = subprocess.run(['ssh', '-F', '/work/field/private/production-ssh.conf', 'openwrt-production'],
+        p = subprocess.run(['ssh', '-F', '/work/field/private/production-ssh.conf', 'openwrt-production', 'sh', '-s'],
                            input=script, capture_output=True, text=True, timeout=25)
         print(p.stdout + p.stderr, flush=True)
         return p.returncode
@@ -35,22 +42,13 @@ def inject(uci_lines):
         print('(session severed by the lockout, as designed)', flush=True)
         return None
 
+
+PW = Path('/work/field/private/openwrt-root-password').read_text().strip()
 phases = [
-    ('address',
-     ["uci set network.wan.ipaddr='198.18.0.99'", "uci commit network"],
-     'wan back to 198.18.0.1'),
-    ('return-route',
-     ["uci delete network.wan.gateway", "uci commit network"],
-     'default gateway restored'),
-    ('vlan',
-     ["uci set network.wan.device='eth0.999'", "uci commit network"],
-     'untagged wan device restored'),
-    ('firewall',
-     ["uci add firewall rule", "uci set firewall.@rule[-1].name='FIELDLOCK'",
-      "uci set firewall.@rule[-1].src='wan'", "uci set firewall.@rule[-1].proto='tcp'",
-      "uci set firewall.@rule[-1].dest_port='22'", "uci set firewall.@rule[-1].target='DROP'",
-      "uci commit firewall"],
-     'fieldlock rule removed'),
+    ('address', [('set', {'config': 'network', 'section': 'wan', 'values': {'ipaddr': '198.18.0.99'}})], 'wan back to 198.18.0.1'),
+    ('return-route', [('delete', {'config': 'network', 'section': 'wan', 'option': 'gateway'})], 'default gateway restored'),
+    ('vlan', [('set', {'config': 'network', 'section': 'wan', 'values': {'device': 'eth0.999'}})], 'untagged wan device restored'),
+    ('firewall', [('set', {'config': 'firewall', 'section': 'field_ssh_wan', 'values': {'target': 'DROP'}})], 'ssh allow rule restored'),
 ]
 
 for phase, uci_lines, expect in phases:
@@ -86,7 +84,7 @@ for phase, uci_lines, expect in phases:
         time.sleep(3)
     state = None
     if recovered_at is not None:
-        p = production('uci show network.wan; uci show firewall | grep -i fieldlock; ip addr show dev eth0', timeout=15)
+        p = production('cut -d. -f1 /proc/uptime; uci show network.wan; uci show firewall.field_ssh_wan; ip addr show dev eth0; ip route show default', timeout=15)
         state = p.stdout
     fwd = subprocess.run(['/work/field/guest-command', 'client', 'cat /tmp/R1-fwd.txt'],
                          capture_output=True, text=True, timeout=20).stdout
