@@ -12,11 +12,11 @@ for CASE in valid wrong-key truncated s3-down; do
  if test -e "$CASE_OUTPUT"; then printf 'Review interrupted restore trial: %s\n' "$CASE_OUTPUT" >&2;exit 2;fi
  bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E8-scene.sh"
  python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
- touch "$CASE_OUTPUT/published"
  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$VM_DIR"
  if test -f "$CASE_OUTPUT/credential-clone/system.raw";then
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/credential-clone/system.raw" "$VM_DIR"
  fi
+ touch "$CASE_OUTPUT/published"
 done
 source "$FIELD_SCRIPTS/select-product.sh" talos
 name=t-E8-talos-v1.14.7-valid
@@ -24,6 +24,6 @@ directory=$FIELD_ROOT/results/E8-talos-v1.14.7-valid
 if ! test -f "$directory/published";then
  bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E8-talos-scene.sh"
  python3 "$FIELD_SCRIPTS/publish-case.py" "$directory" "$name"
- touch "$directory/published"
  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$directory/replacement/system.raw" "$VM_DIR"
+ touch "$directory/published"
 fi

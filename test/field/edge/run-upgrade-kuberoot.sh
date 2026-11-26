@@ -23,7 +23,6 @@ for REPETITION in $(seq 1 10); do
   bash "$FIELD_SCRIPTS/wan-impairment.sh" clean
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E2-scene.sh"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
-  touch "$CASE_OUTPUT/published"
   # Preserve every failed state using an independently pinned backing snapshot.
   # Successful clones are also retained until reviewed; remove no measured state.
   backing=()
@@ -35,5 +34,6 @@ import json,sys
 r=json.load(open(sys.argv[1]))
 if r["status"]=="invalid-fixture":raise SystemExit("Fault fixture invalid; repair before further repetitions: "+r["reason"])
 PYCASE
+  touch "$CASE_OUTPUT/published"
  done
 done

@@ -12,7 +12,7 @@ for product in release main k3s talos; do
   name=t-E6-$PRODUCT-$CASE
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E6-scene.sh"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
-  touch "$CASE_OUTPUT/published"
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
+  touch "$CASE_OUTPUT/published"
  done
 done

@@ -46,7 +46,7 @@ PYTALOS
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E4-scene.sh"
   python3 "$FIELD_SCRIPTS/chart-storage.py" "$CASE_OUTPUT"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
-  touch "$CASE_OUTPUT/published"
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
+  touch "$CASE_OUTPUT/published"
  done
 done

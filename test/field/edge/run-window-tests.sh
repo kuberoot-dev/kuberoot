@@ -13,8 +13,8 @@ for lane in release-testkey main; do
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E9-scene.sh"
   python3 "$FIELD_SCRIPTS/chart-transfer.py" "$CASE_OUTPUT"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
-  touch "$CASE_OUTPUT/published"
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
+  touch "$CASE_OUTPUT/published"
  done
 done
 source "$FIELD_SCRIPTS/select-product.sh" talos
@@ -28,6 +28,6 @@ for CUT_PERCENT in 10 50 90;do
  bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E9-talos-scene.sh"
  python3 "$FIELD_SCRIPTS/chart-transfer.py" "$directory"
  python3 "$FIELD_SCRIPTS/publish-case.py" "$directory" "$name"
- touch "$directory/published"
  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$directory/system.raw" "$VM_DIR"
+ touch "$directory/published"
 done

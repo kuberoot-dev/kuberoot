@@ -11,7 +11,6 @@ for REPETITION in $(seq 1 10); do
   bash "$FIELD_SCRIPTS/wan-impairment.sh" clean
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E2-k3s-scene.sh"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
-  touch "$CASE_OUTPUT/published"
   backing=();first=$FIELD_ROOT/results/E2-$PRODUCT-$CASE-1/failed.qcow2
   [[ $REPETITION == 1 ]] || backing=("$first")
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN" "${backing[@]}"
@@ -20,5 +19,6 @@ import json,sys
 r=json.load(open(sys.argv[1]))
 if r['status']=='invalid-fixture':raise SystemExit('Repair injected fault before repeats: '+r['reason'])
 PY
+  touch "$CASE_OUTPUT/published"
  done
 done
