@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Lightweight Mac-side artifact copier and checkpoint publisher; no VM/builds."""
 import json,os,pathlib,re,subprocess,time,tarfile,shutil
+from artifact_descriptions import describe
 root=pathlib.Path('/Users/tym83/projects/kuberoot-articles')
 scripts=pathlib.Path(__file__).resolve().parent
 env=dict(os.environ,KUBECONFIG='/Users/tym83/workshop.txt')
@@ -48,7 +49,7 @@ while True:
      f.write(f"\n### {r['scenario_id']} — {r['product']}, repetition {r.get('repetition','—')}\n\n")
      f.write(f"Source `{r.get('source_commit')}`, image `{r.get('image_digest')}`. Status {r['status']}.\n\n")
      for artifact in r['artifact_paths']:
-      description='Реальная serial-консоль загрузки' if '-serial.' in artifact else 'Реальный запуск, состояние терминала или исходный вывод'
+      description=describe(artifact,r['scenario_id'])
       f.write(f"- `{artifact}` — {r['scenario_id']}: {description}.\n")
      f.write('\nMetrics: `'+json.dumps(r.get('metrics',{}),ensure_ascii=False)+'`.\n')
     print(json.dumps({'published':stem,'status':r['status']}),flush=True)
