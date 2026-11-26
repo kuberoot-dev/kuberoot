@@ -5,7 +5,7 @@ Use a separate test-key image for injected signed faults; never bypass trust.
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
 from upgrade_observations import evaluate as evaluate_service
-p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted','healthy-control'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);p.add_argument('--health-checks',type=pathlib.Path);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.output;assert d.is_relative_to(root)
 required=(a.golden/'system.raw').stat().st_blocks*512+1024**3
 if shutil.disk_usage(root).free<required:raise SystemExit('Insufficient PVC headroom for a fresh raw clone plus evidence; prepare capacity before this trial')
@@ -13,6 +13,11 @@ d.mkdir(parents=True,exist_ok=False)
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
 env=dict(os.environ,VM_DIR=str(d),FAULT_FIXTURE="1");node_env=dict(env,KUBECONFIG=os.environ['NODE_KUBECONFIG']);G=str(scripts/'gateway-command.sh');name=f'E2-{a.product}-{a.case}-{a.repetition}';errors=[];metrics={};observer_started=False;recorder=None;fault_verified=False
 negative=a.case in ['tampered','untrusted']
+control=a.case=='healthy-control'
+health_checks=json.loads(a.health_checks.read_text()) if a.health_checks else None
+if health_checks is not None:
+ assert a.product=='kuberoot-health-52db7b1' and isinstance(health_checks,list) and health_checks
+ metrics['application_health_checks']=health_checks
 metrics.update({'target_bundle_sha256':a.bundle_sha256,'target_version':a.target_version,'baseline_root_digest':os.environ['IMAGE_DIGEST']})
 def typed(args):
  print('$ ',end='',flush=True)
@@ -46,6 +51,7 @@ try:
  serial=shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds',str(a.deadline+120)])
  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',serial,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  request={'apiVersion':'node.kuberoot.dev/v1alpha1','kind':'Upgrade','metadata':{'name':'field-bad-release'},'spec':{'url':a.bundle_url,'sha256':a.bundle_sha256,'reboot':not negative}}
+ if health_checks is not None:request['spec']['healthChecks']=health_checks
  (d/'upgrade-request.json').write_text(json.dumps(request,indent=2));typed(['date','-u']);subprocess.run(['date','-u'],check=True)
  start=time.monotonic();fault_epoch=time.time();nk('create','-f',str(d/'upgrade-request.json'),visible=True)
  metrics['management_client']='one-shot kubectl create exited before reboot; no further upgrade/recovery commands; WAN available'
@@ -58,7 +64,7 @@ try:
     slots=slot_snapshot();row['bootentries']=slots;current=next(s for s in slots['items'] if s['status'].get('booted'))['status'];row['booted']=current
     if current['release']==a.target_version:
      seen_target=True
-     if not negative and not fault_verified:
+     if not negative and not control and not fault_verified:
       try:
        fault_log=nk('get','--raw','/apis/node.kuberoot.dev/v1alpha1/nodeservices/field-test-fault/log')
        (d/'fault-service.log').write_text(fault_log)
@@ -88,15 +94,18 @@ try:
      errors.append('untrusted/tampered bundle reached write/selection');finished=True
     elif seen_target and current['release']==original and current['state']=='Good':
      metrics['automatic_rollback_seconds']=row['elapsed_seconds'];finished=True
+     if control:errors.append('healthy control unexpectedly rolled back')
     elif seen_target and current['release']==a.target_version and current['state']=='Good' and row['elapsed_seconds']>=120:
-     metrics['faulty_release_marked_good']=True;errors.append('faulty release marked Good instead of automatic rollback');finished=True
+     if control:metrics['healthy_release_marked_good']=True
+     else:metrics['faulty_release_marked_good']=True;errors.append('faulty release marked Good instead of automatic rollback')
+     finished=True
     if finished:(d/'bootentries-after.json').write_text(json.dumps(slots,indent=2))
    except Exception as exc:row['error']=str(exc)
    out.write(json.dumps(row)+'\n');out.flush();os.fsync(out.fileno())
    if finished:break
    time.sleep(5)
  metrics['target_boot_observed']=seen_target;metrics['fault_verified']=fault_verified
- if not negative and not fault_verified:errors.append('injected fault was not verified; no product conclusion')
+ if not negative and not control and not fault_verified:errors.append('injected fault was not verified; no product conclusion')
  if not finished:errors.append('no terminal rejection/rollback within configured deadline')
  time.sleep(65)
  gateway(f'touch /home/observer/{name}.stop');time.sleep(4)
@@ -125,5 +134,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed faulty bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not control and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed healthy control accepted and retained acknowledged records' if control else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

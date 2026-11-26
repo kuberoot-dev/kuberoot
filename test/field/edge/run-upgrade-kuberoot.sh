@@ -8,7 +8,9 @@ source "$FIELD_SCRIPTS/select-product.sh" "$lane"
 export GOLDEN=$VM_DIR
 base=$FIELD_ROOT/www/0.1.0-field-$lane
 for REPETITION in $(seq 1 10); do
- for CASE in init-crash pod-network wrong-content incompatible-state tampered untrusted; do
+ cases=${UPGRADE_CASES:-"init-crash pod-network wrong-content incompatible-state tampered untrusted"}
+ if [[ -n ${UPGRADE_CASES:-} && $lane != health ]];then echo "Case subset is restricted to the supplementary fixed lane" >&2;exit 2;fi
+ for CASE in $cases; do
  export CASE TARGET_VERSION=0.1.0-field-$lane-$CASE
  # Negative fixtures use the same wrong-content payload, rejected before boot.
  [[ $CASE != tampered && $CASE != untrusted ]] || export TARGET_VERSION=0.1.0-field-$lane-wrong-content

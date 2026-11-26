@@ -21,13 +21,15 @@ install -m 755 "$B/fixture-agent" "$B/root/usr/bin/field-fault-agent"
 cmp "$B/root/usr/share/kuberoot/release.pub" /work/fix-build/keys/release.pub
 mkdir -p "$FIELD_ROOT/www" "$B/payload"
 for f in vmlinuz.efi initrd.cpio; do cp "$base/$f" "$B/payload/$f"; done
-for mode in init-crash pod-network wrong-content incompatible-state; do
+modes="init-crash pod-network wrong-content incompatible-state"
+[[ $lane != health ]] || modes="healthy-control wrong-content incompatible-state"
+for mode in $modes; do
  version=0.1.0-field-$lane-$mode
  python3 - "$B/original-profile.yaml" "$B/root/usr/share/kuberoot/profile.yaml" "$mode" <<'PY'
 import pathlib,sys
 s=pathlib.Path(sys.argv[1]).read_text();needle='      services:\n';assert needle in s
 fault='      - name: field-test-fault\n        args: [/usr/bin/field-fault-agent, '+sys.argv[3]+']\n'
-pathlib.Path(sys.argv[2]).write_text(s.replace(needle,needle+fault,1))
+pathlib.Path(sys.argv[2]).write_text(s if sys.argv[3]=='healthy-control' else s.replace(needle,needle+fault,1))
 PY
  printf 'NAME="kuberoot"\nID=kuberoot\nPRETTY_NAME="kuberoot %s TEST FAULT"\nVERSION_ID=%s\n' "$version" "$version" > "$B/root/etc/os-release"
  printf '%s\n' "$version" > "$B/payload/VERSION"

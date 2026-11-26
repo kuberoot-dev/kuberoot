@@ -583,3 +583,21 @@ WAN remains available equally for all products. This avoids introducing an
 additional complete-WAN/NTP fault into the application-fault experiment; that
 fault and the observed Talos dependency are retained in E1. The protocol is
 `upgrade-client-disconnect-v1`; earlier prepared scripts had not executed E2.
+
+### Application-health reruns after original E2 findings
+
+After all original main trials and the comparison lanes, build the fixed image
+with `build-health-image.sh`, install a fresh fixed A with
+`prepare-health-golden.sh`, then run
+`build-fault-bundles.sh /work/field-edge/build-health/out/amd64 health` and
+`run-health-upgrade-tests.sh`. The latter runs ten fresh clones each of a
+healthy control, wrong content, and incompatible state. Both A and B contain
+the health-gate implementation. The control has its own release version and
+no fault service; its successful acceptance is a separate observation.
+
+`application-health-checks.json` checks the complete 1024-byte W response via
+NodePort and the append service's record-format health endpoint. The exact
+checks are included in the public Upgrade request and result. Original main
+and release trials never receive these options. State-format damage and ACK
+loss remain failures even if the OS correctly rolls back; no data repair is
+performed. Build and rerun scripts are preparation, not measured evidence.
