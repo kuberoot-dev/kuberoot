@@ -42,6 +42,7 @@ CHECK
   test -f "$d/system.raw" || qemu-img create -f raw "$d/system.raw" 32G
   test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"
   local drives=()
+  [[ ${FAULT_FIXTURE:-0} != 1 ]] || drives+=(-smbios type=1,serial=field-edge-fault-test)
   test -z "${BOOT_ISO:-}" || drives+=(-cdrom "$BOOT_ISO")
   test -z "$media" || drives+=(-drive "file=$media,format=raw,if=virtio,snapshot=on")
   local systemdrive=(-drive "file=$d/system.raw,format=raw,if=virtio,cache=none")

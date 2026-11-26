@@ -28,6 +28,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
    if r.returncode==0:break
    time.sleep(2)
   else:raise RuntimeError('W did not become healthy before injection')
+  subprocess.run(['bash',str(scripts/'prepare-observer.sh')],env=env,check=True)
   before=json.loads(kube('get','nodes','-o','json'))['items'][0]['status']['nodeInfo']['bootID']
   gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 600 --stop-file /home/observer/{name}.stop --output /home/observer/{name}.jsonl >/home/observer/{name}.log 2>&1 </dev/null &')
   time.sleep(5)

@@ -7,7 +7,7 @@ from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.output;assert d.is_relative_to(root);d.mkdir(parents=True,exist_ok=False)
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
-env=dict(os.environ,VM_DIR=str(d));node_env=dict(env,KUBECONFIG=os.environ['NODE_KUBECONFIG']);G=str(scripts/'gateway-command.sh');name=f'E2-{a.product}-{a.case}-{a.repetition}';errors=[];metrics={};observer_started=False;recorder=None
+env=dict(os.environ,VM_DIR=str(d),FAULT_FIXTURE="1");node_env=dict(env,KUBECONFIG=os.environ['NODE_KUBECONFIG']);G=str(scripts/'gateway-command.sh');name=f'E2-{a.product}-{a.case}-{a.repetition}';errors=[];metrics={};observer_started=False;recorder=None
 negative=a.case in ['tampered','untrusted']
 def typed(args):
  print('$ ',end='',flush=True)
@@ -33,6 +33,7 @@ try:
   except Exception:pass
   time.sleep(2)
  else:raise RuntimeError('golden slot and cached W did not become ready')
+ subprocess.run(['bash',str(scripts/'prepare-observer.sh')],env=env,check=True)
  (d/'bootentries-before.json').write_text(json.dumps(before,indent=2));original=booted['status']['release'];metrics['original_version']=original
  typed(['export','KUBECONFIG='+node_env['KUBECONFIG']]);nk('get','bootentries',visible=True)
  gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds {int(a.deadline+180)} --stop-file /home/observer/{name}.stop --output /home/observer/{name}.jsonl >/home/observer/{name}.log 2>&1 </dev/null &');observer_started=True

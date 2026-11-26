@@ -1,7 +1,7 @@
 #!/bin/bash
 # Source this file. Paths contain credentials; do not print kubeconfig contents.
 export FIELD_ROOT=/work/field-edge
-unset SEED_MEDIA BOOT_ISO RTC_BASE BLOCK_FAULTS
+unset SEED_MEDIA BOOT_ISO RTC_BASE BLOCK_FAULTS NODE_KUBECONFIG
 case "${1:?release|main|k3s|talos}" in
  release)
   export PRODUCT=kuberoot-v0.1.0 VM_DIR=$FIELD_ROOT/vm-1 KUBECONFIG=$FIELD_ROOT/kuberoot-release/kubeconfig
@@ -21,3 +21,8 @@ case "${1:?release|main|k3s|talos}" in
  *) return 2 ;;
 esac
 export PYTHON_IMAGE=$(python3 -c 'import json;print(json.load(open("/work/field-edge/downloads/workload-image.json"))["image"])')
+
+if test -n "${NODE_KUBECONFIG:-}"; then
+ node_cluster=$(KUBECONFIG=$NODE_KUBECONFIG kubectl config view -o jsonpath='{.clusters[0].name}')
+ KUBECONFIG=$NODE_KUBECONFIG kubectl config set-cluster "$node_cluster" --server=https://127.0.0.1:15000 >/dev/null
+fi

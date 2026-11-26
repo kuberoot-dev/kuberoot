@@ -220,3 +220,27 @@ isolates the observed leader with QMP set_link, reboots it, heals, then isolates
 all three. It checks every acknowledged value after healing. These are quorum
 assertions, not claims that a local application PVC replicates across nodes.
 The HA driver is preparation until its actual result and captures are published.
+
+Talos bad-release preparation uses its documented extension-service mechanism:
+[extension services](https://docs.siderolabs.com/talos/v1.14/build-and-extend-talos/custom-images-and-development/extension-services),
+[system extension packaging](https://docs.siderolabs.com/talos/v1.14/build-and-extend-talos/custom-images-and-development/building-a-system-extension).
+`build-talos-faults.sh` extracts the pinned vendor imager binary and boot assets,
+then uses `input.systemExtensions[].ociPath` from the v1.14.7 imager API. This
+avoids requiring Docker, mounts, or additional pod privileges. The extension is
+explicitly test-only; its process refuses non-kuberoot guests unless QEMU carries
+the `field-edge-fault-test` SMBIOS serial. Its nft rules are volatile and its
+persistent mutation is confined to the workload's own record file. All image
+manifests/layers are hash-verified and pins retained. Preparation is not evidence
+of a product result; images must actually build, install and demonstrate the
+specified fault before any E2 outcome is assigned.
+
+The guest ENOSPC injector reserves unwritten filesystem extents with fallocate;
+it does not intentionally write a disk full of zeroes. E4 also monitors free
+space on the owned PVC during fill and cancels its own filler below 768 MiB.
+A host-capacity cancellation is a fixture limitation, not a DUT failure.
+
+Failed cold-boot disks are preserved as qemu-img-verified compressed deltas
+against `cold-boot-forensic-base.qcow2`. That backing snapshot is independent of
+the original golden raw disk, so later workload preparation cannot invalidate
+forensic images. Successful cold-boot clones are disposable; their raw measured
+outputs and complete captures remain. No running VM disk is compressed.

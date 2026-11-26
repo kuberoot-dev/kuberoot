@@ -2,7 +2,7 @@
 """One storage-fault repetition on a fresh disk, measured from outside the DUT.
 A storage/W subcase alone does not establish upgrade-safety coverage.
 """
-import argparse,datetime,json,os,pathlib,shlex,subprocess,time
+import argparse,datetime,json,os,pathlib,shlex,subprocess,time,threading,shutil
 from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['100-iops','20-iops','full-90','full-95','full-100','eio'],required=True);p.add_argument('--product',required=True);p.add_argument('--upgrade-hook',type=pathlib.Path);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent
@@ -36,6 +36,7 @@ try:
   if r.returncode==0:break
   time.sleep(2)
  else:raise RuntimeError('W unavailable before storage injection')
+ subprocess.run(['bash',str(scripts/'prepare-observer.sh')],env=env,check=True)
  # The injector is preloaded on the golden disk, with a critical priority and
  # independent HTTP endpoint so relief does not depend on a responsive API.
  if a.case.startswith('full-'):metrics['initial_filesystem']=occupancy('relieve')
@@ -47,7 +48,24 @@ try:
  show(['date','-u']);fault=time.time();fault_active=True
  if a.case in ['100-iops','20-iops']:block(a.case)
  elif a.case=='eio':block('eio-on')
- else:metrics['full_filesystem']=occupancy('fill/'+a.case.split('-')[1])
+ else:
+  # Guest fallocate reserves unwritten extents, normally only guest metadata
+  # reaches the raw backend. Protect the shared PVC if a filesystem behaves
+  # differently; a host-capacity abort invalidates the fixture, not the DUT.
+  guard_stop=threading.Event();host_abort=[]
+  def guard():
+   while not guard_stop.wait(.25):
+    free=shutil.disk_usage(d).free
+    if free<768*1024**2:
+     host_abort.append({'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'host_free_bytes':free})
+     try:occupancy('relieve')
+     except Exception as exc:host_abort.append({'relief_error':str(exc)})
+     break
+  monitor=threading.Thread(target=guard);monitor.start()
+  try:metrics['full_filesystem']=occupancy('fill/'+a.case.split('-')[1])
+  finally:guard_stop.set();monitor.join(timeout=45)
+  metrics['host_capacity_guard']=host_abort
+  if host_abort:raise RuntimeError('fixture capacity guard aborted fill before shared PVC exhaustion')
  (d/'fault-epoch').write_text(str(fault))
  if a.upgrade_hook:show([a.upgrade_hook,a.case])
  time.sleep(300 if 'iops' in a.case else 30 if a.case=='eio' else 120)

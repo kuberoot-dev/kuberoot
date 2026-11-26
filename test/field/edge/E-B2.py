@@ -92,4 +92,5 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
  with (a.output/'runs.jsonl').open('a') as f:f.write(json.dumps(result)+'\n')
  # Successful disks can be reused/recreated; keep failed disks for diagnosis.
  if not errors:(d/'system.raw').unlink()
+ else:subprocess.run(['bash',str(scripts/'preserve-failed-disk.sh'),str(d/'system.raw'),str(a.golden)],check=True)
  time.sleep(2)

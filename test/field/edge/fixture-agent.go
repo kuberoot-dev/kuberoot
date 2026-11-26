@@ -26,8 +26,9 @@ func main() {
 		log.Fatal("fixture-agent init-crash|pod-network|wrong-content|incompatible-state")
 	}
 	cmdline, err := os.ReadFile("/proc/cmdline")
-	if err != nil || !strings.Contains(string(cmdline), "kuberoot.root=PARTLABEL=kuberoot-root-") {
-		log.Fatal("refusing to inject outside an installed kuberoot guest")
+	serial, _ := os.ReadFile("/sys/class/dmi/id/product_serial")
+	if err != nil || (!strings.Contains(string(cmdline), "kuberoot.root=PARTLABEL=kuberoot-root-") && strings.TrimSpace(string(serial)) != "field-edge-fault-test") {
+		log.Fatal("refusing to inject outside an explicitly marked field-test guest")
 	}
 	log.Printf("TEST-ONLY fault service: %s", os.Args[1])
 	switch os.Args[1] {
