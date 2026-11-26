@@ -208,3 +208,15 @@ forensic disks remain, and `rerun-boot-fixture-failures.sh` repeats them into
 separate paths before density. Statistical summaries use v2 when available;
 the original failed attempts remain individually visible. The aggregate PNG
 contains measured milestones only; missing values are not assigned a time.
+
+`prepare-ha-kuberoot.sh` follows the real media/Installation/JoinTicket flow in
+`hack/e2e/etcd-ha.sh`. `ha-vm.sh` allocates three separate raw 32-GiB disks, fresh
+OVMF vars, 2 vCPU/4 GiB per control plane, with a 13-GiB aggregate guest guard.
+The pod still has its shared six-CPU quota (three VMs are not independent hosts).
+Peer addresses 10.79.0.11–13 only exist on multicast 230.79.0.1:17901. Separate
+user-net ports expose authenticated APIs for observation during a peer split.
+`partition-etcd.py` performs real ConfigMap writes to all three endpoints,
+isolates the observed leader with QMP set_link, reboots it, heals, then isolates
+all three. It checks every acknowledged value after healing. These are quorum
+assertions, not claims that a local application PVC replicates across nodes.
+The HA driver is preparation until its actual result and captures are published.

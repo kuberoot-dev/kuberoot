@@ -12,7 +12,7 @@ mkdir "$B"
 export PATH=$FIELD_ROOT/build-main/go/bin:/work/bin:$PATH GOMAXPROCS=2 GOFLAGS='-p=2 -buildvcs=false'
 export GOCACHE=$B/gocache GOMODCACHE=$FIELD_ROOT/build-main/gomod CGO_ENABLED=0
 source_tree=$FIELD_ROOT/build-main/src
-(cd "$source_tree"; go build -trimpath -ldflags='-s -w' -o "$B/kuberoot-release" ./cmd/kuberoot-release)
+cp /work/fix-build/bin/kuberoot-release "$B/kuberoot-release"
 go build -trimpath -ldflags='-s -w' -o "$B/fixture-agent" "$FIELD_SCRIPTS/fixture-agent.go"
 unsquashfs -processors 2 -d "$B/root" "$base/rootfs.squashfs" > "$B/unpack.log"
 cp "$B/root/usr/share/kuberoot/profile.yaml" "$B/original-profile.yaml"
