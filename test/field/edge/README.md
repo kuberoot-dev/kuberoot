@@ -691,7 +691,8 @@ archive, then resumes the outer queue. The DUT is never paused for archiving.
 Main pod-network repetition 2 also failed before target boot: 32 QEMU write
 errors, with more than 5 GiB free on the PVC and no new OOM/memory-limit events.
 The result is invalid and its disk/captures are retained. `direct-io-alignment-probe.c`
-is compiled only in the pod and creates a new 64 KiB scratch file using O_EXCL.
+is compiled only in the pod and creates a new scratch file using O_EXCL (initially 64 KiB, then a sparse
+32 GiB file for approximately 12 MiB of scatter/gather write probes).
 It records STATX_DIOALIGN and real scalar/vector direct-I/O return codes; no
 measured image is opened for writing. Local statx reports memory alignment 512
 and offset/length alignment 4096. Aligned scalar and split-vector tests pass.
@@ -715,3 +716,21 @@ postboot errors and other fixture failures do not qualify. No cache/fabric/image
 change or guest repair is performed; all invalid attempts remain visible. The
 third backend-invalid attempt still stops for diagnosis. This is not a claim
 that the underlying storage fault has been repaired.
+
+### Disk retention for the full matrix
+
+Public records, transcripts, GIFs, screenshots and exported client data are
+retained for every attempt. Full stopped disks are retained for the first case,
+all backend-invalid attempts, and every new failure signature. Within the
+40 GiB PVC, `retire-known-e2-repeat.py` may remove a later stopped raw disk only
+when its failed outcome, reason, image/commit, target payload, fault proof,
+client failure counters and integrity conclusions match the retained first
+case exactly, and all published public evidence exists. A new data-loss count,
+new API failure, backend error or changed reason prevents retirement. Unknown
+integrity is never converted into zero loss. A per-trial retirement manifest
+states precisely which full disk is kept and which repeat is no longer kept.
+This supersedes earlier chronological notes about retaining every failed disk.
+
+All three E2 product drivers now record QMP backend errors through
+`block_observations.py`; unexpected disk errors invalidate an E2 measurement
+on competitors as well as kuberoot. E4 intentional storage faults are separate.

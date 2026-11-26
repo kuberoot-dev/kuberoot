@@ -4,6 +4,7 @@ Use a separate test-key image for injected signed faults; never bypass trust.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted','healthy-control'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);p.add_argument('--health-checks',type=pathlib.Path);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.output;assert d.is_relative_to(root)
@@ -129,11 +130,7 @@ finally:
  if observer_started:
   try:gateway(f'touch /home/observer/{name}.stop',check=False)
   except Exception:pass
- try:
-  counters=command(str(d/'qmp.sock'),'query-blockstats');(d/'block-counters.json').write_text(json.dumps(counters,indent=2))
-  metrics['unexpected_block_io_failures']=sum(int(x.get('stats',{}).get(k,0)) for x in counters for k in ['failed_wr_operations','failed_rd_operations','failed_flush_operations'])
-  if metrics['unexpected_block_io_failures']:errors.append('unexpected QEMU backend I/O errors; trial invalid')
- except Exception as exc:metrics['block_counters_error']=str(exc)
+ collect_block_observations(d,metrics,errors)
  try:command(str(d/'qmp.sock'),'quit')
  except Exception:pass
  if recorder:

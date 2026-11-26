@@ -32,8 +32,8 @@ for REPETITION in $(seq 1 10); do
   bash "$FIELD_SCRIPTS/wan-impairment.sh" clean
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E2-scene.sh"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
-  # Preserve every failed state using an independently pinned backing snapshot.
-  # Successful clones are also retained until reviewed; remove no measured state.
+  # Preserve first/new/invalid states against immutable backing snapshots.
+  # Published repeats may be retired under the explicit evidence-retention guard.
   backing=()
   first=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-1/failed.qcow2
   if [[ $REPETITION != 1 ]]; then backing=("$first"); fi

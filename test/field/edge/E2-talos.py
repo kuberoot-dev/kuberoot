@@ -5,6 +5,7 @@ A manual rollback is never counted as automatic recovery.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--image',required=True);p.add_argument('--repetition',type=int,required=True);p.add_argument('--deadline',type=int,default=1500);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;d=a.output
@@ -132,6 +133,7 @@ finally:
  subprocess.run(['bash',str(s/'wan-impairment.sh'),'clean'],check=False)
  gateway(f'touch /home/observer/{name}.stop')
  if upgrade and upgrade.poll() is None:upgrade.terminate();upgrade.wait(timeout=10)
+ collect_block_observations(d,metrics,errors)
  try:command(str(d/'qmp.sock'),'quit')
  except Exception:pass
  time.sleep(2)
@@ -148,5 +150,5 @@ finally:
   subprocess.run(['python3',str(s/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
  if vga:assert vga.wait(timeout=60)==0, 'VGA recorder failed; repair capture before publication'
-record={'measurement_protocol':'upgrade-client-disconnect-v2','scenario_id':'E2','product':os.environ['PRODUCT'],'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real Talos installer extension; multicast/gateway; default image policy','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'automatic rollback or integrity rejection and acknowledged-record gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v2','scenario_id':'E2','product':os.environ['PRODUCT'],'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real Talos installer extension; multicast/gateway; default image policy','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') or metrics.get('unexpected_block_io_failures') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'automatic rollback or integrity rejection and acknowledged-record gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

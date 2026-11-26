@@ -12,7 +12,8 @@ for p in pathlib.Path('/proc').glob('[0-9]*/cmdline'):
  except (OSError,UnicodeError):continue
  if a[0].endswith('qemu-system-x86_64') and any(path in arg for path in sys.argv[1:] for arg in a):raise SystemExit('refusing to snapshot a running VM disk')
 PY
-# Keep the first disk of every case as a reference and every failed state.
+# Keep first case disks and novel/invalid states; repeated known findings
+# may be retired only after full public evidence publication.
 # Later passing E2 repeats already have complete client/slot/serial evidence.
 if python3 - "$failed" <<'PYPASSED'
 import datetime,json,pathlib,sys
@@ -26,6 +27,7 @@ p.unlink()
 print(json.dumps(manifest),flush=True)
 PYPASSED
 then exit 0;fi
+if python3 "$FIELD_SCRIPTS/retire-known-e2-repeat.py" "$failed";then exit 0;fi
 base=${3:-$golden/cold-boot-forensic-base.qcow2}
 if [[ $# -lt 3 ]];then base=$(python3 "$FIELD_SCRIPTS/choose-e2-backing.py" "$failed" "$base");fi
 [[ $base == /work/field-edge/*.qcow2 ]] || exit 2
