@@ -468,3 +468,12 @@ pod and produced a 270336-byte allocated delta.
 Terminal PNGs show the last 30 actual wrapped transcript lines. Full command
 output is always retained in the corresponding raw text file; the bounded PNG
 avoids a many-thousand-pixel scrolling screenshot.
+
+E9 includes the native Talos lifecycle upgrade API. `talos-upgrade-pty.py` gives
+`talosctl` a real 110×30 PTY because the pinned CLI suppresses layer percentages
+when stdout is not a terminal. The actual stream is retained verbatim. The cut
+threshold is the native percentage of the **largest compressed OCI layer**,
+matched against the pinned manifest size; this differs explicitly from
+kuberoot's whole-bundle percentage. Gateway wire bytes are measured separately,
+never substituted for payload progress. Both lanes keep the actual artifact
+size and run two real 600-second connected windows 3600 seconds apart.

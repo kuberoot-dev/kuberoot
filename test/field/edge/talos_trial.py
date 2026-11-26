@@ -18,10 +18,10 @@ def boot_default():
  return raw[4:].decode('utf-16-le').rstrip('\0')
 def upgrade(directory,no_reboot=True):
  image=json.loads((ROOT/'talos-good/image.json').read_text())['reference']
- args=BASE+['upgrade','--image',image,'--progress','plain','--reboot-mode','powercycle','--timeout','20m']
+ args=BASE+['upgrade','--image',image,'--progress','auto','--reboot-mode','powercycle','--timeout','20m']
  if no_reboot:args+=['--no-reboot']
  print('$ '+shlex.join(args),flush=True)
- return subprocess.Popen(args,stdout=(pathlib.Path(directory)/'talos-upgrade-progress.txt').open('a'),stderr=subprocess.STDOUT)
+ return subprocess.Popen(['python3',str(S/'talos-upgrade-pty.py'),*args],stdout=(pathlib.Path(directory)/'talos-upgrade-progress.txt').open('a'),stderr=subprocess.STDOUT)
 def counter(reset=False):
  command='sudo nft -j list table inet field_transfer'
  if reset:

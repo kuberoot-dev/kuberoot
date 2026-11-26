@@ -17,4 +17,17 @@ for lane in release-testkey main; do
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
  done
 done
-printf 'Kuberoot windows ended; Talos installer transfer comparison remains required.\n'
+source "$FIELD_SCRIPTS/select-product.sh" talos
+test -f "$FIELD_ROOT/talos-good/image.json" || bash "$FIELD_SCRIPTS/prepare-talos-good-image.sh"
+for CUT_PERCENT in 10 50 90;do
+ export CUT_PERCENT
+ directory=$FIELD_ROOT/results/E9-$PRODUCT-$CUT_PERCENT
+ name=t-E9-$PRODUCT-$CUT_PERCENT
+ test ! -f "$directory/published" || continue
+ if test -e "$directory";then printf 'Review interrupted Talos window trial: %s\n' "$directory" >&2;exit 2;fi
+ bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E9-talos-scene.sh"
+ python3 "$FIELD_SCRIPTS/chart-transfer.py" "$directory"
+ python3 "$FIELD_SCRIPTS/publish-case.py" "$directory" "$name"
+ touch "$directory/published"
+ bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$directory/system.raw" "$VM_DIR"
+done
