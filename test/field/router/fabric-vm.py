@@ -2,20 +2,20 @@
 """Unprivileged equal-product fabric; run exclusively in the workshop pod."""
 import argparse,json,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('name',choices=['client','gateway']);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('name',choices=['client','gateway','sink']);a=p.parse_args()
 root=Path('/work/vms'); d=root/a.name;d.mkdir(exist_ok=True)
 if (d/'pid').exists() and Path('/proc/'+(d/'pid').read_text().strip()).exists():raise SystemExit('VM already running')
 base=Path('/work/field/images/linux-tools.qcow2')
 if not base.exists():raise SystemExit('Prepare offline Linux tools base first')
 if not (d/'sys.qcow2').exists():subprocess.run(['qemu-img','create','-q','-f','qcow2','-F','qcow2','-b',str(base),str(d/'sys.qcow2')],check=True)
 if not (d/'vars.fd').exists():subprocess.run(['cp','/usr/share/OVMF/OVMF_VARS_4M.fd',str(d/'vars.fd')],check=True)
-port=2231 if a.name=='client' else 2232
+port={'client':2231,'gateway':2232,'sink':2233}[a.name]
 key=Path('/work/field/private/id_ed25519.pub').read_text().strip()
 (d/'user-data').write_text('#cloud-config\n'+json.dumps({'hostname':a.name,'disable_root':False,'users':[{'name':'root','ssh_authorized_keys':[key]}]}))
 (d/'meta-data').write_text('instance-id: field-fabric-'+a.name+'\nlocal-hostname: '+a.name+'\n')
 (d/'network-config').write_text(json.dumps({'version':2,'ethernets':{'mgmt0':{'match':{'macaddress':'52:54:00:30:00:01'},'set-name':'mgmt0','dhcp4':True},'test0':{'match':{'macaddress':f'52:54:00:40:{port%100:02x}:02'},'set-name':'test0'},'direct0':{'match':{'macaddress':f'52:54:00:40:{port%100:02x}:03'},'set-name':'direct0'}}}))
 subprocess.run(['cloud-localds','--network-config='+str(d/'network-config'),str(d/'seed.img'),str(d/'user-data'),str(d/'meta-data')],check=True)
-segments=[(31,'lan'),(33,'direct')] if a.name=='client' else [(32,'wan'),(33,'direct')]
+segments={'client':[(31,'lan'),(33,'direct')],'gateway':[(32,'site'),(34,'wan')],'sink':[(34,'wan'),(33,'direct')]}[a.name]
 args=['qemu-system-x86_64','-name',a.name,'-enable-kvm','-cpu','host','-smp','1','-m','768','-machine','q35',
  '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
  '-drive',f'if=pflash,format=raw,file={d}/vars.fd','-drive',f'file={d}/sys.qcow2,format=qcow2,if=virtio,cache=none',

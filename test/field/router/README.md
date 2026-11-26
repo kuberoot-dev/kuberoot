@@ -74,3 +74,24 @@ interface; payload routing is determined inside the guest, not SSH.
 is a setup smoke test, not the repeated ceiling benchmark or R-B2 result.
 `idle-linux.py` settles 600 seconds then observes 3600 seconds, preserving guest
 MemAvailable, QMP writes, CPU and boot identity; it refuses to overwrite a run.
+
+The final G fabric adds a separate sink VM: client(192.168.10.2) →
+DUT(LAN .1, WAN 198.18.0.1) → gateway(.2, 198.18.34.1) → sink(.2,
+loopback 198.19.0.1). Segments use multicast ports 13031/13032/13034.
+The direct ceiling path uses client↔sink segment 13033. Gateway delay is injected
+on test0 (return direction); 50ms there adds approximately 50ms RTT, not 100ms.
+Each endpoint currently has 768 MiB/1 vCPU. Observer SSH is never the measured
+payload path. Earlier direct smoke used gateway itself as sink and is explicitly
+a preparation result; it must not be reused as the final ceiling.
+
+`build-main.sh` builds source commit 1b29543 on the stand PVC because the shared
+builder disk was full. Kernel/external packages reuse the signed capture.5
+payload; all project binaries, kubepkg, CRDs and source overlays are rebuilt/copied.
+`finish-main.sh` completes the initially launched incremental build; inspect its
+exit and build-manifest before using the resulting bundle.
+`boot-debian.py` observes ten installed cold boots and 30 consecutive seconds
+of positive NAT reachability. This does not assert the R6 negative-filter gate.
+`R-B1-debian-serial-fabric.sh` records the first boot with the live serial console.
+`forwarding.py` is prepared for later R-B2: 5×60s TCP P8 and UDP64 in each
+direction, preserving iperf JSON and QEMU CPU time. It does not automatically
+claim generator headroom or a pass; evaluate the full baseline and CPU limits.

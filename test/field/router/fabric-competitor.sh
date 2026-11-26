@@ -22,26 +22,26 @@ case "$name" in
    qemu-img info -f raw "$d/sys.img.partial" >/dev/null
    mv "$d/sys.img.partial" "$d/sys.img"
   fi
-  drive="file=$d/sys.img,format=raw,if=virtio,cache=none";;
+  drive="file=$d/sys.img,format=raw,if=none,id=system,cache=none";;
  vyos)
   [[ -f $d/sys.qcow2 ]] || qemu-img create -q -f qcow2 "$d/sys.qcow2" 12G
-  drive="file=$d/sys.qcow2,format=qcow2,if=virtio,cache=none"
+  drive="file=$d/sys.qcow2,format=qcow2,if=none,id=system,cache=none"
   [[ ${INSTALLED:-0} == 1 ]] || extra=(-cdrom /work/field/images/vyos-2026.11.25-0017.iso -boot d);;
  debian)
   [[ -f $d/sys.qcow2 ]] || qemu-img create -q -f qcow2 -F qcow2 -b /work/field/images/debian-12-genericcloud-amd64.qcow2 "$d/sys.qcow2" 12G
-  drive="file=$d/sys.qcow2,format=qcow2,if=virtio,cache=none"
+  drive="file=$d/sys.qcow2,format=qcow2,if=none,id=system,cache=none"
   [[ ! -f $d/seed.img ]] || extra=(-drive "file=$d/seed.img,format=raw,if=virtio,readonly=on");;
 esac
 # Equal userspace socket fabric; third NIC is isolated observation only.
-qemu-system-x86_64 -name "$name" -enable-kvm -cpu host -smp 2 -m 2048 -machine q35 \
+qemu-system-x86_64 -name "$name" -enable-kvm -cpu host -smp 2 -m 2048 -machine q35 -boot order=c \
  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
- -drive "if=pflash,format=raw,file=$d/vars.fd" -drive "$drive" "${extra[@]}" \
+ -drive "if=pflash,format=raw,file=$d/vars.fd" -drive "$drive" -device virtio-blk-pci,drive=system,bootindex=1 "${extra[@]}" \
  -netdev socket,id=wan,mcast=230.31.0.32:13032,localaddr=127.0.0.1 \
- -device virtio-net-pci,netdev=wan,mac=52:54:00:30:00:01 \
+ -device virtio-net-pci,romfile=,netdev=wan,mac=52:54:00:30:00:01 \
  -netdev socket,id=lan,mcast=230.31.0.31:13031,localaddr=127.0.0.1 \
- -device virtio-net-pci,netdev=lan,mac=52:54:00:30:00:02 \
+ -device virtio-net-pci,romfile=,netdev=lan,mac=52:54:00:30:00:02 \
  -netdev user,id=observer,hostfwd=tcp:127.0.0.1:2222-:22 \
- -device virtio-net-pci,netdev=observer,mac=52:54:00:30:00:03 \
+ -device virtio-net-pci,romfile=,netdev=observer,mac=52:54:00:30:00:03 \
  -chardev "socket,id=ser,path=$d/serial.sock,server=on,wait=off,logfile=$d/console.log,logappend=on" \
  -serial chardev:ser -qmp "unix:$d/qmp.sock,server=on,wait=off" \
  -display none -daemonize -pidfile "$d/pid"
