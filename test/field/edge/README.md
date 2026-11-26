@@ -678,3 +678,10 @@ They inspect native Upgrade/BootEntry state and live QMP write/read/flush errors
 The observed eight write errors occurred before the target boot; their cause
 was not established. A successful subsequent scratch-file test would not
 prove that the original storage fault was fixed.
+
+`monitor-trial-resources.py` records PVC free bytes and pod memory counters every
+five seconds until the named trial has a result. Future E2 observation rows also
+include current PVC headroom. `archive-e2-retry-boundary.py` records the exact
+incident-specific Mac maintenance invocation: it waits for the retry and its
+rendered capture, verifies three unused Phase-1 disks in the established local
+archive, then resumes the outer queue. The DUT is never paused for archiving.
