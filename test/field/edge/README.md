@@ -2,7 +2,7 @@
 
 The binding experiment plan is `kuberoot-articles/test-suites/edge.md`.
 This branch starts at kuberoot `b365f53` (origin/main fetched 2026-11-25).
-**The field suite has not run.** Do not interpret observer self-tests as product
+**The field suite is in progress; no complete test row is available yet.** Do not interpret observer self-tests as product
 results, and do not substitute Phase 1 user-network/qcow2 measurements.
 
 ## Network and storage method (author-approved revision)
@@ -105,3 +105,21 @@ sampling, using source commit 1b29543967ae6fce971f0bf818000a6b04374b52. It reuse
 the unchanged release kernel/userland and the previously validated exact
 kubepkg commit 22170c1213a4, rebuilds all kuberoot binaries and the initrd,
 and signs with the existing private test-series key. Never publish that key.
+
+W uses an explicit static, node-affine PV on `/var/lib/field-records` on all
+single-node products. This avoids adding a provisioner only to Talos and makes
+the persistence substrate explicit. The declared 1 GiB PV capacity is not a
+filesystem quota. This local volume does not provide application failover in
+HA; do not claim replicated append availability from etcd majority tests.
+The API probe loop uses the `field` namespace and records its own errors.
+
+`run-baseline-products.sh` is the current sequential baseline queue: wait for
+release completion, gracefully stop it, build/install/sample main, then k3s,
+then Talos. It stops on setup errors for diagnosis. `sync-baselines.py` performs
+only light kubectl/file operations on the Mac and publishes completed records
+and copied artifacts; matplotlib rendering stays inside the pod. Completing
+this loop is only E-B1, not completion of the suite.
+
+`E6.py` is an unexecuted RTC/API checkpoint driver. It deliberately does not
+claim full E6 pass from API recovery alone: application recovery, TLS diagnosis,
+CA expiry derivation and every manual recovery operation remain mandatory.

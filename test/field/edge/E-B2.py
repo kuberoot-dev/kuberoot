@@ -3,7 +3,7 @@
 Prepare GOLDEN after caching the pinned Python image, then stop the source DUT.
 No previous VM may use the fixed DUT MAC. Measurements are external wall time.
 """
-import argparse,datetime,json,os,pathlib,shutil,subprocess,time
+import argparse,datetime,json,os,pathlib,shlex,signal,subprocess,time
 from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--image',required=True)
 a=p.parse_args();assert '@sha256:' in a.image
@@ -18,6 +18,11 @@ for repetition in range(1,11):
  for f in ['system.raw','vars.fd']:
   subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
  env=dict(os.environ,VM_DIR=str(d))
+ recorder=None
+ if repetition==1:
+  (d/'serial.log').touch()
+  shell='date -u; tail -n +1 -F '+shlex.quote(str(d/'serial.log'))
+  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',shell,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
  t0=time.monotonic();utc0=datetime.datetime.now(datetime.timezone.utc)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(scripts)],env=env,check=True)
  metrics={};errors=[]
@@ -55,7 +60,13 @@ for repetition in range(1,11):
   metrics['new_pod_serves_seconds']=time.monotonic()-t0
  except Exception as exc:errors.append(str(exc))
  finally:
-  command(str(d/'qmp.sock'),'quit')
+  try: command(str(d/'qmp.sock'),'quit')
+  except Exception as exc: errors.append('QMP stop: '+str(exc))
+  if recorder:
+   os.killpg(recorder.pid,signal.SIGINT)
+   recorder.wait(timeout=10)
+   subprocess.run(['python3','/work/scripts/render.py',str(d/'serial.cast')],check=True)
+   subprocess.run(['/work/bin/agg','--font-size','16','--theme','monokai','--last-frame-duration','5',str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
  result={'scenario_id':'E-B2','product':a.product,'repetition':repetition,'start_utc':utc0.isoformat(),'metrics':metrics,'errors':errors,'status':'measured' if not errors else 'failed','vcpu':2,'ram_mib':4096,'topology':'same multicast LAN and gateway; fresh raw disk and OVMF vars clone','workload_image':a.image,'artifact_paths':[str(d/'serial.log')]}
  (d/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
  # Successful disks can be reused/recreated; keep failed disks for diagnosis.

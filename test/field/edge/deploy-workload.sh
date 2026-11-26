@@ -6,10 +6,15 @@ set -euo pipefail
 S=$(cd "$(dirname "$0")" && pwd)
 kubectl create namespace field --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n field create configmap workload --from-file=workload.py="$S/workload.py" --dry-run=client -o yaml | kubectl apply -f -
-python3 - "$PYTHON_IMAGE" <<'PY' | kubectl apply -f -
+node=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+python3 - "$PYTHON_IMAGE" "$node" <<'PY' | kubectl apply -f -
 import json,sys
 image=sys.argv[1]
-items=[{'apiVersion':'v1','kind':'PersistentVolumeClaim','metadata':{'name':'records','namespace':'field'},'spec':{'accessModes':['ReadWriteOnce'],'resources':{'requests':{'storage':'1Gi'}}}}]
+items=[{'apiVersion':'v1','kind':'PersistentVolume','metadata':{'name':'field-records'},'spec':{
+ 'capacity':{'storage':'1Gi'},'accessModes':['ReadWriteOnce'],'persistentVolumeReclaimPolicy':'Retain','storageClassName':'',
+ 'hostPath':{'path':'/var/lib/field-records','type':'DirectoryOrCreate'},
+ 'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':[sys.argv[2]]}]}]}}}},
+ {'apiVersion':'v1','kind':'PersistentVolumeClaim','metadata':{'name':'records','namespace':'field'},'spec':{'storageClassName':'','volumeName':'field-records','accessModes':['ReadWriteOnce'],'resources':{'requests':{'storage':'1Gi'}}}}]
 for name,replicas,port in [('http',10,30080),('append',1,30081)]:
     container={'name':name,'image':image,'command':['python3','/code/workload.py'],
         'ports':[{'containerPort':8080}], 'resources':{'requests':{'cpu':'5m','memory':'16Mi'},'limits':{'memory':'96Mi'}},

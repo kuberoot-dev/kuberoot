@@ -41,3 +41,20 @@ test ! -e "$D/system.raw"
 qemu-img convert -f qcow2 -O raw "$FIELD_ROOT/downloads/ubuntu-24.04-server-cloudimg-amd64.img" "$D/system.raw"
 qemu-img resize -f raw "$D/system.raw" 32G
 VM_DIR="$D" vm_start 1 "$D/seed.iso"
+C=$FIELD_SCRIPTS/dut-command.sh
+for i in $(seq 1 120); do
+ if "$C" 'test -f /etc/rancher/k3s/k3s.yaml && systemctl is-active k3s'; then break; fi
+ sleep 5
+done
+"$C" 'sudo cat /etc/rancher/k3s/k3s.yaml' > "$D/kubeconfig"
+chmod 600 "$D/kubeconfig"
+export KUBECONFIG=$D/kubeconfig
+kubectl config set-cluster default --server=https://127.0.0.1:16443 --tls-server-name=10.78.0.11
+kubectl config set-context --current --namespace=default
+for i in $(seq 1 120); do
+ if kubectl get node edge-k3s; then break; fi
+ sleep 5
+done
+kubectl wait --for=condition=Ready node/edge-k3s --timeout=600s
+kubectl get pods -A
+"$C" 'sudo k3s --version; cat /etc/os-release; systemctl is-enabled unattended-upgrades'

@@ -42,8 +42,9 @@ CHECK
   test -f "$d/system.raw" || qemu-img create -f raw "$d/system.raw" 32G
   test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"
   local drives=()
+  test -z "${BOOT_ISO:-}" || drives+=(-cdrom "$BOOT_ISO")
   test -z "$media" || drives+=(-drive "file=$media,format=raw,if=virtio,snapshot=on")
-  qemu-system-x86_64 -name "field-edge-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 \
+  qemu-system-x86_64 -name "field-edge-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 -rtc "base=${RTC_BASE:-utc}" \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive "if=pflash,format=raw,file=$d/vars.fd" "${drives[@]}" \
     -drive "file=$d/system.raw,format=raw,if=virtio,cache=none" \
