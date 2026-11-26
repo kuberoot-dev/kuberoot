@@ -9,6 +9,13 @@ p=argparse.ArgumentParser();p.add_argument('directory',type=pathlib.Path);p.add_
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.directory
 assert d.is_relative_to(root) and a.capture.startswith('t-') and '/' not in a.capture
 r=json.loads((d/'result.json').read_text());transfers={}
+identity=lambda x:(x.get('scenario_id'),x.get('product'),x.get('repetition'),x.get('time_utc'))
+existing=[json.loads(line) for line in (root/'results.jsonl').read_text().splitlines()]
+previous=[x for x in existing if identity(x)==identity(r)]
+if previous:
+ assert len(previous)==1 and all(previous[0].get(k)==r.get(k) for k in ['status','metrics','source_commit','image_digest']),'Published result changed; explicit review required'
+ assert all(pathlib.Path(p).is_file() for p in previous[0].get('artifact_transfers',{}).values()),'Published source evidence missing'
+ print('Already published: '+str(d));raise SystemExit(0)
 apply_upgrade_budget(r,root/'results.jsonl')
 (d/'result.json').write_text(json.dumps(r,indent=2))
 if r['scenario_id']=='E2':subprocess.run(['python3',str(scripts/'render-upgrade-evidence.py'),str(d)],check=True)
