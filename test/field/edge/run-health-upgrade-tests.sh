@@ -7,5 +7,5 @@ require_stand
 test -f "$FIELD_ROOT/build-health/built"
 test -f "$FIELD_ROOT/vm-health/system.raw"
 export HEALTH_CHECKS_FILE=$FIELD_SCRIPTS/application-health-checks.json
-export UPGRADE_CASES="healthy-control wrong-content incompatible-state"
+export UPGRADE_CASES="healthy-control pod-network wrong-content incompatible-state"
 bash "$FIELD_SCRIPTS/run-upgrade-kuberoot.sh" health

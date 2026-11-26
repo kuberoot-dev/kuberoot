@@ -643,3 +643,9 @@ publication. A retirement manifest records the exact result and allocated
 bytes. The first disk of every case and every failed disk remain preserved;
 all client records, slot observations, transcripts and captures remain retained.
 This rule does not apply to other scenarios or any invalid/failed E2 trial.
+
+The first main v2 pod-network trial verified the fault while the target slot
+was nevertheless marked Good. The fixed health-gate lane therefore also runs
+ten pod-network trials, in addition to the healthy control and c/d cases.
+This is protection with explicitly configured application checks; it is not
+a claim that the default API-only gate detects every data-plane failure.

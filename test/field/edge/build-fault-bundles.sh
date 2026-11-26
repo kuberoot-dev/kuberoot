@@ -22,7 +22,7 @@ cmp "$B/root/usr/share/kuberoot/release.pub" /work/fix-build/keys/release.pub
 mkdir -p "$FIELD_ROOT/www" "$B/payload"
 for f in vmlinuz.efi initrd.cpio; do cp "$base/$f" "$B/payload/$f"; done
 modes="init-crash pod-network wrong-content incompatible-state"
-[[ $lane != health ]] || modes="healthy-control wrong-content incompatible-state"
+[[ $lane != health ]] || modes="healthy-control pod-network wrong-content incompatible-state"
 for mode in $modes; do
  version=0.1.0-field-$lane-$mode
  python3 - "$B/original-profile.yaml" "$B/root/usr/share/kuberoot/profile.yaml" "$mode" <<'PY'

@@ -21,7 +21,7 @@ bash "$FIELD_SCRIPTS/run-health-upgrade-tests.sh"
 python3 - "$FIELD_ROOT/results.jsonl" <<'PYCHECK'
 import json,sys
 rows=[json.loads(line) for line in open(sys.argv[1])]
-for phase in ['healthy-control','wrong-content','incompatible-state']:
+for phase in ['healthy-control','pod-network','wrong-content','incompatible-state']:
  selected=[r for r in rows if r.get('scenario_id')=='E2' and r.get('product')=='kuberoot-health-52db7b1' and r.get('fault_phase')==phase and r.get('status')!='invalid-fixture']
  assert set(range(1,11))<={r.get('repetition') for r in selected},'Fixed lane incomplete: '+phase
  if phase!='incompatible-state':assert all(r['status']=='passed' for r in selected),'Application-health implementation needs diagnosis: '+phase
