@@ -64,6 +64,12 @@ while True:
    r['metrics']['named_boot_assets_bytes']=footprint['asset_bytes_sum']
    r['footprint_observation_utc']=footprint['utc']
    r['measurement_notes']=footprint['notes']+['Guest filesystem used is the filesystem reported by kubelet; for kuberoot it excludes read-only root/ESP. Raw allocation is a separate whole-disk host measurement.']
+   if r['product']=='talos-v1.14.7':
+    plotted=remote('python3','/work/field-edge/scripts/chart-idle-comparison.py')
+    if plotted.returncode:raise RuntimeError(plotted.stderr)
+    comparison='02-edge/img/chart-idle-comparison.png'
+    copy('/work/field-edge/captures/chart-idle-comparison.png',root/comparison)
+    r['artifact_paths'].append(comparison)
    # Every scene is rendered and copied before the result is published.
    record=root/'02-edge/raw'/f'{stem}-published-result.json'
    record.write_text(json.dumps(r,indent=2)+'\n')
@@ -72,7 +78,7 @@ while True:
     f.write(f"\n### {r['scenario_id']} — {r['product']}\n\n")
     f.write(f"Source `{r['source_commit']}`, image `{r['image_digest']}`. {r['samples_ok']}/{r['samples_total']} samples; status {r['status']}.\n\n")
     for artifact in r['artifact_paths']:
-     kind='Измеренная временная кривая idle RAM' if pathlib.Path(artifact).name.startswith('chart-') else 'Реальный запуск и вывод E-B1' if artifact.endswith(('.gif','.png','.txt')) else 'Исходные samples E-B1'
+     kind='Сравнение четырёх E-B1: working set, CPU, host raw allocation, virtual writes' if pathlib.Path(artifact).name=='chart-idle-comparison.png' else 'Измеренная временная кривая idle RAM' if pathlib.Path(artifact).name.startswith('chart-') else 'Реальный запуск и вывод E-B1' if artifact.endswith(('.gif','.png','.txt')) else 'Исходные samples E-B1'
      f.write(f'- `{artifact}` — {kind}.\n')
     f.write('\nMetrics: `'+json.dumps(r['metrics'],ensure_ascii=False)+'`.\n')
    print(json.dumps({'published':r['product'],'status':r['status']}),flush=True)
