@@ -7,7 +7,7 @@ root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;
 assert shutil.disk_usage(root).free>(golden/'system.raw').stat().st_blocks*512+1024**3
 d.mkdir();negative=a.case in ['tampered','untrusted'];env=dict(os.environ,VM_DIR=str(d),SEED_MEDIA=str(golden/'seed.iso'),FAULT_FIXTURE='1',KUBECONFIG=str(golden/'kubeconfig'),DUT_KNOWN_HOSTS=str(golden/'known_hosts'))
 for file in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(golden/file),str(d/file)],check=True)
-G=str(s/'gateway-command.sh');C=str(s/'dut-command.sh');metrics={'packaging':'lab APT package: unchanged official k3s B binary plus intentional systemd fault; Ubuntu kernel unchanged','target_binary_sha256':'265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda'};errors=[];fault_verified=False;recorder=None;wan_cut=False;name=d.name
+G=str(s/'gateway-command.sh');C=str(s/'dut-command.sh');metrics={'packaging':'lab APT package: unchanged official k3s B binary plus intentional systemd fault; positive cases also request pinned native Ubuntu linux-image-virtual candidate','target_binary_sha256':'265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda'};errors=[];fault_verified=False;recorder=None;wan_cut=False;name=d.name
 
 def typed(args):
  print('$ ',end='',flush=True)
@@ -31,6 +31,7 @@ try:
   if r.returncode==0 and r.stdout=='W'*1024 and kube('get','--raw','/readyz').returncode==0:break
   time.sleep(2)
  else:raise RuntimeError('A baseline did not become ready')
+ metrics['kernel_before']=dut('uname -r').stdout.strip()
  before=inventory();(d/'package-before.txt').write_text(before);before_boot=before.splitlines()[0];metrics['boot_id_before']=before_boot
  if 'v1.37.1+k3s1' not in before:raise RuntimeError('unexpected A version')
  subprocess.run(['bash',str(s/'prepare-observer.sh')],env=env,check=True)
@@ -50,13 +51,21 @@ try:
  typed(['date','-u']);subprocess.run(['date','-u']);start=time.monotonic();metrics['fault_epoch']=time.time()
  update=dut('sudo apt-get '+options+' update',visible=True,timeout=120)
  (d/'apt-update.txt').write_text(update.stdout+update.stderr)
+ if not negative:
+  native_update=dut('sudo apt-get update',visible=True,timeout=180)
+  (d/'apt-native-update.txt').write_text(native_update.stdout+native_update.stderr)
+  if native_update.returncode:raise RuntimeError('Native Ubuntu APT metadata refresh failed')
  if a.case=='untrusted':
   output=update.stdout+update.stderr
   metrics['apt_update_exit']=update.returncode
   if update.returncode==0 or not any(x in output for x in ['NO_PUBKEY','not signed','Missing key','couldn\'t be verified']):errors.append('APT did not demonstrate foreign signer rejection')
  else:
   if update.returncode:raise RuntimeError('trusted repository update failed: '+update.stderr)
-  install=dut('sudo env DEBIAN_FRONTEND=noninteractive apt-get '+options+' install -y field-edge-trial',visible=True,timeout=180)
+  kernel=(golden/'kernel-target-version').read_text().strip()
+  if not negative and kernel in ['', '(none)']:raise RuntimeError('No native Ubuntu kernel candidate captured')
+  install_command='sudo env DEBIAN_FRONTEND=noninteractive apt-get '+(options+' install -y field-edge-trial' if negative else 'install -y field-edge-trial '+shlex.quote('linux-image-virtual='+kernel))
+  metrics['requested_native_kernel_package']=None if negative else 'linux-image-virtual='+kernel
+  install=dut(install_command,visible=True,timeout=600)
   (d/'apt-install.txt').write_text(install.stdout+install.stderr);metrics['apt_install_exit']=install.returncode
   if a.case=='tampered':
    if install.returncode==0 or 'Hash Sum mismatch' not in install.stdout+install.stderr:errors.append('APT did not demonstrate corrupted package rejection')
@@ -68,9 +77,11 @@ try:
    while time.monotonic()-start<a.deadline:
     row={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds':time.monotonic()-start}
     try:
-     r=dut('cat /proc/sys/kernel/random/boot_id; /usr/local/bin/k3s --version; systemctl is-active field-fault; sudo journalctl -u field-fault -n 12 --no-pager',timeout=15)
+     r=dut('cat /proc/sys/kernel/random/boot_id; /usr/local/bin/k3s --version; uname -r; systemctl is-active field-fault; sudo journalctl -u field-fault -n 12 --no-pager',timeout=15)
      row['status']=r.stdout;row['ssh_exit']=r.returncode
      if 'v1.37.2+k3s1' in r.stdout and r.stdout.splitlines()[0]!=before_boot:
+      if 'kernel_after' not in metrics:
+       metrics['kernel_after']=dut('uname -r').stdout.strip();metrics['kernel_changed']=metrics['kernel_after']!=metrics['kernel_before']
       target_seen=True
       if not wan_cut:
        subprocess.run(['bash',str(s/'wan-impairment.sh'),'blackhole'],check=True);wan_cut=True

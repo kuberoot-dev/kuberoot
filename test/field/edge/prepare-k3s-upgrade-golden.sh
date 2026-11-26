@@ -17,6 +17,9 @@ bash "$FIELD_SCRIPTS/deploy-workload.sh"
 bash "$FIELD_SCRIPTS/prepare-observer.sh"
 # Install only the toolchain required by the fault injection, before measurements.
 "$FIELD_SCRIPTS/dut-command.sh" 'sudo apt-get update && sudo apt-get install -y nftables; k3s --version; uname -r; dpkg-query -W "linux-image*"; systemctl is-enabled unattended-upgrades' > "$D/upgrade-baseline-public.txt"
+"$FIELD_SCRIPTS/dut-command.sh" 'uname -r; dpkg-query -W linux-image-virtual; apt-cache policy linux-image-virtual' > "$D/kernel-upgrade-candidate.txt"
+"$FIELD_SCRIPTS/dut-command.sh" "apt-cache policy linux-image-virtual | awk '/Candidate:/ {print \$2}'" > "$D/kernel-target-version"
+test -s "$D/kernel-target-version"
 kubectl -n field get pods -o json > "$D/workload-inventory.json"
 bash "$FIELD_SCRIPTS/stop-dut.sh" "$D"
 # Current stable B is copied from its verified official release, not built locally.

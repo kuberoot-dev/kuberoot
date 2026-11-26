@@ -423,7 +423,7 @@ write, installed binary before reboot, and a verified new boot ID with uptime
 below 120 seconds. k3s is not assigned fictitious inactive slots or probation.
 Every seeded cut freezes a twice-observed phase using QMP, records that pause as
 the outage start, then kills QEMU. This laboratory package is not an upstream
-k3s Debian distribution; the Ubuntu kernel remains unchanged.
+k3s Debian distribution; E3's APT binary-write phase leaves the kernel unchanged. E2 positive cases additionally request the pinned native Ubuntu kernel candidate.
 
 E8's `replay-preloss-membership.py` boots and installs a separate blank worker
 with MAC `52:54:00:78:00:02`, then applies an unused 24-hour Membership issued
@@ -501,3 +501,11 @@ retired third node's original disk/config/snapshot into `n3-retired`; it is neve
 used as the replacement disk. Per-node MACs are saved with the VM definition.
 This keeps historical evidence on the 40 GiB PVC without changing measured
 running-disk format or comparing competitors concurrently.
+
+E2 k3s positive trials also request the native Ubuntu `linux-image-virtual`
+candidate captured during preparation, using Ubuntu's normal signed APT sources.
+The requested package version, before/after `uname -r`, native APT output and
+whether the kernel actually changed are recorded. If the cloud image already
+contains that candidate, an APT no-op is not called a kernel upgrade. Negative
+signer/hash trials stay confined to the laboratory package and must leave all
+boot files unchanged. No unattended-upgrades setting is disabled for the test.
