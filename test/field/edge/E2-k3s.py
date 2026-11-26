@@ -2,6 +2,8 @@
 """Real APT trust/integrity and k3s A→B trials with declared lab fault packaging."""
 import argparse,datetime,hashlib,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from qmp_events import Recorder as EventRecorder
+event_recorder=None
 from io_observation import enable as enable_io_observation
 from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
@@ -37,6 +39,7 @@ def inventory():
 try:
  enable_io_observation(d,env,metrics)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(s)],env=env,check=True)
+ event_recorder=EventRecorder(d);metrics['qmp_event_recording']=True
  for _ in range(150):
   r=gateway('curl --silent --max-time 2 http://10.78.0.11:30080/http')
   if r.returncode==0 and r.stdout=='W'*1024 and kube('get','--raw','/readyz').returncode==0:break
@@ -133,6 +136,7 @@ finally:
  collect_block_observations(d,metrics,errors)
  try:command(str(d/'qmp.sock'),'quit')
  except Exception:pass
+ if event_recorder:event_recorder.close()
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=15)
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))

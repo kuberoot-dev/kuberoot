@@ -5,6 +5,8 @@ A manual rollback is never counted as automatic recovery.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from qmp_events import Recorder as EventRecorder
+event_recorder=None
 from io_observation import enable as enable_io_observation
 from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
@@ -39,6 +41,7 @@ def boot_digest():
 try:
  enable_io_observation(d,env,metrics)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(s)],env=env,check=True)
+ event_recorder=EventRecorder(d);metrics['qmp_event_recording']=True
  for _ in range(150):
   r=kube('get','nodes','-o','json')
   if r.returncode==0:
@@ -138,6 +141,7 @@ finally:
  collect_block_observations(d,metrics,errors)
  try:command(str(d/'qmp.sock'),'quit')
  except Exception:pass
+ if event_recorder:event_recorder.close()
  time.sleep(2)
  if (d/'boot-partitions-before.json').exists():
   try:

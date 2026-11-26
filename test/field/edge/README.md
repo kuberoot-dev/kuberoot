@@ -757,3 +757,5 @@ saved observations only. Charts render in the pod after each E2 experiment;
 published runs without changing their measured records.
 
 The metadata-only E2 host I/O observer also records failed preadv64/fsync/fdatasync calls. Per-run source and library SHA256 distinguish observer revisions; successful flushes and data are not logged, and underlying calls/results/errno are preserved. A live QEMU keeps its mapped library revision until it exits.
+
+Subsequent E2 trials retain `qmp-events.jsonl`: a passive QMP connection sends only the capability handshake, then records actual events with receipt UTC. `metrics.qmp_event_recording` declares its presence. Older runs have block counters but no continuous QMP event log. This helps distinguish guest-visible I/O failures from failed wrapped host syscalls; neither is silently treated as a product defect.
