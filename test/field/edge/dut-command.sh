@@ -23,4 +23,4 @@ Host *
 CONFIG
  chmod 600 "$config"
 fi
-exec ssh -F "$config" field-dut "$@"
+exec ssh -F "$config" -o "UserKnownHostsFile=${DUT_KNOWN_HOSTS:-/work/field-edge/dut-known-hosts}" field-dut "$@"

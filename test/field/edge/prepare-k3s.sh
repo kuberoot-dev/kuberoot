@@ -3,7 +3,10 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require_stand
-D=$FIELD_ROOT/k3s
+D=${K3S_DIR:-$FIELD_ROOT/k3s}
+version=${K3S_VERSION:-v1.37.2+k3s1}
+sha=${K3S_SHA256:-265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda}
+[[ $D == "$FIELD_ROOT/"* && $version =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+$ && $sha =~ ^[0-9a-f]{64}$ ]] || exit 2
 mkdir -p "$D"
 KEY=$(cat "$FIELD_ROOT/gateway/key.pub")
 cat > "$D/user-data" <<YAML
@@ -25,7 +28,7 @@ write_files:
         - 127.0.0.1
         - 10.78.0.11
 runcmd:
-  - [bash, -euc, 'curl -fL --retry 3 -o /usr/local/bin/k3s https://github.com/k3s-io/k3s/releases/download/v1.37.2%2Bk3s1/k3s; echo "265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda  /usr/local/bin/k3s" | sha256sum -c; chmod +x /usr/local/bin/k3s; curl -fL --retry 3 -o /root/install-k3s.sh https://raw.githubusercontent.com/k3s-io/k3s/v1.37.2%2Bk3s1/install.sh; INSTALL_K3S_SKIP_DOWNLOAD=true sh /root/install-k3s.sh server --disable=traefik --disable=servicelb']
+  - [bash, -euc, 'curl -fL --retry 3 -o /usr/local/bin/k3s https://github.com/k3s-io/k3s/releases/download/$version/k3s; echo "$sha  /usr/local/bin/k3s" | sha256sum -c; chmod +x /usr/local/bin/k3s; curl -fL --retry 3 -o /root/install-k3s.sh https://raw.githubusercontent.com/k3s-io/k3s/$version/install.sh; INSTALL_K3S_SKIP_DOWNLOAD=true sh /root/install-k3s.sh server --disable=traefik --disable=servicelb']
 YAML
 cat > "$D/network-config" <<'YAML'
 version: 2
