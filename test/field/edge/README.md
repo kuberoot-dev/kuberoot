@@ -525,3 +525,5 @@ counts present. This evidence gate prevents boot-state rollback alone from
 being reported as application recovery. Observer overload invalidates the
 fixture. Incorrect HTTP content and acknowledged-record corruption remain
 separate measurements.
+
+`chart-storage.py` draws actual per-minute external W failures, API operation p99 and request counts, with UTC-derived fault/relief markers. Missing series produce no invented graph. `artifact_descriptions.py` distinguishes console, observer, integrity, boot-slot and chart evidence in the article manifest.
