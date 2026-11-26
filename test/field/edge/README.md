@@ -259,3 +259,10 @@ answers. A missing/nonfunctional injector is `invalid-fixture`, never a product
 rollback pass. Network faults affect both forwarded pod traffic and host-origin
 workload/DNS traffic; wrong-content NAT targets only the HTTP NodePort in both
 prerouting and output. The append NodePort and API port remain separate.
+
+After the four real E1 windows, `after-wan-prepare.sh` waits for their queue to
+finish before compiling images. Capacity preparation removes only stopped
+Phase-1 installer media whose every boot payload and trust file matches retained
+source artifacts. The public manifest retains original hashes, loader entries,
+and exact recreation commands; guest disks and credentials stay intact. FAT/GPT
+metadata of recreated media can differ. No cleanup runs during a measurement.

@@ -1,13 +1,32 @@
 #!/usr/bin/env python3
 """Lightweight Mac-side artifact copier and checkpoint publisher; no VM/builds."""
-import json,os,pathlib,re,subprocess,time
+import json,os,pathlib,re,subprocess,time,tarfile,shutil
 root=pathlib.Path('/Users/tym83/projects/kuberoot-articles')
 scripts=pathlib.Path(__file__).resolve().parent
 env=dict(os.environ,KUBECONFIG='/Users/tym83/workshop.txt')
 base=['kubectl','--context','admin@workshop','-n','tenant-kuberoot']
 def remote(*args):return subprocess.run(base+['exec','kr-edge-stand','--',*args],env=env,text=True,capture_output=True,timeout=90)
 def copy(src,dst):
- subprocess.run(base+['cp','kr-edge-stand:'+src,str(dst)],env=env,check=True,capture_output=True,timeout=90)
+ temporary=dst.with_name(dst.name+'.partial')
+ subprocess.run(base+['cp','kr-edge-stand:'+src,str(temporary)],env=env,check=True,capture_output=True,timeout=90)
+ temporary.replace(dst)
+def copy_many(transfers):
+ origins={origin:root/destination for destination,origin in transfers.items()}
+ assert all(str(dst).startswith(str(root/'02-edge')+'/') and '..' not in str(dst) for dst in origins.values())
+ assert all(src.startswith('/work/field-edge/') for src in origins)
+ process=subprocess.Popen(base+['exec','kr-edge-stand','--','tar','-cf','-','--',*origins],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+ received=set()
+ try:
+  with tarfile.open(fileobj=process.stdout,mode='r|') as archive:
+   for member in archive:
+    origin='/'+member.name.lstrip('/');assert member.isfile() and origin in origins
+    destination=origins[origin];temporary=destination.with_name(destination.name+'.partial')
+    with temporary.open('wb') as out:shutil.copyfileobj(archive.extractfile(member),out,1024*1024)
+    assert temporary.stat().st_size==member.size
+    temporary.replace(destination);received.add(origin)
+  assert process.wait(timeout=30)==0 and received==set(origins), 'incomplete artifact stream'
+ except BaseException:
+  process.kill();process.wait();raise
 while True:
  try:
   existing=[json.loads(x) for x in (root/'results/edge.jsonl').read_text().splitlines() if x.strip()]
@@ -19,10 +38,7 @@ while True:
    r=json.loads(line)
    if (r.get('scenario_id'),r.get('product'),r.get('time_utc')) in known:continue
    if r.get('artifact_transfers'):
-    for destination,origin in r['artifact_transfers'].items():
-     assert destination.startswith(('02-edge/img/','02-edge/raw/')) and '..' not in destination
-     assert origin.startswith('/work/field-edge/')
-     copy(origin,root/destination)
+    copy_many(r['artifact_transfers'])
     stamp=re.sub(r'[^0-9A-Za-z]', '-', r.get('time_utc','unknown'))
     stem=f"{r['scenario_id']}-{r['product']}-{r.get('repetition','run')}-{stamp}"
     record=root/'02-edge/raw'/f'{stem}-published-result.json'
