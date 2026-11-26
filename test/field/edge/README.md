@@ -636,3 +636,10 @@ this changes evidence storage only, never the fresh raw disks used for trials.
 `continue-after-main.py --parent PID` waits for the actual main runner to exit,
 requires ten valid v2 records for every main E2 case, then invokes the full
 table continuation. It never treats an early runner exit as completion.
+
+To stay within the fixed PVC quota, stopped E2 repeats after repetition 1 with
+status passed and zero ACK loss retire only their disposable raw clone after
+publication. A retirement manifest records the exact result and allocated
+bytes. The first disk of every case and every failed disk remain preserved;
+all client records, slot observations, transcripts and captures remain retained.
+This rule does not apply to other scenarios or any invalid/failed E2 trial.
