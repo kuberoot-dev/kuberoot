@@ -20,9 +20,8 @@ for lane in release-testkey main k3s talos; do
   export PRODUCT=k3s-v1.37.1-to-v1.37.2-lab-package
   bash "$FIELD_SCRIPTS/prepare-k3s-good-package.sh"
  elif [[ $lane == talos ]]; then
-  # Product-specific phase hooks must be validated before enabling them.
-  # Writes-only is an explicit partial lane; it cannot complete E3 by itself.
-  test -z "${COMPETITOR_PHASE_HOOK:-}" || export PHASE_HOOK=$COMPETITOR_PHASE_HOOK
+  test -f "$FIELD_ROOT/talos-good/image.json" || bash "$FIELD_SCRIPTS/prepare-talos-good-image.sh"
+  export PHASE_HOOK=$FIELD_SCRIPTS/talos-power-phase.py
  fi
  for REPETITION in $(seq 1 30); do
   export REPETITION

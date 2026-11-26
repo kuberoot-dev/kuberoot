@@ -434,3 +434,23 @@ Membership credential class, not all conceivable copied credentials. The
 second guest uses the same userspace LAN; a DHCP reservation is configured
 inside the owned gateway VM. The replay's serial capture and public result are
 published separately from private membership material.
+
+`E8-talos.py` is the native Talos etcd-snapshot reference. It streams a real
+snapshot to external local S3, shuts down and quarantines the source, then boots
+a blank replacement and calls `talosctl bootstrap --recover-from` with normal
+hash checking. It measures snapshot-marker recovery and restores application
+data from a separately captured snapshot. Native etcd snapshot data is plaintext
+and stays in private fixture storage; only its size/hash and public results are
+published. Machine configuration and snapshot secrets never enter transcripts.
+
+Talos E3 uses `talos-power-phase.py` with the official unchanged v1.14.7
+installer mirrored by digest. This is an explicitly declared same-version
+reinstall, not a fabricated release. It verifies native installer output for UKI
+writes, reads the actual EFI LoaderEntryDefault for selection changes, and uses
+the real Upgrade META tag `0x06` plus changed boot ID for fallback-pending boot.
+Talos removes that tag on Running+Ready; this is not kuberoot's probation timer.
+The implementation is checked against the pinned upstream
+[upgrade CLI](https://github.com/siderolabs/talos/blob/55021d7c274f6bc207bf18efa2a684a31a35cd9f/cmd/talosctl/cmd/talos/upgrade.go),
+[sd-boot implementation](https://github.com/siderolabs/talos/blob/55021d7c274f6bc207bf18efa2a684a31a35cd9f/internal/app/machined/pkg/runtime/v1alpha1/bootloader/sdboot/sdboot.go)
+and [fallback controller](https://github.com/siderolabs/talos/blob/55021d7c274f6bc207bf18efa2a684a31a35cd9f/internal/app/machined/pkg/controllers/runtime/drop_upgrade_fallback.go).
+These references define observation hooks, not test results.
