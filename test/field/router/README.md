@@ -50,3 +50,16 @@ The background idle sample on r2 begins after 600 seconds of settling and observ
 reboots or reset block counters; `plot-idle.py` labels short windows incomplete.
 QMP guest writes are not host/device flash write amplification. Service cgroups,
 QEMU RSS and guest Total−Free are separate metrics; none is MemAvailable.
+
+## Approved resume methodology
+
+The author superseded the bridge/tap requirement: use identical unprivileged
+QEMU socket multicast segments for every product, each with a distinct group
+and port. WAN delay/jitter/loss/bandwidth/blackholes run via tc netem/tbf/nft
+inside a dedicated Linux gateway VM. Management hostfwd is observation access;
+measured probes must traverse the DUT. Measure direct client/sink and Linux
+forwarding fabric ceilings first. Publish relative userspace-fabric throughput,
+never line rate; if all products hit that ceiling, report DUT CPU per Gbit/s.
+Storage faults use QEMU throttle/blkdebug or guest filesystem exhaustion; power
+cuts use kill -9 or QMP quit; clock faults use per-VM -rtc. No pod capabilities,
+namespace changes, host bridges or tun devices are needed or authorized.
