@@ -2,12 +2,15 @@
 """Publish only explicitly listed public evidence. Never walk private VM configs."""
 import argparse,json,pathlib,subprocess
 from gif_integrity import inspect as inspect_gif
+from upgrade_budget import apply as apply_upgrade_budget
 import importlib.util
 _spec=importlib.util.spec_from_file_location("archive_evidence",pathlib.Path(__file__).with_name("archive-evidence.py"));_archive=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_archive)
 p=argparse.ArgumentParser();p.add_argument('directory',type=pathlib.Path);p.add_argument('capture');a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.directory
 assert d.is_relative_to(root) and a.capture.startswith('t-') and '/' not in a.capture
 r=json.loads((d/'result.json').read_text());transfers={}
+apply_upgrade_budget(r,root/'results.jsonl')
+(d/'result.json').write_text(json.dumps(r,indent=2))
 for ext in ['gif','png','txt','cast','timing.json']:
  f=root/'captures'/(a.capture+'.'+ext);assert f.is_file(),str(f)
  transfers['02-edge/'+('img/' if ext in ['gif','png'] else 'raw/')+f.name]=str(f)

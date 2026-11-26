@@ -607,3 +607,9 @@ c/d reruns before E3. Preparation checkpoints retain interrupted work for
 diagnosis. A passing control and wrong-content rollback are required; the
 incompatible-state case must demonstrate OS rollback but may still fail its
 data gate. A fix PR and review of the captured evidence remain separate tasks.
+
+E2 kuberoot rollback timing is checked against three times (300 seconds plus
+the maximum of the ten measured E-B2 power-on-to-new-pod times), separately
+from the driver safety timeout. The reference product and allowance are stored
+in each applicable result. Fixed-main reruns use the same original-main
+reference; release-testkey uses the unchanged release baseline.
