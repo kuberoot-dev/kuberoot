@@ -19,7 +19,7 @@ if a.action=='collect':
   for context in config['contexts']:context['context']['user']='old-kubelet'
   private.write_text(json.dumps(config));private.chmod(0o600)
   request={'apiVersion':'authentication.k8s.io/v1','kind':'SelfSubjectReview'}
-  baseline=subprocess.run(['kubectl','--kubeconfig',str(private),'--request-timeout=10s','create','--raw','/apis/authentication.k8s.io/v1/selfsubjectreviews','-f','-'],input=json.dumps(request),text=True,capture_output=True)
+  baseline=subprocess.run(['kubectl','--request-timeout=10s','create','--raw','/apis/authentication.k8s.io/v1/selfsubjectreviews','-f','-'],input=json.dumps(request),text=True,capture_output=True,env=dict(os.environ,KUBECONFIG=str(private)))
   identity=json.loads(baseline.stdout).get('status',{}).get('userInfo',{}) if baseline.returncode==0 else None
   evidence={'old_node':name,'identity':identity,'exit_code':baseline.returncode,'diagnosis':baseline.stderr}
   (out/'old-identity-before.json').write_text(json.dumps(evidence,indent=2))
@@ -28,7 +28,7 @@ if a.action=='collect':
  print('Saved old kubelet client credential privately via diagnostic Pod; no key material published.')
 else:
  request={'apiVersion':'authentication.k8s.io/v1','kind':'SelfSubjectReview'}
- r=subprocess.run(['kubectl','--kubeconfig',str(private),'--request-timeout=10s','create','--raw','/apis/authentication.k8s.io/v1/selfsubjectreviews','-f','-'],input=json.dumps(request),text=True,capture_output=True)
+ r=subprocess.run(['kubectl','--request-timeout=10s','create','--raw','/apis/authentication.k8s.io/v1/selfsubjectreviews','-f','-'],input=json.dumps(request),text=True,capture_output=True,env=dict(os.environ,KUBECONFIG=str(private)))
  identity=None
  if r.returncode==0:identity=json.loads(r.stdout).get('status',{}).get('userInfo',{})
  # An unavailable server or authorization-denied response is not proof of revocation.
