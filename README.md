@@ -472,6 +472,25 @@ A node boots from media (`mkimage` writes a disk image with the kernel, the init
 
 An `Upgrade` downloads a signed release bundle, writes it to the inactive slot and boots it on probation: unless every service runs without restarting and the node is Ready within five minutes, the node reboots, and once the attempts run out it boots the previous slot again.
 
+For application correctness, set `spec.healthChecks` on the `Upgrade`. Each HTTP(S) GET must return its expected status (200 by default); `bodySHA256` optionally checks the complete body, up to 1 MiB. For example, a local NodePort can expose an application-specific readiness check:
+
+```yaml
+apiVersion: node.kuberoot.dev/v1alpha1
+kind: Upgrade
+metadata:
+  name: application-checked
+spec:
+  url: https://releases.example.org/kuberoot-next-amd64.tar
+  reboot: true
+  healthChecks:
+    - url: http://127.0.0.1:30080/health
+      statusCode: 200
+```
+
+At most eight checks share a three-second request budget per assessment. They run from the node, without HTTP proxies, redirects or client credentials; HTTPS validates the server certificate against system trust roots. Point checks at the local application instance when the purpose is to detect a failed node: a load-balanced healthy peer can hide it. The checks must pass alongside service/API health for the existing 30-second window, within the existing five-minute probation deadline. The policy is written atomically with the new slot's boot entry before boot selection changes and survives reboots and boot-counter renames. Malformed policies fail the assessment. No checks preserves the previous service/API-only behavior.
+
+Both the installed node API and the target release must implement this field; older target binaries do not enforce it. Upgrade to a supporting release first. Application checks decide whether to keep the new OS slot; they do not restore persistent data or undo an incompatible database migration. Keep application backups and backward-compatible migrations even when automatic OS rollback is enabled.
+
 Control planes of a cluster on etcd take an upgrade one at a time, and the cluster keeps answering while they do. `hack/e2e/etcd-ha.sh` checks this on three QEMU machines, run by the `e2e-etcd` workflow on GitHub's runners for every pull request that changes the image's components, the store, or how nodes install, upgrade and back up: three control planes installed from the previous image take the current one with an `Upgrade` each, one after the other, while a marker object is written through one API server and read back through another every two seconds; one of them is rolled back to its old slot and forward again, and comes back as the same member of the store; then a `StateBackup` of the first is uploaded encrypted, the cluster is lost, and the first control plane is installed from it on a blank disk with the marker as it was at the backup. The move from etcd 3.7.2 to 3.7.3 (Kubernetes 1.37.1 to 1.37.2) passed it without a failed write or read.
 
 ## Backups of the control plane

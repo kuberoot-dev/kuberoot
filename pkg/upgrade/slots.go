@@ -4,6 +4,7 @@
 package upgrade
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,15 +37,17 @@ const (
 
 // Entry is the boot entry of one slot as found on the EFI partition.
 type Entry struct {
-	Slot    string
-	File    string // file name, including any boot counter
-	Version int    // sort version: the highest good-or-trying entry boots by default
-	Release string // kuberoot release in the title
-	State   string
-	Left    int
-	Done    int
-	Booted  bool
-	Default bool
+	Slot             string
+	File             string // file name, including any boot counter
+	Version          int    // sort version: the highest good-or-trying entry boots by default
+	Release          string // kuberoot release in the title
+	State            string
+	Left             int
+	Done             int
+	Booted           bool
+	Default          bool
+	HealthChecks     []HealthCheck
+	HealthCheckError error
 }
 
 var counter = regexp.MustCompile(`^kuberoot-([ab])(?:\+(\d+)(?:-(\d+))?)?\.conf$`)
@@ -125,7 +128,11 @@ func readEntriesIn(dir, current string) ([]Entry, error) {
 				e.State = StateBad
 			}
 		}
-		raw, _ := os.ReadFile(filepath.Join(dir, f.Name()))
+		raw, readErr := os.ReadFile(filepath.Join(dir, f.Name()))
+		if readErr != nil {
+			return nil, readErr
+		}
+		e.HealthChecks, e.HealthCheckError = healthPolicy(string(raw))
 		for _, line := range strings.Split(string(raw), "\n") {
 			if v, ok := strings.CutPrefix(line, "version "); ok {
 				e.Version, _ = strconv.Atoi(strings.TrimSpace(v))
@@ -153,6 +160,14 @@ func readEntriesIn(dir, current string) ([]Entry, error) {
 // goes first, so a write that breaks off halfway never leaves an entry that
 // points at a half-written root.
 func Stage(a bootdisk.Artifacts, report func(done, total int64)) (string, error) {
+	return StageWithHealthChecks(a, nil, report)
+}
+
+// StageWithHealthChecks binds application checks to the new slot before it is selectable.
+func StageWithHealthChecks(a bootdisk.Artifacts, checks []HealthCheck, report func(done, total int64)) (string, error) {
+	if err := ValidateHealthChecks(checks); err != nil {
+		return "", err
+	}
 	current := CurrentSlot()
 	if current == "" {
 		return "", fmt.Errorf("not booted from an installed slot")
@@ -181,7 +196,7 @@ func Stage(a bootdisk.Artifacts, report func(done, total int64)) (string, error)
 				return err
 			}
 		}
-		return addProbationEntry(entriesDir, bootdisk.SlotEntry(a, target, ""), CurrentSlot())
+		return addProbationEntryWithHealthChecks(entriesDir, bootdisk.SlotEntry(a, target, ""), CurrentSlot(), checks)
 	})
 }
 
@@ -221,6 +236,13 @@ func retireSlot(dir, slot string) error {
 // addProbationEntry writes a slot's entry above every other one, with Tries
 // boot attempts.
 func addProbationEntry(dir string, entry bootdisk.Entry, current string) error {
+	return addProbationEntryWithHealthChecks(dir, entry, current, nil)
+}
+
+func addProbationEntryWithHealthChecks(dir string, entry bootdisk.Entry, current string, checks []HealthCheck) error {
+	if err := ValidateHealthChecks(checks); err != nil {
+		return err
+	}
 	entries, err := readEntriesIn(dir, current)
 	if err != nil {
 		return err
@@ -231,7 +253,15 @@ func addProbationEntry(dir string, entry bootdisk.Entry, current string) error {
 	}
 	entry.Version = strconv.Itoa(top + 1)
 	name := fmt.Sprintf("%s+%d.conf", entry.ID, Tries)
-	return atomicfile.WriteFile(filepath.Join(dir, name), []byte(entry.String()), 0o644)
+	raw := entry.String()
+	if len(checks) > 0 {
+		policy, err := json.Marshal(checks)
+		if err != nil {
+			return err
+		}
+		raw += "\n" + healthPrefix + string(policy) + "\n"
+	}
+	return atomicfile.WriteFile(filepath.Join(dir, name), []byte(raw), 0o644)
 }
 
 // Probation reports whether the running slot is on probation and whether

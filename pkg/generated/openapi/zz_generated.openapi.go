@@ -96,6 +96,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupList":       schema_pkg_apis_node_v1alpha1_StateBackupList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus":     schema_pkg_apis_node_v1alpha1_StateBackupStatus(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Upgrade":               schema_pkg_apis_node_v1alpha1_Upgrade(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeHealthCheck":    schema_pkg_apis_node_v1alpha1_UpgradeHealthCheck(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeList":           schema_pkg_apis_node_v1alpha1_UpgradeList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec":           schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus":         schema_pkg_apis_node_v1alpha1_UpgradeStatus(ref),
@@ -3381,6 +3382,41 @@ func schema_pkg_apis_node_v1alpha1_Upgrade(ref common.ReferenceCallback) common.
 	}
 }
 
+func schema_pkg_apis_node_v1alpha1_UpgradeHealthCheck(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UpgradeHealthCheck probes an application from the node during probation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"statusCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StatusCode defaults to 200.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"bodySHA256": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BodySHA256 checks the complete response body, limited to 1 MiB.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"url"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_node_v1alpha1_UpgradeList(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3456,10 +3492,30 @@ func schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref common.ReferenceCallback) com
 							Format:      "",
 						},
 					},
+					"healthChecks": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HealthChecks must pass throughout the boot probation window. Both installed and target versions must support application health checks.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeHealthCheck"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"url"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeHealthCheck"},
 	}
 }
 

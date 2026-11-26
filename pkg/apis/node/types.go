@@ -252,6 +252,19 @@ type UpgradeSpec struct {
 	Sha256 string `json:"sha256,omitempty"`
 	// Reboot into the new slot when staged.
 	Reboot bool `json:"reboot,omitempty"`
+	// HealthChecks must pass throughout the boot probation window.
+	// Both installed and target versions must support application health checks.
+	// +listType=atomic
+	HealthChecks []UpgradeHealthCheck `json:"healthChecks,omitempty"`
+}
+
+// UpgradeHealthCheck probes an application from the node during probation.
+type UpgradeHealthCheck struct {
+	URL string `json:"url"`
+	// StatusCode defaults to 200.
+	StatusCode int32 `json:"statusCode,omitempty"`
+	// BodySHA256 checks the complete response body, limited to 1 MiB.
+	BodySHA256 string `json:"bodySHA256,omitempty"`
 }
 
 type UpgradeStatus struct {
