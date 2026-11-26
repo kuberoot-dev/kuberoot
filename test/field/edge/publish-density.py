@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import datetime,json,os,pathlib
+import datetime,json,os,pathlib,sys
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -15,6 +15,7 @@ axes[0].set_ylabel('Guest RAM (MiB)');axes[0].legend()
 axes[1].plot(x,[r['api_p99_seconds']*1000 for r in points],'o-');axes[1].axhline(1000,color='red',linestyle='--',label='1 s threshold');axes[1].set_yscale('log');axes[1].set_ylabel('API p99 (ms, log scale)');axes[1].set_xlabel('Ready test pods');axes[1].legend()
 for ax in axes:ax.grid(alpha=.3)
 fig.suptitle(product+'\nDensity, 2 vCPU / 4 GiB');fig.tight_layout();chart='chart-density-'+product+'.png';fig.savefig(root/'captures'/chart,dpi=150)
+if '--chart-only' in sys.argv:raise SystemExit(0)
 name='t-E-B3-'+product;transfers={}
 for ext in ['gif','png','txt','cast','timing.json']:
  transfers['02-edge/'+('img/' if ext in ['gif','png'] else 'raw/')+name+'.'+ext]=str(root/'captures'/(name+'.'+ext))

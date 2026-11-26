@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Recompress stopped owned Phase-1 evidence without changing logical bytes."""
-import datetime,hashlib,json,pathlib,shutil,subprocess
+import datetime,hashlib,json,pathlib,shutil,subprocess,os
 root=pathlib.Path('/work');manifest=root/'field-edge/phase1-lossless-compression.jsonl'
 paths=[p for name in ['media-demo','fleet','stand','upgrade-demo','fix-validation'] for p in (root/name).glob('*/sys.qcow2')]
 done={json.loads(x)['source'] for x in manifest.read_text().splitlines()} if manifest.exists() else set()
@@ -21,3 +21,10 @@ for source in sorted(paths,key=lambda p:p.stat().st_blocks):
  row={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source':str(source),'old_file_sha256':oldhash,'new_file_sha256':newhash,'allocated_before':before,'allocated_after':after,'virtual_size':info['virtual-size'],'logical_bytes_compared_equal':True,'method':'qemu-img compressed re-encoding; no guest contents removed'}
  with manifest.open('a') as f:f.write(json.dumps(row)+'\n')
  print(json.dumps(row),flush=True)
+
+# Existing measured data only. Refresh readability without publishing new runs.
+scripts=pathlib.Path(__file__).resolve().parent
+subprocess.run(['python3',str(scripts/'chart-boots.py')],check=True)
+for product in ['kuberoot-v0.1.0','kuberoot-main-1b29543','k3s-v1.37.2-k3s1','talos-v1.14.7']:
+ subprocess.run(['python3',str(scripts/'publish-density.py'),'--chart-only'],env=dict(os.environ,PRODUCT=product),check=True)
+print('Existing baseline charts refreshed; no new result records added.',flush=True)
