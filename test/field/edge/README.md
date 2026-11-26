@@ -685,3 +685,22 @@ include current PVC headroom. `archive-e2-retry-boundary.py` records the exact
 incident-specific Mac maintenance invocation: it waits for the retry and its
 rendered capture, verifies three unused Phase-1 disks in the established local
 archive, then resumes the outer queue. The DUT is never paused for archiving.
+
+### Direct-I/O diagnosis after a second preboot failure
+
+Main pod-network repetition 2 also failed before target boot: 32 QEMU write
+errors, with more than 5 GiB free on the PVC and no new OOM/memory-limit events.
+The result is invalid and its disk/captures are retained. `direct-io-alignment-probe.c`
+is compiled only in the pod and creates a new 64 KiB scratch file using O_EXCL.
+It records STATX_DIOALIGN and real scalar/vector direct-I/O return codes; no
+measured image is opened for writing. Local statx reports memory alignment 512
+and offset/length alignment 4096. Aligned scalar and split-vector tests pass.
+
+`qemu-io-diagnostic.c` is a diagnostic-only LD_PRELOAD pass-through for QEMU's
+pread64/pwrite64/pwritev64 calls. It does not modify calls or results and logs
+only offsets, lengths, alignment counts and return codes, never guest bytes.
+`io-diagnostic-scene.sh` uses it in a separate non-scored experiment; its timing
+must not be mixed into product results. Runtime ptrace is unavailable, and no
+additional privileges are requested. Initial live QEMU probes correctly select
+4096 request / 512 buffer alignment, so the alignment-probing hypothesis is
+not yet established for the observed failures.
