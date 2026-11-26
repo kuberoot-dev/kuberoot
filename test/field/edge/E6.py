@@ -94,7 +94,7 @@ finally:
  except Exception:pass
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=10)
-  if vga:vga.wait(timeout=60)
+  if vga:assert vga.wait(timeout=60)==0, 'VGA recorder failed; repair capture before publication'
   subprocess.run(['python3',str(scripts/'render-serial.py'),str(d/'serial.cast')],check=True)
  subprocess.run([str(scripts/'wan-impairment.sh'),'clean'],check=True)
 record={'scenario_id':'E6','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'fault_seed':None,'fault_phase':a.case,'rtc_requested_utc':rtc.isoformat(),'ca_expiry':ca,'vcpu':2,'ram_mib':4096,'topology':'fresh raw + OVMF clone; RTC fault; WAN/NTP blackholed in gateway; external strict-TLS observer','metrics':metrics,'manual_actions':manual,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'outage_seconds':None,'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'status':'invalid-fixture' if metrics.get('driver_overloads') else 'failed' if errors else 'passed-TLS-W','reason':'; '.join(errors) if errors else 'strict TLS preserved and API/W recovered after documented time correction','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)],'measurement_notes':['RTC request is not assumed equal to guest wall time: HTTP Date, mutable-guest date, serial/VGA and API errors retain observations.','No insecure TLS flag or client clock change is used.']}

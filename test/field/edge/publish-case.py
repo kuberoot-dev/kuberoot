@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish only explicitly listed public evidence. Never walk private VM configs."""
 import argparse,json,pathlib,subprocess
-from PIL import Image
+from gif_integrity import inspect as inspect_gif
 import importlib.util
 _spec=importlib.util.spec_from_file_location("archive_evidence",pathlib.Path(__file__).with_name("archive-evidence.py"));_archive=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_archive)
 p=argparse.ArgumentParser();p.add_argument('directory',type=pathlib.Path);p.add_argument('capture');a=p.parse_args()
@@ -33,11 +33,7 @@ for filename in ['console.gif','console.png','timing.json']:
 gifs=[]
 for target,source in list(transfers.items()):
  if not target.endswith('.gif'):continue
- path=pathlib.Path(source);picture=Image.open(path);duration=0
- for frame in range(picture.n_frames):picture.seek(frame);duration+=picture.info.get('duration',0)/1000
- row={'artifact':target,'bytes':path.stat().st_size,'frames':picture.n_frames,'duration_seconds':duration,'pixels':picture.size}
- assert row['bytes']<8*1024**2 and 15<=duration<=60,row
- gifs.append(row)
+ gifs.append(inspect_gif(source,target))
 manifest=d/'public-gif-verification.json';manifest.write_text(json.dumps(gifs,indent=2))
 transfers['02-edge/raw/'+a.capture+'-public-gif-verification.json']=str(manifest)
 transfers=_archive.archive_transfers(transfers)

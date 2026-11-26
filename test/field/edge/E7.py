@@ -88,6 +88,6 @@ finally:
  except Exception:pass
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=15);subprocess.run(['python3',str(s/'render-serial.py'),str(d/'serial.cast')],check=True)
- if vga:vga.wait(timeout=60)
+ if vga:assert vga.wait(timeout=60)==0, 'VGA recorder failed; repair capture before publication'
 record={'scenario_id':'E7','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'node_count':3,'topology':'3 control planes; shared multicast peer LAN; separate user-net API observation; W via healthy node 1','fault_seed':None,'fault_phase':'stop node 3; block its observed Kube API path while host API remains; blank replacement with new MAC','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('replacement_ready_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':metrics.get('operator_actions',[]),'status':'invalid-fixture' if not fault_injected else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'fault detection, replacement, revocation and membership gates passed','time_utc':stamp(),'artifact_paths':[str(d)],'measurement_notes':['API-path fault removes only the QEMU management port forward. The API server process itself is not stopped.','Application append storage remains on surviving node 1; this is not a claim of replicated-PVC failover.']}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

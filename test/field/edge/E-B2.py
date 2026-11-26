@@ -82,7 +82,7 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
   if recorder:
    (d/'serial.stop').touch()
    recorder.wait(timeout=10)
-   if vga:vga.wait(timeout=60)
+   if vga:assert vga.wait(timeout=60)==0, 'VGA recorder failed; repair capture before publication'
    timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
    subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
    hold=str(max(5,15.1-timing['playback_seconds']))

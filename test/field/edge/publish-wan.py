@@ -2,6 +2,7 @@
 """Evaluate E1 against real observer records, including the pre-reset WAN outage."""
 import datetime,json,os,pathlib,subprocess
 import importlib.util
+from gif_integrity import inspect as inspect_gif
 _spec=importlib.util.spec_from_file_location("archive_evidence",pathlib.Path(__file__).with_name("archive-evidence.py"));_archive=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_archive)
 root=pathlib.Path('/work/field-edge');product=os.environ['PRODUCT'];name=os.environ['RUN_NAME'];d=root/'results'/name
 metrics=json.loads((d/'recovery.json').read_text());metrics.update(json.loads((d/'durability.json').read_text()))
@@ -17,8 +18,8 @@ metrics['gateway_conntrack_count_peak']=max(x['conntrack']['count'] for x in mon
 metrics['gateway_conntrack_drop_delta']=monitor[-1]['conntrack']['drop']-monitor[0]['conntrack']['drop']
 metrics['gateway_monitor_samples']=len(monitor)
 errors=[]
-fixture_invalid=metrics['gateway_conntrack_drop_delta']!=0 or metrics['gateway_conntrack_max']<65536
-if fixture_invalid:errors.append('gateway conntrack fixture invalid')
+fixture_invalid=metrics['gateway_conntrack_drop_delta']!=0 or metrics['gateway_conntrack_max']<65536 or bool(metrics['driver_overloads'])
+if metrics['gateway_conntrack_drop_delta']!=0 or metrics['gateway_conntrack_max']<65536:errors.append('gateway conntrack fixture invalid')
 if not local or metrics['wan_blackhole_before_reset_failures']:errors.append('local requests failed before the hard reset')
 r=metrics.get('recovery_seconds_first_60s_sustained_success')
 if r is None or r>180:errors.append('W did not recover within 180 seconds')
@@ -50,6 +51,11 @@ subprocess.run(['python3',str(pathlib.Path(__file__).resolve().parent/'chart-wan
 transfers['02-edge/img/chart-'+name+'.png']=str(d/'wan-curve.png')
 comparison='chart-wan-'+os.environ.get('WAN_RUN_LABEL','gateway-v2')+'-recovery.png'
 if (root/'captures'/comparison).exists():transfers['02-edge/img/'+comparison]=str(root/'captures'/comparison)
+verified=[inspect_gif(source,target) for target,source in transfers.items() if target.endswith('.gif')]
+proof=d/'public-gif-verification.json';proof.write_text(json.dumps(verified,indent=2))
+transfers['02-edge/raw/'+name+'-public-gif-verification.json']=str(proof)
+verification=root/'captures'/(capture+'-verification.json');assert verification.is_file()
+transfers['02-edge/raw/'+verification.name]=str(verification)
 transfers=_archive.archive_transfers(transfers)
 record['artifact_transfers']=transfers
 record['artifact_paths']=list(transfers)
