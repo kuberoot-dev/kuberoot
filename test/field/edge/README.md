@@ -601,3 +601,9 @@ checks are included in the public Upgrade request and result. Original main
 and release trials never receive these options. State-format damage and ACK
 loss remain failures even if the OS correctly rolls back; no data repair is
 performed. Build and rerun scripts are preparation, not measured evidence.
+
+`run-table-tail.sh` runs all original E2 comparisons, then the fixed control and
+c/d reruns before E3. Preparation checkpoints retain interrupted work for
+diagnosis. A passing control and wrong-content rollback are required; the
+incompatible-state case must demonstrate OS rollback but may still fail its
+data gate. A fix PR and review of the captured evidence remain separate tasks.

@@ -7,6 +7,7 @@ source "$(dirname "$0")/lib.sh"
 require_stand
 bash "$FIELD_SCRIPTS/run-e2-comparisons.sh"
 python3 "$FIELD_SCRIPTS/audit-suite.py" "$FIELD_ROOT/results.jsonl" --through E2
+bash "$FIELD_SCRIPTS/prepare-and-run-health-tests.sh"
 for pair in E3:run-power-tests E4:run-storage-tests E5:run-etcd-tests E6:run-clock-tests E7:run-replacement-tests E8:run-restore-tests E9:run-window-tests E10:run-fleet-tests;do
  scenario=${pair%%:*};script=${pair#*:}
  date -u
