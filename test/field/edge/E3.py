@@ -16,7 +16,7 @@ base=a.golden/'system.qcow2'
 if not base.exists():
  run(['qemu-img','convert','-c','-f','raw','-O','qcow2',a.golden/'system.raw',base])
  run(['qemu-img','compare','-f','raw','-F','qcow2',a.golden/'system.raw',base])
-phases=['writes','download','inactive-write','boot-selection','probation'] if a.phase_hook else ['writes']
+phases=os.environ.get('POWER_PHASES','writes,download,inactive-write,boot-selection,probation').split(',') if a.phase_hook else ['writes']
 for repetition in ([a.repetition-1] if a.repetition else range(30)):
  rng=random.Random(a.seed+repetition)
  phase=phases[repetition%len(phases)];name=f'E3-{a.product}-{repetition+1:02d}';d=a.output/name;d.mkdir()

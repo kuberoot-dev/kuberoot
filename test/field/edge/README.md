@@ -415,3 +415,22 @@ The Talos 1.14 HA config uses the schemas for
 and [KubeFlannelCNIConfig](https://docs.siderolabs.com/talos/v1.14/reference/configuration/kubernetes/kubeflannelcniconfig).
 Merged configuration is validated by the pinned `talosctl` before apply.
 These scripts are preparation until their actual result records exist.
+
+E3's k3s APT lane uses `prepare-k3s-good-package.sh` and
+`k3s-power-phase.py`: the unchanged official B binary is packaged without a fault
+agent. Its actual phases are partial APT download, partial dpkg `.dpkg-new`
+write, installed binary before reboot, and a verified new boot ID with uptime
+below 120 seconds. k3s is not assigned fictitious inactive slots or probation.
+Every seeded cut freezes a twice-observed phase using QMP, records that pause as
+the outage start, then kills QEMU. This laboratory package is not an upstream
+k3s Debian distribution; the Ubuntu kernel remains unchanged.
+
+E8's `replay-preloss-membership.py` boots and installs a separate blank worker
+with MAC `52:54:00:78:00:02`, then applies an unused 24-hour Membership issued
+before the source snapshot. The restored control plane remains online. A real
+new Node demonstrates acceptance; an unavailable API/timeout does not prove
+rejection. The initial source disk remains quarantined. This tests the saved
+Membership credential class, not all conceivable copied credentials. The
+second guest uses the same userspace LAN; a DHCP reservation is configured
+inside the owned gateway VM. The replay's serial capture and public result are
+published separately from private membership material.

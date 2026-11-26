@@ -32,7 +32,7 @@ secret_path=private_json('backup-secret.json',secret);kube('apply','-f',str(secr
 kube('create','configmap','field-restore-marker','--from-literal=value=before-snapshot')
 # A pre-loss, unused, still-valid enrollment credential is deliberately saved.
 # This tests replay after recovery; it does not claim to revoke all copied keys.
-ticket={'apiVersion':'node.kuberoot.dev/v1alpha1','kind':'JoinTicket','metadata':{'name':'field-preloss-ticket'},'spec':{'nodeName':'kuberoot-780002','role':'Worker','address':'10.78.0.12'}}
+ticket={'apiVersion':'node.kuberoot.dev/v1alpha1','kind':'JoinTicket','metadata':{'name':'field-preloss-ticket'},'spec':{'nodeName':'kuberoot-780002','role':'Worker','address':'10.78.0.12','ttl':'24h'}}
 kube('create','-f','-',node=True,body=json.dumps(ticket))
 for _ in range(60):
  membership=kube('get','jointicket','field-preloss-ticket','-o','jsonpath={.status.membership}',node=True)

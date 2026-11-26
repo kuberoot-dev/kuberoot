@@ -5,7 +5,7 @@ source "$(dirname "$0")/lib.sh"
 for lane in release-testkey main k3s talos; do
  source "$FIELD_SCRIPTS/select-product.sh" "$lane"
  export GOLDEN=$VM_DIR
- unset PHASE_HOOK GOOD_BUNDLE_URL GOOD_BUNDLE_SHA256
+ unset PHASE_HOOK GOOD_BUNDLE_URL GOOD_BUNDLE_SHA256 POWER_PHASES
  # Published v0.1.0 has no signed bundle asset. Its upgrade lane is the
  # explicitly named lab-trust repack, with unchanged release binaries.
  if [[ $lane == main ]]; then
@@ -14,7 +14,12 @@ for lane in release-testkey main k3s talos; do
  elif [[ $lane == release-testkey ]]; then
   source "$FIELD_SCRIPTS/select-good-bundle.sh" release-testkey
   export PHASE_HOOK=$FIELD_SCRIPTS/upgrade-power-phase.py
- elif [[ $lane == talos || $lane == k3s ]]; then
+ elif [[ $lane == k3s ]]; then
+  export GOLDEN=$FIELD_ROOT/k3s-upgrade-a KUBECONFIG=$FIELD_ROOT/k3s-upgrade-a/kubeconfig SEED_MEDIA=$FIELD_ROOT/k3s-upgrade-a/seed.iso DUT_KNOWN_HOSTS=$FIELD_ROOT/k3s-upgrade-a/known_hosts
+  export PHASE_HOOK=$FIELD_SCRIPTS/k3s-power-phase.py POWER_PHASES=writes,download,package-write,installed-before-reboot,early-boot
+  export PRODUCT=k3s-v1.37.1-to-v1.37.2-lab-package
+  bash "$FIELD_SCRIPTS/prepare-k3s-good-package.sh"
+ elif [[ $lane == talos ]]; then
   # Product-specific phase hooks must be validated before enabling them.
   # Writes-only is an explicit partial lane; it cannot complete E3 by itself.
   test -z "${COMPETITOR_PHASE_HOOK:-}" || export PHASE_HOOK=$COMPETITOR_PHASE_HOOK

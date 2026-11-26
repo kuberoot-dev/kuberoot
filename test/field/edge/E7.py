@@ -47,7 +47,7 @@ try:
  else:raise RuntimeError('node did not recover before separate API-path fault')
  api_access(False);fault=time.monotonic();r=kube('get','--raw','/readyz',index=3);metrics['kubernetes_api_path_failed']=r.returncode!=0;(d/'api-path-failure.txt').write_text(r.stdout+r.stderr)
  if a.product.startswith('kuberoot'):
-  e=dict(env,KUBECONFIG=str(h/'trust/admin.kubeconfig'));cmd=['kubectl','--server=https://127.0.0.1:25300','--request-timeout=5s','get','osconfigs'];typed(['export','KUBECONFIG='+e['KUBECONFIG']]);typed(cmd);node_api=subprocess.run(cmd,env=e,text=True,capture_output=True,timeout=8)
+  e=dict(env,KUBECONFIG=str(h/'trust/admin.kubeconfig'));cmd=['kubectl','--server=https://127.0.0.1:25300','--tls-server-name='+oldname+'.kuberoot-node.kube-system.svc','--request-timeout=5s','get','osconfigs'];typed(['export','KUBECONFIG='+e['KUBECONFIG']]);typed(cmd);node_api=subprocess.run(cmd,env=e,text=True,capture_output=True,timeout=8)
  elif a.product.startswith('talos'):
   cmd=['talosctl','--talosconfig',str(h/'config/talosconfig'),'--endpoints','127.0.0.1:25300','--nodes','10.79.0.13','version'];typed(cmd);node_api=subprocess.run(cmd,text=True,capture_output=True,timeout=15)
  else:node_api=None;metrics['separate_node_api']='unsupported: k3s has no independent host-management API in this product lane'
