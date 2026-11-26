@@ -4,6 +4,7 @@ Use a separate test-key image for injected signed faults; never bypass trust.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from upgrade_observations import evaluate as evaluate_service
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.output;assert d.is_relative_to(root)
 required=(a.golden/'system.raw').stat().st_blocks*512+1024**3
@@ -100,6 +101,7 @@ try:
  time.sleep(65)
  gateway(f'touch /home/observer/{name}.stop');time.sleep(4)
  (d/'observer.jsonl').write_text(gateway(f'cat /home/observer/{name}.jsonl').stdout)
+ service_metrics,service_errors=evaluate_service(d/'observer.jsonl');metrics.update(service_metrics);errors.extend(service_errors)
  with (d/'records').open('wb') as f:subprocess.run([G,'curl --fail --max-time 20 http://10.78.0.11:30081/records'],stdout=f,timeout=30,check=True)
  check=subprocess.run(['python3',str(scripts/'check-records.py'),str(d/'observer.jsonl'),str(d/'records')],text=True,capture_output=True)
  metrics.update(json.loads(check.stdout))
@@ -123,5 +125,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed faulty bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if not negative and not fault_verified else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed faulty bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

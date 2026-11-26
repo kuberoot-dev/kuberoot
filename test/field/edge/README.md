@@ -1,4 +1,4 @@
-# Edge field tests — preparation checkpoint
+# Edge field tests
 
 The binding experiment plan is `kuberoot-articles/test-suites/edge.md`.
 This branch starts at kuberoot `b365f53` (origin/main fetched 2026-11-25).
@@ -29,19 +29,19 @@ Mac activity is restricted to source editing, git and kubectl.
   test outcome. Run with `/work/bin` on PATH.
 - `lib.sh`: guarded 2-vCPU/4096-MiB/32-GiB raw `cache=none` UEFI QEMU launch,
   userspace multicast fixture, and command typing. It refuses missing prerequisites.
-  The revised launch fixture still requires live validation.
+  The launch fixture has been used for the completed baseline and corrected E1 release run.
   Before three-VM tests stop the old Phase 1 VM; total guest RAM must fit 14Gi.
 - `workload.py`: `/http` returns exactly 1024 bytes; `/append` accepts numbered
   1024-byte records and acknowledges only after fsync; `/records` exports bytes
   for post-recovery comparison. Run HTTP as ten replicas, append as one replica
-  on its own persistent volume. Container pinning/preloading and deployment are
-  still required; this file alone is not a deployed W workload.
+  on its own persistent volume. The cached golden images contain the digest-pinned workload; each trial
+  verifies its availability before fault injection.
 - `observer.py`: outside-DUT 20 HTTP requests/s and 10 appends/s. Records UTC,
   monotonic timing, response correctness, failures and fsyncs its evidence file.
   Dispatch exhaustion is an explicit driver error, not reduced offered load.
   Use a new append data file and a new observer output per repetition; IDs start
   at zero. Continue the same observer across fault/recovery; do not restart it
-  against existing records. API ConfigMap probes are not yet implemented.
+  against existing records. The ConfigMap create/read/delete observer runs at 0.2 Hz.
 - `check-records.py OBSERVER RECOVERED`: compares acknowledged IDs and exact
   contents, reports missing/corrupt/duplicate records. Unacknowledged successful
   writes are valid unknown outcomes and are not counted as acknowledged loss.
@@ -50,9 +50,9 @@ Mac activity is restricted to source editing, git and kubectl.
   of deliberate loss. It tests the harness, not virtual power-loss durability.
 
 The self-test passed inside the workshop pod. No image build or VM ran on Mac.
-The next step is product pinning/preload,
-clean disk installation and E-B1, continuing in table order. Per-test orchestration,
-full workload deployment, repetition accounting and GIFs remain to be implemented.
+Baseline execution is complete. E1 runs on all four products before any E2
+image builds. Prepared E2–E10 drivers require runtime execution and diagnosis;
+script presence is not a result.
 
 ## Revised fixture and measurements
 
@@ -83,13 +83,12 @@ remain separate from completed suite results.
 
 ## Execution status and next stages
 
-The userspace gateway and clean installed release DUT have been exercised.
-The 30-minute E-B1 release collector completed 61/61 valid samples. Main also completed
-61/61 samples. k3s is installed; competitor baselines have not yet completed. New `E-B2.py`, `E-B3.py`, `E1.sh`, `prepare-k3s.sh`, `build-main.sh`,
-`storage-stressor.py` and application workload deployment are implementations
-awaiting their first runtime validation, not evidence that these tests passed.
-The full table still requires execution in order, competitor runs, fault lanes
-and per-test artifacts. Do not open the completion PR before that work is done.
+The baseline rows E-B1, E-B2 and E-B3 are complete for all four products.
+Corrected E1 release passed; main, k3s and Talos remain in the sequential queue.
+`after-wan-prepare.sh` waits for all four corrected records and the E1 queue to
+exit, then builds and runs E2 main. It does not yet chain every remaining lane.
+Use the article STAND_LOG and machine records for the current runtime position.
+Do not open the completion PR before the entire table and required fixes finish.
 
 Observer `--kubeconfig` enables a separate 0.2 Hz ConfigMap create/read/delete
 loop. API probe failures do not masquerade as acknowledged application records.
@@ -143,7 +142,8 @@ the first also records QEMU serial boot. Node Ready must have a fresh heartbeat.
 Failed disks are retained. The Ubuntu NoCloud seed remains attached on later
 boots to preserve disk order and datasource identity. `publish-boot.py` records
 explicit artifact transfer paths; the Mac sync process publishes only after
-copying them. These boot scenarios await runtime validation.
+copying them. All four products completed ten boot-readiness-v2 repetitions; early invalid
+driver attempts remain preserved separately.
 
 Density HTTPS probes use strict mTLS with the kubeconfig's TLS server name,
 including when connecting through the localhost tunnel. They measure complete
@@ -370,7 +370,7 @@ E2 Talos now has a real installer-extension driver and separate corrupt-blob / f
 
 `capacity-at-wan-boundary.py` pauses only the queue parent after a measured run and ACPI shutdown, while its compressor finishes. `deduplicate-forensic-disks.py` preserves historical failed disks as verified qcow2 deltas against an immutable first failed disk, comparing all logical bytes before replacing the old standalone file. The backing file must never be deleted.
 
-The prepared k3s E2 lane uses a fresh Ubuntu installation of official v1.37.1+k3s1 (SHA256 `92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0`) as A, then the unchanged official baseline v1.37.2+k3s1 binary as B. It never downgrades an existing datastore. A declared laboratory Debian package carries B and the intentional systemd service; this is not an upstream k3s Debian package and does not claim an Ubuntu kernel update. The actual APT verifier handles a foreign-signed repository and a corrupted package. Only the laboratory trusted repository public key is added. Native defaults for unattended-upgrades remain enabled. Runtime validation is pending.
+The prepared k3s E2 lane uses a fresh Ubuntu installation of official v1.37.1+k3s1 (SHA256 `92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0`) as A, then the unchanged official baseline v1.37.2+k3s1 binary as B. It never downgrades an existing datastore. A declared laboratory Debian package carries B and the intentional systemd service; this is not an upstream k3s Debian package. Positive E2 trials also request the pinned native Ubuntu kernel candidate, recording whether it changes the kernel (see below). The actual APT verifier handles a foreign-signed repository and a corrupted package. Only the laboratory trusted repository public key is added. Native defaults for unattended-upgrades remain enabled. Runtime validation is pending.
 
 E3/E4/E5 queue wrappers now publish each completed run before advancing. They are prepared, not yet executed. E3 release upgrade phases use the explicitly named release-testkey lane: GitHub v0.1.0 assets contain boot files and SHA256SUMS, but no signed upgrade bundle. Competitor upgrade-phase hooks and E4 upgrade-safety hooks still require implementation/runtime validation; writes-only or storage/W results must never be labelled full-row completion.
 
@@ -509,3 +509,19 @@ whether the kernel actually changed are recorded. If the cloud image already
 contains that candidate, an APT no-op is not called a kernel upgrade. Negative
 signer/hash trials stay confined to the laboratory package and must leave all
 boot files unchanged. No unattended-upgrades setting is disabled for the test.
+
+## Completion audit and final service evidence
+
+Run `python3 audit-suite.py /work/field-edge/results.jsonl` inside the pod (or
+against the copied article `results/edge.jsonl`). It checks exact product,
+protocol, fault and repetition coverage, excludes invalid fixtures, and accepts
+unavailable cells only when an explicit reason is recorded. A nonzero exit
+means cells remain. This is a coverage audit, not proof that product gates,
+required fixes, captures or publication are complete.
+
+All E2 products additionally require the final 60 seconds of external HTTP,
+append and ConfigMap probes to succeed with at least 99% of scheduled request
+counts present. This evidence gate prevents boot-state rollback alone from
+being reported as application recovery. Observer overload invalidates the
+fixture. Incorrect HTTP content and acknowledged-record corruption remain
+separate measurements.
