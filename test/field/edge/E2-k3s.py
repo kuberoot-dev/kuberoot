@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real APT trust/integrity and k3s A→B trials with declared lab fault packaging."""
-import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
+import argparse,datetime,hashlib,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
 from upgrade_observations import evaluate as evaluate_service
 p=argparse.ArgumentParser();p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--repetition',type=int,required=True);p.add_argument('--deadline',type=int,default=1500);a=p.parse_args()
@@ -11,6 +11,11 @@ for file in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(
 G=str(s/'gateway-command.sh');C=str(s/'dut-command.sh');metrics={'packaging':'lab APT package: unchanged official k3s B binary plus intentional systemd fault; positive cases also request pinned native Ubuntu linux-image-virtual candidate','target_binary_sha256':'265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda'};errors=[];fault_verified=False;recorder=None;wan_cut=False;name=d.name
 metrics['ubuntu_cloud_image_sha256']='04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94'
 metrics['a_binary_sha256']='92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0'
+repo=root/'k3s-fault-build/public'/a.case
+metrics['lab_package_provenance']={}
+for relative in ['pool/field-edge-trial_0.1.0_amd64.deb','InRelease','Packages']:
+ with (repo/relative).open('rb') as source:metrics['lab_package_provenance'][relative]=hashlib.file_digest(source,'sha256').hexdigest()
+
 
 def typed(args):
  print('$ ',end='',flush=True)

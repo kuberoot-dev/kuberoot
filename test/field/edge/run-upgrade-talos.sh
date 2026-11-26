@@ -8,8 +8,12 @@ endpoint=$(cat "$FIELD_ROOT/oci-registry/endpoint")
 for REPETITION in $(seq 1 10); do
  for CASE in init-crash pod-network wrong-content incompatible-state tampered untrusted; do
   export REPETITION CASE CASE_OUTPUT=$FIELD_ROOT/results/E2-$PRODUCT-$CASE-$REPETITION
-  export TRIAL_IMAGE=$endpoint/field-talos/$CASE:trial
-  [[ $CASE != tampered ]] || export TRIAL_IMAGE=${endpoint%:*}:15006/field-talos/tampered:trial
+  payload=$CASE
+  [[ $CASE != tampered && $CASE != untrusted ]] || payload=wrong-content
+  digest=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["manifests"][0]["digest"])' "$FIELD_ROOT/talos-fault-build/$payload/installer-oci/index.json")
+  [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || exit 2
+  export TRIAL_IMAGE=$endpoint/field-talos/$CASE@$digest
+  [[ $CASE != tampered ]] || export TRIAL_IMAGE=${endpoint%:*}:15006/field-talos/tampered@$digest
   name=t-E2-$PRODUCT-$CASE-$REPETITION
   test ! -f "$CASE_OUTPUT/published" || continue
   if test -e "$CASE_OUTPUT"; then printf 'Review interrupted trial: %s\n' "$CASE_OUTPUT" >&2;exit 2;fi

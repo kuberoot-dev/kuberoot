@@ -542,3 +542,8 @@ article conclusions or the final unmerged PR.
 
 `audit-suite.py RECORDS --through E3` limits the audit to that point in table
 order. Its unavailable-cell exception requires an explicitly recorded reason.
+
+E2 provenance records include both the baseline image and the actual test
+payload: kuberoot target bundle SHA256/version, Talos installer manifest digest
+(the upgrade request uses `@sha256:`), and k3s laboratory package plus signed APT
+index digests. The base-image hash alone does not identify an injected release.

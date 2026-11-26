@@ -13,6 +13,8 @@ assert shutil.disk_usage(root).free>(a.golden/'system.raw').stat().st_blocks*512
 negative=a.case in ['tampered','untrusted'];d.mkdir();env=dict(os.environ,VM_DIR=str(d),FAULT_FIXTURE='1')
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
 name=d.name;metrics={'image_reference':a.image,'image_policy':'Talos product default; only registry transport CA added'};errors=[];fault_verified=False;recorder=vga=upgrade=None;target_seen=False;wan_cut=False
+assert '@sha256:' in a.image,'Trial installer must be pinned by manifest digest'
+metrics['target_installer_digest']=a.image.rsplit('@',1)[1]
 G=str(s/'gateway-command.sh');tc=['/home/observer/talosctl','--talosconfig','/home/observer/talosconfig','--nodes','10.78.0.11','--endpoints','10.78.0.11']
 def typed(args):
  print('$ ',end='',flush=True)

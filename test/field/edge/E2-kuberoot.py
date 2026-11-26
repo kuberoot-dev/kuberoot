@@ -13,6 +13,7 @@ d.mkdir(parents=True,exist_ok=False)
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
 env=dict(os.environ,VM_DIR=str(d),FAULT_FIXTURE="1");node_env=dict(env,KUBECONFIG=os.environ['NODE_KUBECONFIG']);G=str(scripts/'gateway-command.sh');name=f'E2-{a.product}-{a.case}-{a.repetition}';errors=[];metrics={};observer_started=False;recorder=None;fault_verified=False
 negative=a.case in ['tampered','untrusted']
+metrics.update({'target_bundle_sha256':a.bundle_sha256,'target_version':a.target_version,'baseline_root_digest':os.environ['IMAGE_DIGEST']})
 def typed(args):
  print('$ ',end='',flush=True)
  for ch in shlex.join([str(v) for v in args]):print(ch,end='',flush=True);time.sleep(.01)
