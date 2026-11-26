@@ -84,8 +84,8 @@ remain separate from completed suite results.
 ## Execution status and next stages
 
 The userspace gateway and clean installed release DUT have been exercised.
-The 30-minute E-B1 release collector completed 61/61 valid samples. Main is
-built and its baseline is in progress; competitors have not yet been measured. New `E-B2.py`, `E-B3.py`, `E1.sh`, `prepare-k3s.sh`, `build-main.sh`,
+The 30-minute E-B1 release collector completed 61/61 valid samples. Main also completed
+61/61 samples. k3s is installed; competitor baselines have not yet completed. New `E-B2.py`, `E-B3.py`, `E1.sh`, `prepare-k3s.sh`, `build-main.sh`,
 `storage-stressor.py` and application workload deployment are implementations
 awaiting their first runtime validation, not evidence that these tests passed.
 The full table still requires execution in order, competitor runs, fault lanes
@@ -149,3 +149,18 @@ Density HTTPS probes use strict mTLS with the kubeconfig's TLS server name,
 including when connecting through the localhost tunnel. They measure complete
 fresh-connection HTTPS requests, not kubectl process startup. The observer's
 ConfigMap operations similarly preserve strict TLS verification.
+
+The strict-TLS client and observer were checked against the prepared k3s API
+and a real harness HTTP/fsync service respectively: 100 HTTP requests, 50 append
+acks, 50 recovered records, no corrupt/duplicate/missing records. This is not W
+running on the DUT and is not an E1/E3 pass. Gateway IFB/netem/tbf setup and cleanup
+were exercised inside the Linux VM, with actual packet counters; no pod network
+capabilities were requested. Realized impairment and product recovery remain
+scenario measurements.
+
+`archive-stopped-disk.py SOURCE DESTINATION` streams a stopped owned Phase-1 disk
+to a Mac archive to relieve the 40 GiB PVC. It refuses attached disks, hashes the
+stream, rechecks the source hash, writes a manifest, and only then removes the
+source inside our pod. Restoring that file with kubectl cp restores the original
+bytes. Never archive an active disk or another workload's files. The Mac runs
+only a file transfer and SHA256, not VM or build tools.

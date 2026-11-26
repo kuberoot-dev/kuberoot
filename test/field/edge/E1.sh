@@ -21,6 +21,9 @@ date +%s > "$D/power-cut-epoch"
 show kill -9 "$(cat "$VM_DIR/pid")"
 cp "$VM_DIR/serial.log" "$D/before-cut-serial.log"
 show vm_start 1
+# Record the actual serial stream of the recovery, separately from the API view.
+asciinema rec --cols 110 --rows 30 -q -c "date -u; timeout 180 tail -n +1 -F '$VM_DIR/serial.log'; date -u" "$D/recovery.cast" > "$D/serial-recorder.log" 2>&1 &
+serial_recorder=$!
 show date -u
 # Keep the blackhole for a full hour measured from the fault, including reboot.
 remain=$((fault+3600-$(date +%s)))
@@ -28,13 +31,20 @@ if ((remain>0)); then sleep "$remain"; fi
 show date -u
 show kubectl -n field run uncached-image --image=registry.k8s.io/field-deliberately-missing:never-published --restart=Never
 sleep 30
+kubectl -n field get pod uncached-image -o json > "$D/missing-image.json"
 show kubectl -n field get pod uncached-image -o yaml
 show "$FIELD_SCRIPTS/wan-impairment.sh" clean
 sleep 340
 show date -u
 "$G" "cat /home/observer/$RUN_NAME.jsonl" > "$D/observer.jsonl"
 "$G" 'curl --fail --max-time 10 http://10.78.0.11:30081/records' > "$D/recovered-records"
-python3 "$FIELD_SCRIPTS/check-records.py" "$D/observer.jsonl" "$D/recovered-records" | tee "$D/durability.json"
+python3 "$FIELD_SCRIPTS/check-records.py" "$D/observer.jsonl" "$D/recovered-records" > "$D/durability.json" || true
+show cat "$D/durability.json"
 cp "$VM_DIR/serial.log" "$D/recovery-serial.log"
 
 python3 "$FIELD_SCRIPTS/analyse-observer.py" "$D/observer.jsonl" --fault-epoch "$(cat "$D/power-cut-epoch")" | tee "$D/recovery.json"
+
+wait "$serial_recorder"
+python3 /work/scripts/render.py "$D/recovery.cast" > "$D/recovery-timing.json"
+hold=$(python3 -c 'import json,sys;print(max(5,15.1-json.load(open(sys.argv[1]))["playback_seconds"]))' "$D/recovery-timing.json")
+agg -q --font-size 16 --theme monokai --last-frame-duration "$hold" "$D/recovery.retimed.cast" "$D/recovery.gif"

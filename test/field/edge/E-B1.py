@@ -25,7 +25,7 @@ node = nodes[0]['metadata']['name']
 (a.output/'inventory.json').write_text(kubectl('get','pods','-A','-o','json'))
 (a.output/'node.json').write_text(json.dumps(nodes[0],indent=2))
 print('$ date -u', flush=True)
-print(datetime.datetime.now(datetime.timezone.utc).isoformat(), flush=True)
+print(subprocess.check_output(['date','-u'],text=True),end='',flush=True)
 print('$ kubectl get nodes', flush=True)
 print(kubectl('get','nodes'), flush=True)
 print('Sampling kubelet whole-node stats and QMP block counters for 1800 seconds', flush=True)
