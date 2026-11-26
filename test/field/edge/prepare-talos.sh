@@ -29,12 +29,20 @@ for i in $(seq 1 120); do
  sleep 5
 done
 "$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 bootstrap'
-"$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 kubeconfig -' > "$D/kubeconfig"
+for i in $(seq 1 120); do
+ if "$G" '/home/observer/talosctl --talosconfig /home/observer/talosconfig --nodes 10.78.0.11 --endpoints 10.78.0.11 kubeconfig --merge=false -' > "$D/kubeconfig"; then break; fi
+ sleep 5
+done
+chmod 600 "$D/kubeconfig"
 export KUBECONFIG=$D/kubeconfig
 cluster=$(kubectl config view -o jsonpath='{.clusters[0].name}')
 kubectl config set-cluster "$cluster" --server=https://127.0.0.1:16443 --tls-server-name=10.78.0.11
 kubectl config set-context --current --namespace=default
-kubectl wait --for=condition=Ready nodes --all --timeout=600s
+for i in $(seq 1 120); do
+ if kubectl --request-timeout=5s get node edge-talos; then break; fi
+ sleep 5
+done
+kubectl wait --for=condition=Ready node/edge-talos --timeout=600s
 kubectl get pods -A
 # Baseline must boot from the installed disk, with installation ISO detached.
 bash "$FIELD_SCRIPTS/stop-dut.sh" "$D"

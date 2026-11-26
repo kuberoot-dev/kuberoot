@@ -25,6 +25,7 @@ def main():
     ap.add_argument('--seconds', type=float, required=True)
     ap.add_argument('--output', type=pathlib.Path, required=True)
     ap.add_argument('--stop-file', type=pathlib.Path)
+    ap.add_argument('--id-base', type=int, default=0, help='Unique record range for consecutive observers on one disk')
     ap.add_argument('--kubeconfig', type=pathlib.Path, help='Enable 0.2 Hz ConfigMap create/read/delete probes')
     args = ap.parse_args()
     # Exclusive create prevents accidentally overwriting an acknowledgement log.
@@ -105,7 +106,7 @@ def main():
             if args.stop_file and args.stop_file.exists(): break
             scheduled = tick / 20
             time.sleep(max(0, origin + scheduled - time.monotonic()))
-            probes = [('http', tick)] + ([('append', tick // 2)] if tick % 2 == 0 else [])
+            probes = [('http', tick)] + ([('append', args.id_base + tick // 2)] if tick % 2 == 0 else [])
             if args.kubeconfig and tick % 100 == 0:
                 probes.append(('api', tick // 100))
             for kind, number in probes:

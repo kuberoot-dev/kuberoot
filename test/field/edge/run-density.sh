@@ -22,4 +22,8 @@ for product in release main k3s talos; do
  python3 "$FIELD_SCRIPTS/verify-capture.py" "$FIELD_ROOT/captures/$name.cast" "$FIELD_ROOT/captures/$name.gif" > "$FIELD_ROOT/captures/$name-verification.json"
  python3 "$FIELD_SCRIPTS/publish-density.py"
  bash "$FIELD_SCRIPTS/stop-dut.sh" "$VM_DIR"
+ # This is a capacity run, not a crash image. Retain all measured state/events;
+ # the stopped trial disk is reproducible from the original and the scripts.
+ test -s "$FIELD_ROOT/results/E-B3-$PRODUCT/result.json"
+ rm -- "$VM_DIR/system.raw"
 done

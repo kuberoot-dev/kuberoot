@@ -19,5 +19,8 @@ for product in release main k3s talos; do
  python3 "$FIELD_SCRIPTS/verify-capture.py" "$FIELD_ROOT/captures/$name" > "$FIELD_ROOT/captures/$name-verification.json"
  python3 "$FIELD_SCRIPTS/publish-wan.py"
  bash "$FIELD_SCRIPTS/stop-dut.sh" "$VM_DIR"
- # Keep all faulted disks; later compact/archive only with verified equivalence.
+ # Preserve the faulted disk losslessly in compressed form before the next DUT.
+ qemu-img convert -c -f raw -O qcow2 "$VM_DIR/system.raw" "$VM_DIR/after-fault.qcow2"
+ qemu-img compare -f raw -F qcow2 "$VM_DIR/system.raw" "$VM_DIR/after-fault.qcow2"
+ rm -- "$VM_DIR/system.raw"
 done
