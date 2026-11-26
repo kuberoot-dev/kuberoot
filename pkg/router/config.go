@@ -155,6 +155,10 @@ func Check(c Config) (Config, Problems) {
 			p[Ref{"BGPPeer", peer.Name}] = "no BGPRouter named default"
 			continue
 		}
+		if err := checkPeerPolicy(peer.Spec); err != nil {
+			p[Ref{"BGPPeer", peer.Name}] = err.Error()
+			continue
+		}
 		ok.Peers = append(ok.Peers, peer)
 	}
 	sortConfig(&ok)
@@ -347,4 +351,23 @@ func splitFamilies(cidrs []string) (v4, v6 []string) {
 		}
 	}
 	return v4, v6
+}
+
+func checkPeerPolicy(s v1.BGPPeerSpec) error {
+	if s.MaxPrefixes < 0 {
+		return fmt.Errorf("maxPrefixes must not be negative")
+	}
+	addr, _ := netip.ParseAddr(s.Address)
+	for _, policy := range []*v1.BGPPrefixPolicy{s.ImportPolicy, s.ExportPolicy} {
+		if policy == nil {
+			continue
+		}
+		for _, raw := range policy.Prefixes {
+			prefix, err := netip.ParsePrefix(raw)
+			if err != nil || prefix != prefix.Masked() || prefix.Addr().Is4() != addr.Is4() {
+				return fmt.Errorf("policy prefix %q must be canonical and match peer address family", raw)
+			}
+		}
+	}
+	return nil
 }

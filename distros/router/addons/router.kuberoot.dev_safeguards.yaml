@@ -64,6 +64,17 @@ spec:
                 default: 2m
                 description: ConfirmWithin is how long a change runs on trial.
                 type: string
+              forwardingChecks:
+                description: |-
+                  ForwardingChecks are HTTP(S) health endpoints queried during OS boot
+                  probation. Each must return 200 only while an independent observer can
+                  forward traffic through this router. An API readiness endpoint alone
+                  does not establish forwarding health. Redirects are rejected.
+                  Unset preserves the service/API-only boot assessment.
+                items:
+                  type: string
+                maxItems: 8
+                type: array
             type: object
           status:
             properties:

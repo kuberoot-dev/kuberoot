@@ -23,6 +23,9 @@ func TestWriteFixtures(t *testing.T) {
 	c.BGP = []v1.BGPRouter{{ObjectMeta: named("default"), Spec: v1.BGPRouterSpec{ASN: 65010, Announce: []string{"192.168.10.0/24", "fd00:10::/64"}, Import: "All"}}}
 	c.Peers = []v1.BGPPeer{{ObjectMeta: named("v4"), Spec: v1.BGPPeerSpec{Address: "10.255.0.3", ASN: 65020}},
 		{ObjectMeta: named("v6"), Spec: v1.BGPPeerSpec{Address: "2001:db8::1", ASN: 64512, Multihop: 2}}}
+	c.Peers[0].Spec.ImportPolicy = &v1.BGPPrefixPolicy{Prefixes: []string{"203.0.113.0/24"}}
+	c.Peers[0].Spec.ExportPolicy = &v1.BGPPrefixPolicy{Prefixes: []string{"192.168.10.0/24"}}
+	c.Peers[0].Spec.MaxPrefixes = 1000
 	ok, problems := Check(c)
 	if len(problems) > 0 {
 		t.Fatal(problems)

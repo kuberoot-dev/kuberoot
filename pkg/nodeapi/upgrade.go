@@ -311,6 +311,14 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 		if ctx.Err() != nil {
 			return
 		}
+		if ready {
+			for _, status := range statuses {
+				if status.Name == "kuberoot-router" {
+					ready = routerForwardingReady(deadlineCtx)
+					break
+				}
+			}
+		}
 		good, reason := assessment.Observe(time.Now(), ready, statuses)
 		if reason != "" {
 			reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses))

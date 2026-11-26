@@ -58,6 +58,34 @@ spec:
                 maximum: 4294967294
                 minimum: 1
                 type: integer
+              exportPolicy:
+                description: |-
+                  ExportPolicy restricts announced prefixes. Unset uses BGPRouter.announce;
+                  an empty policy rejects all. This cannot enable transit export.
+                properties:
+                  prefixes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              importPolicy:
+                description: |-
+                  ImportPolicy restricts accepted prefixes. Unset preserves BGPRouter.import;
+                  an empty policy rejects all. Prefixes match exactly, never more specifics.
+                properties:
+                  prefixes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              maxPrefixes:
+                description: |-
+                  MaxPrefixes disables the session when accepted prefixes exceed this limit.
+                  Zero leaves the limit disabled. Reconfiguration resets the BIRD limit.
+                format: int32
+                maximum: 2147483647
+                minimum: 0
+                type: integer
               multihop:
                 description: |-
                   Multihop allows the neighbour to be this many hops away; 0 for a

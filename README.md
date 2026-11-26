@@ -67,6 +67,60 @@ spec: {links: [eth1], input: Accept, forwardTo: [wan]}
 
 Every resource reports in its status whether the node runs it and, if not, why; interfaces report their state, DHCP servers their leases, BGP peers their sessions. `BGPRouter.status.routes` also shows a bounded snapshot of the kernel's main routing table (up to 256 next hops), including destination, gateway, link, metric and the actual route protocol; `routesTruncated` and `routesError` make incomplete observations explicit. Static `Route` resources use protocol 107; BIRD routes keep BIRD's protocol. The firewall filters only once a zone exists, and the router's API stays open on management zones whatever the rules say. With a `Safeguard`, every change runs on trial: unless `spec.confirm` names its revision in time, the router goes back to the last confirmed configuration, so a change that cuts the administrators off undoes itself.
 
+
+A `BGPPeer` can restrict imports and exports with exact-prefix allow lists and
+stop a session that exceeds an accepted-prefix limit:
+
+```yaml
+apiVersion: router.kuberoot.dev/v1alpha1
+kind: BGPPeer
+metadata: {name: customer}
+spec:
+  address: 198.18.0.2
+  asn: 65001
+  importPolicy:
+    prefixes: [203.0.113.0/24]
+  exportPolicy:
+    prefixes: [192.0.2.0/24]
+  maxPrefixes: 1000
+```
+
+The policies match exact canonical prefixes of the peer's address family;
+`203.0.113.0/24` does not allow its more-specific routes or a default route.
+An empty policy (`{}`) rejects everything. An omitted import policy retains
+`BGPRouter.spec.import`, and global `import: None` still rejects imports.
+Exports are restricted to local static announcements in
+`BGPRouter.spec.announce`; an export policy cannot enable transit export.
+`maxPrefixes` counts accepted routes and disables the session on overflow;
+zero disables the limit. BIRD resets this limit when reconfigured or restarted.
+
+For a router upgrade to check the data path, set
+`Safeguard.spec.forwardingChecks` to up to eight HTTP(S) observer endpoints.
+Each endpoint must return HTTP 200 only while its independent client-to-sink
+probe forwards through this router. For example:
+
+```yaml
+apiVersion: router.kuberoot.dev/v1alpha1
+kind: Safeguard
+metadata: {name: default}
+spec:
+  confirmWithin: 60s
+  forwardingChecks: [https://observer.example.net/router/site-1]
+```
+
+During boot probation all checks must succeed throughout the healthy window,
+in addition to service and API readiness. Requests have a two-second timeout,
+HTTPS certificates are verified, and redirects are rejected. Unavailable
+observers prevent promotion; provision their reachability accordingly. With
+no forwarding checks configured, the existing service/API-only assessment
+remains in effect. These checks gate OS boot promotion, not configuration
+confirmation. A local API readiness URL does not prove that packets forward.
+
+Direct node API mutations also produce Kubernetes Metadata audit events on
+`kuberoot-node` stderr, retained in its supervisor log and readable through
+`nodeservices/log`. Events identify actor, object and response status without
+recording request or response bodies.
+
 ## The hypervisor distribution
 
 `hypervisor` runs virtual machines on KVM with cloud-hypervisor: no libvirt, and no pods. A machine is a resource of the cluster:

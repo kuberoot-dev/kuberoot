@@ -418,6 +418,26 @@ type BGPPeerSpec struct {
 	// +kubebuilder:validation:Maximum=255
 	// +optional
 	Multihop int32 `json:"multihop,omitempty"`
+	// ImportPolicy restricts accepted prefixes. Unset preserves BGPRouter.import;
+	// an empty policy rejects all. Prefixes match exactly, never more specifics.
+	// +optional
+	ImportPolicy *BGPPrefixPolicy `json:"importPolicy,omitempty"`
+	// ExportPolicy restricts announced prefixes. Unset uses BGPRouter.announce;
+	// an empty policy rejects all. This cannot enable transit export.
+	// +optional
+	ExportPolicy *BGPPrefixPolicy `json:"exportPolicy,omitempty"`
+	// MaxPrefixes disables the session when accepted prefixes exceed this limit.
+	// Zero leaves the limit disabled. Reconfiguration resets the BIRD limit.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
+	// +optional
+	MaxPrefixes int32 `json:"maxPrefixes,omitempty"`
+}
+
+// BGPPrefixPolicy is an exact-prefix allow list with an implicit final reject.
+type BGPPrefixPolicy struct {
+	// +optional
+	Prefixes []string `json:"prefixes,omitempty"`
 }
 
 type BGPPeerStatus struct {
@@ -459,6 +479,15 @@ type Safeguard struct {
 }
 
 type SafeguardSpec struct {
+	// ForwardingChecks are HTTP(S) health endpoints queried during OS boot
+	// probation. Each must return 200 only while an independent observer can
+	// forward traffic through this router. An API readiness endpoint alone
+	// does not establish forwarding health. Redirects are rejected.
+	// Unset preserves the service/API-only boot assessment.
+	// +kubebuilder:validation:MaxItems=8
+	// +optional
+	ForwardingChecks []string `json:"forwardingChecks,omitempty"`
+
 	// ConfirmWithin is how long a change runs on trial.
 	// +kubebuilder:default="2m"
 	ConfirmWithin metav1.Duration `json:"confirmWithin,omitempty"`
