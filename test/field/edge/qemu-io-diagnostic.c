@@ -19,11 +19,11 @@ static void report(const char *op,int fd,const struct iovec *v,int n,off64_t off
 }
 ssize_t pwritev64(int fd,const struct iovec *v,int n,off64_t off){
  static ssize_t(*real)(int,const struct iovec*,int,off64_t);if(!real)real=dlsym(RTLD_NEXT,"pwritev64");
- ssize_t r=real(fd,v,n,off);int e=errno;if(r<0)report("pwritev64",fd,v,n,off,r,e);errno=e;return r;
+ ssize_t r=real(fd,v,n,off);int e=errno;size_t expected=0;for(int i=0;i<n;i++)expected+=v[i].iov_len;if(r<0||(size_t)r!=expected)report("pwritev64",fd,v,n,off,r,r<0?e:0);errno=e;return r;
 }
 ssize_t pwrite64(int fd,const void *b,size_t n,off64_t off){
  static ssize_t(*real)(int,const void*,size_t,off64_t);if(!real)real=dlsym(RTLD_NEXT,"pwrite64");
- ssize_t r=real(fd,b,n,off);int e=errno;if(r<0){struct iovec v={(void*)b,n};report("pwrite64",fd,&v,1,off,r,e);}errno=e;return r;
+ ssize_t r=real(fd,b,n,off);int e=errno;if(r<0||(size_t)r!=n){struct iovec v={(void*)b,n};report("pwrite64",fd,&v,1,off,r,r<0?e:0);}errno=e;return r;
 }
 ssize_t pread64(int fd,void *b,size_t n,off64_t off){
  static ssize_t(*real)(int,void*,size_t,off64_t);static unsigned calls;if(!real)real=dlsym(RTLD_NEXT,"pread64");

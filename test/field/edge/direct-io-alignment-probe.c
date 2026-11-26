@@ -26,5 +26,14 @@ int main(int argc,char **argv) {
   errno=0;ssize_t r=pwritev(fd,v,2,8192);int e=errno;
   printf("pwritev offset=8192 lengths=%d,%d result=%zd errno=%d %s\n",split,8192-split,r,e,e?strerror(e):"OK");
  }
- fsync(fd);close(fd);free(base);return 0;
+ if(ftruncate(fd,34359738368LL)){perror("extend scratch");return 2;}
+ void *large=NULL;if(posix_memalign(&large,4096,4*1024*1024))return 2;memset(large,0x6b,4*1024*1024);
+ for(int mode=0;mode<3;mode++)for(int b=0;b<4;b++){
+  off_t off=67108864LL+(mode*4+b)*2097152LL;struct iovec v[254];
+  for(int i=0;i<254;i++)v[i]=(struct iovec){(char*)large+shifts[b]+i*8192,4096};
+  if(mode==2){v[0].iov_len=2048;v[253].iov_len=6144;}
+  errno=0;ssize_t r=mode?pwritev(fd,v,254,off):pwrite(fd,(char*)large+shifts[b],254*4096,off);int e=errno;
+  printf("sparse mode=%d buffer_mod4096=%zu offset=%lld length=%d result=%zd errno=%d %s\n",mode,shifts[b],(long long)off,254*4096,r,e,e?strerror(e):"OK");
+ }
+ free(large);fsync(fd);close(fd);free(base);return 0;
 }

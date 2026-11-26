@@ -16,12 +16,16 @@ for REPETITION in $(seq 1 10); do
  [[ $CASE != tampered && $CASE != untrusted ]] || export TARGET_VERSION=0.1.0-field-$lane-wrong-content
  export BUNDLE_URL=http://10.0.2.2:15004/0.1.0-field-$lane-$CASE.tar
  export BUNDLE_SHA256=$(cut -d' ' -f1 "$base-$CASE.tar.sha256")
-  export REPETITION CASE_OUTPUT=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-$REPETITION
+  export REPETITION
+  case_base=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-$REPETITION
+  while true; do
+  export CASE_OUTPUT=$case_base
   if test -f "$CASE_OUTPUT/retry.json"; then
-   export CASE_OUTPUT=$(python3 "$FIELD_SCRIPTS/reviewed-retry.py" "$CASE_OUTPUT")
+   CASE_OUTPUT=$(python3 "$FIELD_SCRIPTS/reviewed-retry.py" "$CASE_OUTPUT")
+   export CASE_OUTPUT
   fi
   name=t-${CASE_OUTPUT##*/}
-  if test -f "$CASE_OUTPUT/published"; then continue; fi
+  if test -f "$CASE_OUTPUT/published"; then break; fi
   if test -e "$CASE_OUTPUT"; then
    printf 'Interrupted case requires evidence review: %s\n' "$CASE_OUTPUT" >&2;exit 2
   fi
@@ -34,11 +38,13 @@ for REPETITION in $(seq 1 10); do
   first=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-1/failed.qcow2
   if [[ $REPETITION != 1 ]]; then backing=("$first"); fi
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN" "${backing[@]}"
-  python3 - "$CASE_OUTPUT/result.json" <<'PYCASE'
-import json,sys
-r=json.load(open(sys.argv[1]))
-if r["status"]=="invalid-fixture":raise SystemExit("Fault fixture invalid; repair before further repetitions: "+r["reason"])
-PYCASE
+  status=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["status"])' "$CASE_OUTPUT/result.json")
+  if [[ $status == invalid-fixture ]];then
+   python3 "$FIELD_SCRIPTS/review-backend-retry.py" "$CASE_OUTPUT" "$case_base"
+   continue
+  fi
   touch "$CASE_OUTPUT/published"
+  break
+  done
  done
 done

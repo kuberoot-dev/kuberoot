@@ -704,3 +704,14 @@ must not be mixed into product results. Runtime ptrace is unavailable, and no
 additional privileges are requested. Initial live QEMU probes correctly select
 4096 request / 512 buffer alignment, so the alignment-probing hypothesis is
 not yet established for the observed failures.
+
+After two separately preserved preboot backend incidents, the kuberoot E2
+runner permits at most three identical attempts when all of these are proved:
+positive service-fault case, native preboot failure, nonzero QMP backend errors,
+no target boot, no verified intended fault, published invalid result and a
+fully preserved stopped disk. `review-backend-retry.py` writes an explicit
+review marker for the next unique directory. Product failures, signature tests,
+postboot errors and other fixture failures do not qualify. No cache/fabric/image
+change or guest repair is performed; all invalid attempts remain visible. The
+third backend-invalid attempt still stops for diagnosis. This is not a claim
+that the underlying storage fault has been repaired.
