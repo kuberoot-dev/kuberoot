@@ -570,3 +570,16 @@ main kernel/userland and laboratory signing trust are retained. A fresh
 `prepare-health-golden.sh` installation is exposed as the `health` lane;
 original main records/golden images remain unchanged. These image/preparation
 scripts have not yet run. Unit/codegen success is not a field rerun result.
+
+### E2 control-client disconnection (before the first E2 run)
+
+Research S05 says “Disconnect the manager immediately after reboot.” The E2
+lane implements this with one submitted upgrade: kuberoot's one-shot kubectl
+request has already exited, APT/reboot SSH commands have ended, and the original
+Talos upgrade client is terminated in the observer VM when the target boot is
+observed. Remaining product calls read status/logs; W still performs its declared
+ConfigMap workload. No upgrade, rollback or repair command is sent after reboot.
+WAN remains available equally for all products. This avoids introducing an
+additional complete-WAN/NTP fault into the application-fault experiment; that
+fault and the observed Talos dependency are retained in E1. The protocol is
+`upgrade-client-disconnect-v1`; earlier prepared scripts had not executed E2.

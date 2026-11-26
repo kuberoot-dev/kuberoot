@@ -8,7 +8,7 @@ root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;
 assert shutil.disk_usage(root).free>(golden/'system.raw').stat().st_blocks*512+1024**3
 d.mkdir();negative=a.case in ['tampered','untrusted'];env=dict(os.environ,VM_DIR=str(d),SEED_MEDIA=str(golden/'seed.iso'),FAULT_FIXTURE='1',KUBECONFIG=str(golden/'kubeconfig'),DUT_KNOWN_HOSTS=str(golden/'known_hosts'))
 for file in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(golden/file),str(d/file)],check=True)
-G=str(s/'gateway-command.sh');C=str(s/'dut-command.sh');metrics={'packaging':'lab APT package: unchanged official k3s B binary plus intentional systemd fault; positive cases also request pinned native Ubuntu linux-image-virtual candidate','target_binary_sha256':'265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda'};errors=[];fault_verified=False;recorder=None;wan_cut=False;name=d.name
+G=str(s/'gateway-command.sh');C=str(s/'dut-command.sh');metrics={'packaging':'lab APT package: unchanged official k3s B binary plus intentional systemd fault; positive cases also request pinned native Ubuntu linux-image-virtual candidate','target_binary_sha256':'265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda'};errors=[];fault_verified=False;recorder=None;name=d.name
 metrics['ubuntu_cloud_image_sha256']='04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94'
 metrics['a_binary_sha256']='92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0'
 repo=root/'k3s-fault-build/public'/a.case
@@ -79,7 +79,9 @@ try:
    if install.returncode==0 or 'Hash Sum mismatch' not in install.stdout+install.stderr:errors.append('APT did not demonstrate corrupted package rejection')
   elif install.returncode:raise RuntimeError('trusted positive fault package did not install: '+install.stderr)
  if not negative:
-  dut('sudo reboot',visible=True,timeout=15)
+  reboot_request=dut('sudo reboot',visible=True,timeout=15)
+  metrics['management_client']='APT and reboot SSH commands ended before target-boot observation; no further update/recovery commands; WAN available'
+  metrics['reboot_client_exit']=reboot_request.returncode
   target_seen=False
   with (d/'observations.jsonl').open('x') as out:
    while time.monotonic()-start<a.deadline:
@@ -91,8 +93,6 @@ try:
       if 'kernel_after' not in metrics:
        metrics['kernel_after']=dut('uname -r').stdout.strip();metrics['kernel_changed']=metrics['kernel_after']!=metrics['kernel_before']
       target_seen=True
-      if not wan_cut:
-       subprocess.run(['bash',str(s/'wan-impairment.sh'),'blackhole'],check=True);wan_cut=True
       expected={'init-crash':'intentional init-service crash','pod-network':'injected pod-network drop rules','wrong-content':'injected wrong-content NAT rule','incompatible-state':'test state migrated incompatibly'}[a.case]
       if expected in r.stdout:
        if a.case=='wrong-content':
@@ -134,5 +134,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(s/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'scenario_id':'E2','product':'k3s-v1.37.1-to-v1.37.2-lab-package','source_commit':'f6973cb850e9b245585363d15bde80904ac862fd','image_digest':'sha256:'+metrics['target_binary_sha256'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh Ubuntu/k3s A raw+UEFI; actual signed APT test package; multicast/gateway','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'APT rejected negative package and retained boot state and acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':'k3s-v1.37.1-to-v1.37.2-lab-package','source_commit':'f6973cb850e9b245585363d15bde80904ac862fd','image_digest':'sha256:'+metrics['target_binary_sha256'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh Ubuntu/k3s A raw+UEFI; actual signed APT test package; multicast/gateway','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'APT rejected negative package and retained boot state and acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

@@ -12,7 +12,7 @@ assert d.is_relative_to(root) and a.golden.is_relative_to(root)
 assert shutil.disk_usage(root).free>(a.golden/'system.raw').stat().st_blocks*512+1024**3
 negative=a.case in ['tampered','untrusted'];d.mkdir();env=dict(os.environ,VM_DIR=str(d),FAULT_FIXTURE='1')
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
-name=d.name;metrics={'image_reference':a.image,'image_policy':'Talos product default; only registry transport CA added'};errors=[];fault_verified=False;recorder=vga=upgrade=None;target_seen=False;wan_cut=False
+name=d.name;metrics={'image_reference':a.image,'image_policy':'Talos product default; only registry transport CA added'};errors=[];fault_verified=False;recorder=vga=upgrade=None;target_seen=False;manager_ended=False
 assert '@sha256:' in a.image,'Trial installer must be pinned by manifest digest'
 metrics['target_installer_digest']=a.image.rsplit('@',1)[1]
 G=str(s/'gateway-command.sh');tc=['/home/observer/talosctl','--talosconfig','/home/observer/talosconfig','--nodes','10.78.0.11','--endpoints','10.78.0.11']
@@ -65,7 +65,9 @@ try:
  args=tc+['upgrade','--image',a.image,'--reboot-mode','powercycle','--timeout',str(a.deadline)+'s']
  typed(['date','-u']);subprocess.run(['date','-u']);typed(args)
  start=time.monotonic();metrics['fault_epoch']=time.time()
- upgrade=subprocess.Popen([G,shlex.join(args)],stdout=(d/'upgrade-command.txt').open('w'),stderr=subprocess.STDOUT)
+ client_pid='/home/observer/'+name+'.upgrade-client.pid'
+ remote_command='echo $$ > '+shlex.quote(client_pid)+'; exec '+shlex.join(args)
+ upgrade=subprocess.Popen([G,remote_command],stdout=(d/'upgrade-command.txt').open('w'),stderr=subprocess.STDOUT)
  last=None;finished=False
  with (d/'observations.jsonl').open('x') as out:
   while time.monotonic()-start<a.deadline:
@@ -76,8 +78,16 @@ try:
     node=json.loads(node.stdout)['items'][0];row['boot_id']=node['status']['nodeInfo']['bootID'];row['conditions']=node['status']['conditions']
    if 'field-fault' in ext.stdout and row.get('boot_id')!=before_boot:
     target_seen=True
-    if not negative and not wan_cut:
-     subprocess.run(['bash',str(s/'wan-impairment.sh'),'blackhole'],check=True);wan_cut=True;metrics['wan_disconnected_after_target_boot']=True
+    if not negative and not manager_ended:
+     if upgrade.poll() is None:
+      stop='pid=$(cat '+shlex.quote(client_pid)+'); if test -d /proc/$pid; then grep -aq talosctl /proc/$pid/cmdline && kill -TERM "$pid"; fi'
+      typed([G,stop]);stopped=gateway(stop);print(stopped.stdout+stopped.stderr,end='',flush=True)
+      if stopped.returncode:raise RuntimeError('Could not end original upgrade client after target boot')
+      upgrade.wait(timeout=10)
+     manager_ended=True
+     metrics['management_client']='original talosctl upgrade client ended by target-boot observation; subsequent calls are read-only; WAN available'
+     metrics['upgrade_client_exit']=upgrade.returncode
+     metrics['upgrade_client_disconnected_utc']=row['utc']
     fault=talos('logs','ext-field-fault');(d/'fault-service.log').write_text(fault.stdout+fault.stderr)
     message={'init-crash':'intentional init-service crash','pod-network':'injected pod-network drop rules','wrong-content':'injected wrong-content NAT rule','incompatible-state':'test state migrated incompatibly'}.get(a.case)
     if message and message in fault.stdout:
@@ -138,5 +148,5 @@ finally:
   subprocess.run(['python3',str(s/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
  if vga:assert vga.wait(timeout=60)==0, 'VGA recorder failed; repair capture before publication'
-record={'scenario_id':'E2','product':os.environ['PRODUCT'],'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real Talos installer extension; multicast/gateway; default image policy','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'automatic rollback or integrity rejection and acknowledged-record gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':os.environ['PRODUCT'],'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real Talos installer extension; multicast/gateway; default image policy','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'automatic rollback or integrity rejection and acknowledged-record gates passed','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

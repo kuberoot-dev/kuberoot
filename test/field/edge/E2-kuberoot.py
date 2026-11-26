@@ -48,7 +48,9 @@ try:
  request={'apiVersion':'node.kuberoot.dev/v1alpha1','kind':'Upgrade','metadata':{'name':'field-bad-release'},'spec':{'url':a.bundle_url,'sha256':a.bundle_sha256,'reboot':not negative}}
  (d/'upgrade-request.json').write_text(json.dumps(request,indent=2));typed(['date','-u']);subprocess.run(['date','-u'],check=True)
  start=time.monotonic();fault_epoch=time.time();nk('create','-f',str(d/'upgrade-request.json'),visible=True)
- seen_target=False;last_print=None;finished=False;wan_cut=False
+ metrics['management_client']='one-shot kubectl create exited before reboot; no further upgrade/recovery commands; WAN available'
+ metrics['upgrade_request_completed_utc']=datetime.datetime.now(datetime.timezone.utc).isoformat()
+ seen_target=False;last_print=None;finished=False
  with (d/'observations.jsonl').open('x') as out:
   while time.monotonic()-start<a.deadline:
    row={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds':time.monotonic()-start}
@@ -56,9 +58,6 @@ try:
     slots=slot_snapshot();row['bootentries']=slots;current=next(s for s in slots['items'] if s['status'].get('booted'))['status'];row['booted']=current
     if current['release']==a.target_version:
      seen_target=True
-     if not negative and not wan_cut:
-      subprocess.run(['bash',str(scripts/'wan-impairment.sh'),'blackhole'],check=True);wan_cut=True
-      metrics['wan_disconnected_after_target_boot']=True
      if not negative and not fault_verified:
       try:
        fault_log=nk('get','--raw','/apis/node.kuberoot.dev/v1alpha1/nodeservices/field-test-fault/log')
@@ -126,5 +125,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed faulty bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v1','scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed faulty bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)
