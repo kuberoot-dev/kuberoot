@@ -78,8 +78,8 @@ spec:
             - asn
             type: object
           status:
-            description: 'Status is what every router resource reports: whether the
-              node matches it.'
+            description: BGPRouterStatus includes observed routes, not just the desired
+              announcements.
             properties:
               conditions:
                 description: 'Conditions: Applied says whether the node runs this
@@ -143,6 +143,49 @@ spec:
                 description: ObservedGeneration is the generation the conditions describe.
                 format: int64
                 type: integer
+              routes:
+                description: |-
+                  Routes is a bounded snapshot of the kernel's main routing table,
+                  refreshed with the BGP sessions. Protocol distinguishes routes from
+                  kuberoot (107), BIRD and other writers. Multipath routes have one row
+                  per next hop. At most 256 rows are reported.
+                items:
+                  description: KernelRoute is one observed route or next hop in the
+                    main routing table.
+                  properties:
+                    destination:
+                      type: string
+                    gateway:
+                      type: string
+                    link:
+                      type: string
+                    metric:
+                      format: int32
+                      type: integer
+                    protocol:
+                      format: int32
+                      type: integer
+                    type:
+                      format: int32
+                      type: integer
+                    weight:
+                      description: Weight is the relative weight of a multipath next
+                        hop.
+                      format: int32
+                      type: integer
+                  required:
+                  - destination
+                  - metric
+                  - protocol
+                  - type
+                  type: object
+                type: array
+              routesError:
+                description: RoutesError explains a failed read; routes are cleared
+                  on failure.
+                type: string
+              routesTruncated:
+                type: boolean
             type: object
         required:
         - spec

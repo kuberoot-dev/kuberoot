@@ -229,8 +229,8 @@ func TestCheckRefusesDuplicateRoutesAndZonedPeers(t *testing.T) {
 func TestPortForwardsLeaveTheManagementPortsAlone(t *testing.T) {
 	c := gateway()
 	c.NAT = append(c.NAT, v1.NATRule{ObjectMeta: named("grab-api"), Spec: v1.NATRuleSpec{PortForward: &v1.PortForward{InLink: "eth0", Protocol: "tcp", Port: 6443, To: "192.168.10.5"}}})
-	ok, _ := Check(c)
-	got := Ruleset(ok)
+	// The renderer remains safe even if validation is bypassed.
+	got := Ruleset(c)
 	ret := strings.Index(got, `iifname { "eth0" } tcp dport { 6443, 50000 } return`)
 	dnat := strings.Index(got, `dport 6443 dnat`)
 	if ret < 0 || dnat < 0 || ret > dnat {
@@ -253,5 +253,36 @@ func TestIPv6RouteWithoutMetricMatchesTheKernel(t *testing.T) {
 	}
 	if r, _ := kernelRoute(v1.RouteSpec{Destination: "10.0.0.0/8", Gateway: "192.168.10.1"}); r.Priority != 0 {
 		t.Errorf("IPv4 priority %d", r.Priority)
+	}
+}
+
+func TestCheckReportsManagementPortConflicts(t *testing.T) {
+	for _, tc := range []struct {
+		name, link, protocol string
+		port                 int32
+		management, rejected bool
+	}{
+		{"api", "eth0", "tcp", 6443, true, true},
+		{"node-api", "eth0", "tcp", 50000, true, true},
+		{"udp", "eth0", "udp", 6443, true, false},
+		{"other-port", "eth0", "tcp", 8443, true, false},
+		{"other-link", "eth1", "tcp", 6443, true, false},
+		{"not-management", "eth0", "tcp", 6443, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{
+				Zones: []v1.FirewallZone{{ObjectMeta: named("wan"), Spec: v1.FirewallZoneSpec{Links: []string{"eth0"}, Management: tc.management}}},
+				NAT:   []v1.NATRule{{ObjectMeta: named("forward"), Spec: v1.NATRuleSpec{PortForward: &v1.PortForward{InLink: tc.link, Protocol: tc.protocol, Port: tc.port, To: "192.168.10.5"}}}},
+			}
+			ok, problems := Check(c)
+			msg := problems[Ref{"NATRule", "forward"}]
+			if tc.rejected {
+				if len(ok.NAT) != 0 || !strings.Contains(msg, "reserved for the router API by management zone wan") {
+					t.Fatalf("NAT=%v problems=%v", ok.NAT, problems)
+				}
+			} else if len(ok.NAT) != 1 || msg != "" {
+				t.Fatalf("unrelated port forward rejected: NAT=%v problems=%v", ok.NAT, problems)
+			}
+		})
 	}
 }

@@ -407,6 +407,21 @@ func (c *Controller) report(ctx context.Context, l listed, problem string, apply
 				extra[k] = nil
 			}
 		}
+	case "BGPRouter":
+		extra["routes"], extra["routesError"], extra["routesTruncated"] = nil, nil, nil
+		if routes, truncated, err := ReadRoutes(); err != nil {
+			extra["routesError"] = err.Error()
+		} else {
+			items := make([]any, 0, len(routes))
+			for _, route := range routes {
+				u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(&route)
+				items = append(items, u)
+			}
+			extra["routes"] = items
+			if truncated {
+				extra["routesTruncated"] = true
+			}
+		}
 	case "BGPPeer":
 		st, found := sessions[PeerProtocol(l.ref.Name)]
 		if !found {

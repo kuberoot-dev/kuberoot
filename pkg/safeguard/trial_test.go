@@ -59,3 +59,70 @@ func TestWithoutAutoConfirmOnlyConfirmKeepsAChange(t *testing.T) {
 		t.Fatalf("confirmed change not kept: %s", rev)
 	}
 }
+
+func TestPendingDeadlineSurvivesRestart(t *testing.T) {
+	now := time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC)
+	guard := &Guard{ConfirmWithin: time.Minute}
+	var tr Trial[string]
+	tr.Decide("a", "a", guard, "", now)
+	if _, _, save := tr.Decide("b", "b", guard, "", now); !save {
+		t.Fatal("starting a trial must save its deadline")
+	}
+	path := filepath.Join(t.TempDir(), "confirmed.json")
+	if err := tr.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	var again Trial[string]
+	again.Load(path)
+	if _, rev, save := again.Decide("b", "b", guard, "", now.Add(30*time.Second)); rev != "b" || save || !again.Deadline.Equal(now.Add(time.Minute)) {
+		t.Fatalf("restart changed the trial: %+v, save=%v", again, save)
+	}
+	if _, rev, save := again.Decide("b", "b", guard, "", now.Add(time.Minute)); rev != "a" || !save || again.RolledBack != "b" {
+		t.Fatalf("restart extended the deadline: %+v", again)
+	}
+}
+
+func TestReturningToBaselineClearsPersistedTrialAndRollback(t *testing.T) {
+	for _, rolledBack := range []bool{false, true} {
+		now := time.Now()
+		guard := &Guard{ConfirmWithin: time.Minute}
+		var tr Trial[string]
+		tr.Decide("a", "a", guard, "", now)
+		tr.Decide("b", "b", guard, "", now)
+		if rolledBack {
+			tr.Decide("b", "b", guard, "", now.Add(time.Minute))
+		}
+		if _, _, save := tr.Decide("a", "a", guard, "", now.Add(2*time.Minute)); !save {
+			t.Fatalf("returning to baseline did not save cleared state (rolledBack=%v)", rolledBack)
+		}
+		path := filepath.Join(t.TempDir(), "confirmed.json")
+		if err := tr.Save(path); err != nil {
+			t.Fatal(err)
+		}
+		var again Trial[string]
+		again.Load(path)
+		if again.Pending != "" || !again.Deadline.IsZero() || again.RolledBack != "" || again.Why != "" {
+			t.Fatalf("stale trial survived baseline restore: %+v", again)
+		}
+		if _, rev, save := again.Decide("b", "b", guard, "", now.Add(3*time.Minute)); rev != "b" || !save || again.Pending != "b" {
+			t.Fatalf("old rollback suppressed a new trial: %+v", again)
+		}
+	}
+}
+
+func TestClockGoingBackDoesNotStretchATrial(t *testing.T) {
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	guard := &Guard{ConfirmWithin: time.Minute}
+	var tr Trial[string]
+	tr.Decide("a", "a", guard, "", now)
+	tr.Decide("b", "b", guard, "", now)
+	// After a restart the node's clock reads a day earlier: the kept
+	// deadline is a day and a minute away, but the trial lasts a minute.
+	back := now.Add(-24 * time.Hour)
+	if _, rev, save := tr.Decide("b", "b", guard, "", back); rev != "b" || !save || !tr.Deadline.Equal(back.Add(time.Minute)) {
+		t.Fatalf("deadline %s after the clock went back, want %s", tr.Deadline, back.Add(time.Minute))
+	}
+	if _, rev, _ := tr.Decide("b", "b", guard, "", back.Add(time.Minute)); rev != "a" || tr.RolledBack != "b" {
+		t.Fatalf("trial outlived its length: running %s", rev)
+	}
+}

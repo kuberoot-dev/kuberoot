@@ -41,7 +41,7 @@ type Trial[C any] struct {
 // trial, that undoes it at once.
 func (t *Trial[C]) Decide(candidate C, rev string, g *Guard, unhealthy string, now time.Time) (C, string, bool) {
 	confirm := func() (C, string, bool) {
-		changed := t.ConfirmedRev != rev
+		changed := t.ConfirmedRev != rev || t.Pending != "" || !t.Deadline.IsZero() || t.RolledBack != "" || t.Why != ""
 		t.Confirmed, t.ConfirmedRev, t.Pending, t.Deadline, t.RolledBack, t.Why = candidate, rev, "", time.Time{}, "", ""
 		return candidate, rev, changed
 	}
@@ -59,12 +59,19 @@ func (t *Trial[C]) Decide(candidate C, rev string, g *Guard, unhealthy string, n
 		// Undone already; it stays undone until the resources change.
 		return t.Confirmed, t.ConfirmedRev, false
 	}
+	changed := false
+	within := g.ConfirmWithin
+	if within <= 0 {
+		within = 2 * time.Minute
+	}
 	if t.Pending != rev {
-		within := g.ConfirmWithin
-		if within <= 0 {
-			within = 2 * time.Minute
-		}
 		t.Pending, t.Deadline = rev, now.Add(within)
+		changed = true
+	} else if latest := now.Add(within); t.Deadline.After(latest) {
+		// A deadline kept on disk is wall-clock time. If the clock went back
+		// across a restart, the trial must not outlive its own length.
+		t.Deadline = latest
+		changed = true
 	}
 	if unhealthy != "" {
 		return undo(unhealthy)
@@ -75,20 +82,22 @@ func (t *Trial[C]) Decide(candidate C, rev string, g *Guard, unhealthy string, n
 		}
 		return undo("not confirmed in time")
 	}
-	return candidate, rev, false
+	return candidate, rev, changed
 }
 
-// saved is the confirmed configuration as kept on disk.
+// saved keeps the confirmed configuration and the current trial across restarts.
 type saved[C any] struct {
-	Revision   string `json:"revision"`
-	Config     C      `json:"config"`
-	RolledBack string `json:"rolledBack,omitempty"`
-	Why        string `json:"why,omitempty"`
+	Revision   string    `json:"revision"`
+	Config     C         `json:"config"`
+	Pending    string    `json:"pending,omitempty"`
+	Deadline   time.Time `json:"deadline,omitempty"`
+	RolledBack string    `json:"rolledBack,omitempty"`
+	Why        string    `json:"why,omitempty"`
 }
 
-// Save keeps the confirmed configuration, and what was undone, on disk.
+// Save keeps the confirmed configuration, pending deadline and rollback on disk.
 func (t *Trial[C]) Save(path string) error {
-	raw, err := json.Marshal(saved[C]{t.ConfirmedRev, t.Confirmed, t.RolledBack, t.Why})
+	raw, err := json.Marshal(saved[C]{Revision: t.ConfirmedRev, Config: t.Confirmed, Pending: t.Pending, Deadline: t.Deadline, RolledBack: t.RolledBack, Why: t.Why})
 	if err != nil {
 		return err
 	}
@@ -107,6 +116,6 @@ func (t *Trial[C]) Load(path string) {
 	}
 	var s saved[C]
 	if json.Unmarshal(raw, &s) == nil {
-		t.Confirmed, t.ConfirmedRev, t.RolledBack, t.Why = s.Config, s.Revision, s.RolledBack, s.Why
+		t.Confirmed, t.ConfirmedRev, t.Pending, t.Deadline, t.RolledBack, t.Why = s.Config, s.Revision, s.Pending, s.Deadline, s.RolledBack, s.Why
 	}
 }

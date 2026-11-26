@@ -51,7 +51,7 @@ func Revision(c Config) string {
 type trial struct{ safeguard.Trial[Config] }
 
 // decide returns the configuration to run and its revision. It reports
-// whether the confirmed configuration changed, to be kept on disk.
+// whether the configuration or trial state changed, to be kept on disk.
 func (t *trial) decide(candidate Config, rev string, guard *v1.Safeguard, now time.Time) (Config, string, bool) {
 	var g *safeguard.Guard
 	if guard != nil {

@@ -332,8 +332,8 @@ type BGPRouter struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BGPRouterSpec `json:"spec"`
-	Status Status        `json:"status,omitempty"`
+	Spec   BGPRouterSpec   `json:"spec"`
+	Status BGPRouterStatus `json:"status,omitempty"`
 }
 
 type BGPRouterSpec struct {
@@ -351,6 +351,37 @@ type BGPRouterSpec struct {
 	// +kubebuilder:validation:Enum=All;None
 	// +kubebuilder:default=All
 	Import string `json:"import,omitempty"`
+}
+
+// BGPRouterStatus includes observed routes, not just the desired announcements.
+type BGPRouterStatus struct {
+	Status `json:",inline"`
+	// Routes is a bounded snapshot of the kernel's main routing table,
+	// refreshed with the BGP sessions. Protocol distinguishes routes from
+	// kuberoot (107), BIRD and other writers. Multipath routes have one row
+	// per next hop. At most 256 rows are reported.
+	// +optional
+	Routes []KernelRoute `json:"routes,omitempty"`
+	// +optional
+	RoutesTruncated bool `json:"routesTruncated,omitempty"`
+	// RoutesError explains a failed read; routes are cleared on failure.
+	// +optional
+	RoutesError string `json:"routesError,omitempty"`
+}
+
+// KernelRoute is one observed route or next hop in the main routing table.
+type KernelRoute struct {
+	Destination string `json:"destination"`
+	// +optional
+	Gateway string `json:"gateway,omitempty"`
+	// +optional
+	Link     string `json:"link,omitempty"`
+	Protocol int32  `json:"protocol"`
+	Metric   int32  `json:"metric"`
+	Type     int32  `json:"type"`
+	// Weight is the relative weight of a multipath next hop.
+	// +optional
+	Weight int32 `json:"weight,omitempty"`
 }
 
 // +kubebuilder:object:root=true
