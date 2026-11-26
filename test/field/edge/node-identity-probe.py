@@ -18,6 +18,12 @@ if a.action=='collect':
   config['users']=[{'name':'old-kubelet','user':{'client-certificate-data':value['cert'],'client-key-data':value['key']}}]
   for context in config['contexts']:context['context']['user']='old-kubelet'
   private.write_text(json.dumps(config));private.chmod(0o600)
+  request={'apiVersion':'authentication.k8s.io/v1','kind':'SelfSubjectReview'}
+  baseline=subprocess.run(['kubectl','--kubeconfig',str(private),'--request-timeout=10s','create','--raw','/apis/authentication.k8s.io/v1/selfsubjectreviews','-f','-'],input=json.dumps(request),text=True,capture_output=True)
+  identity=json.loads(baseline.stdout).get('status',{}).get('userInfo',{}) if baseline.returncode==0 else None
+  evidence={'old_node':name,'identity':identity,'exit_code':baseline.returncode,'diagnosis':baseline.stderr}
+  (out/'old-identity-before.json').write_text(json.dumps(evidence,indent=2))
+  assert identity and identity.get('username')=='system:node:'+name,'old kubelet identity was not authenticated before removal'
  finally:kube('-n','field','delete','pod','identity-audit','--wait=true')
  print('Saved old kubelet client credential privately via diagnostic Pod; no key material published.')
 else:
@@ -26,6 +32,10 @@ else:
  identity=None
  if r.returncode==0:identity=json.loads(r.stdout).get('status',{}).get('userInfo',{})
  # An unavailable server or authorization-denied response is not proof of revocation.
- revoked=r.returncode!=0 and ('Unauthorized' in r.stderr or 'certificate has expired' in r.stderr or 'certificate revoked' in r.stderr)
+ baseline=json.loads((out/'old-identity-before.json').read_text())
+ assert baseline['identity']['username']=='system:node:'+name
+ # Certificate expiry text can concern the SERVER certificate, so it cannot
+ # establish rejection/revocation of the retained client credential.
+ revoked=r.returncode!=0 and 'Unauthorized' in r.stderr
  evidence={'old_node':name,'credential':'actual pre-removal kubelet client certificate','identity':identity,'exit_code':r.returncode,'diagnosis':r.stderr,'old_identity_revoked':revoked}
  (out/'old-identity-probe.json').write_text(json.dumps(evidence,indent=2));print(json.dumps(evidence))
