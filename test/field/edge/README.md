@@ -493,3 +493,11 @@ WAL and local backup paths. E4 saves file sizes before/during/after faults. This
 is an observation of default compaction/retention behavior, not an inferred
 retention guarantee. No datastore contents, private keys, or backup payloads are
 published. The only hostPath mounts are inside the product VM's Kubernetes.
+
+Stopped E5 control-plane disks are retained as exact verified qcow2 deltas,
+then materialized and compared back to 32 GiB raw disks before E7 starts them.
+E7 preserves new final snapshots separately (`after-E7.qcow2`) and moves the
+retired third node's original disk/config/snapshot into `n3-retired`; it is never
+used as the replacement disk. Per-node MACs are saved with the VM definition.
+This keeps historical evidence on the 40 GiB PVC without changing measured
+running-disk format or comparing competitors concurrently.

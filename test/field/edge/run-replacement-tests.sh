@@ -24,4 +24,10 @@ for lane in main talos k3s;do
  bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E7-scene.sh"
  python3 "$FIELD_SCRIPTS/publish-case.py" "$HA_ROOT/E7" "$name"
  for id in 1 2 3;do bash "$FIELD_SCRIPTS/ha-vm.sh" stop "$id";done
+ for id in 1 2 3;do
+  PRESERVED_DISK_OUTPUT=$HA_ROOT/n$id/after-E7.qcow2 bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$HA_ROOT/n$id/system.raw" "$VM_DIR"
+ done
+ if test -f "$HA_ROOT/n3-retired/system.raw";then
+  PRESERVED_DISK_OUTPUT=$HA_ROOT/n3-retired/retired-E7.qcow2 bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$HA_ROOT/n3-retired/system.raw" "$VM_DIR"
+ fi
 done

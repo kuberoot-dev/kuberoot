@@ -21,7 +21,8 @@ if ! test -f "$base"; then
  mv "$base.partial" "$base"
  sha256sum "$base" > "$base.sha256"
 fi
-out=${failed%/system.raw}/failed.qcow2
+out=${PRESERVED_DISK_OUTPUT:-${failed%/system.raw}/failed.qcow2}
+[[ $out == /work/field-edge/*.qcow2 ]] || exit 2
 test ! -e "$out"
 python3 "$FIELD_SCRIPTS/share-disk-blocks.py" "$failed" "$base" "$out" --source-format raw
 qemu-img compare -f raw -F qcow2 "$failed" "$out"

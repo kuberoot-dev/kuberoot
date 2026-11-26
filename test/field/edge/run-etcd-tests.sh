@@ -17,5 +17,8 @@ for lane in main k3s; do
  bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E5-scene.sh"
  python3 "$FIELD_SCRIPTS/publish-case.py" "$HA_ROOT/E5" "$name"
  for id in 1 2 3; do bash "$FIELD_SCRIPTS/ha-vm.sh" stop "$id";done
- # Keep all three disks and configs for E7 replacement tests; no deletion here.
+ # Preserve exact node state as verified deltas. E7 materializes raw disks.
+ for id in 1 2 3;do
+  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$HA_ROOT/n$id/system.raw" "$VM_DIR"
+ done
 done

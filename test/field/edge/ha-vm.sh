@@ -23,8 +23,17 @@ for p in pathlib.Path('/proc').glob('[0-9]*/cmdline'):
 if memory>13312:raise SystemExit('guest RAM would exceed 13 GiB')
 PY
  mkdir -p "$d"
- test -f "$d/system.raw" || qemu-img create -f raw "$d/system.raw" 32G
+ if ! test -f "$d/system.raw";then
+  saved=$d/failed.qcow2
+  test ! -f "$d/after-E7.qcow2" || saved=$d/after-E7.qcow2
+  if test -f "$saved";then
+   qemu-img convert -f qcow2 -O raw "$saved" "$d/system.raw"
+   qemu-img compare -f raw -F qcow2 "$d/system.raw" "$saved"
+  else qemu-img create -f raw "$d/system.raw" 32G;fi
+ fi
  test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"
+ if test -f "$d/network.env";then source "$d/network.env";fi
+ printf 'HA_MANAGEMENT_MAC=%q\nHA_PEER_MAC=%q\n' "${HA_MANAGEMENT_MAC:-52:54:00:79:01:0$id}" "${HA_PEER_MAC:-52:54:00:79:00:0$id}" > "$d/network.env"
  seed=${3:-}; if [[ -z $seed && -f $d/seed.iso ]]; then seed=$d/seed.iso; fi
  media=(); test -z "$seed" || media=(-drive "file=$seed,format=raw,if=virtio,snapshot=on")
  boot=();test -z "${HA_BOOT_ISO:-}" || boot=(-cdrom "$HA_BOOT_ISO")
