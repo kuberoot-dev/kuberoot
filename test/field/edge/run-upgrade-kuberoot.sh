@@ -26,7 +26,10 @@ for REPETITION in $(seq 1 10); do
   touch "$CASE_OUTPUT/published"
   # Preserve every failed state using an independently pinned backing snapshot.
   # Successful clones are also retained until reviewed; remove no measured state.
-  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
+  backing=()
+  first=$FIELD_ROOT/results/E2-$PRODUCT-$CASE-1/failed.qcow2
+  if [[ $REPETITION != 1 ]]; then backing=("$first"); fi
+  bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN" "${backing[@]}"
   python3 - "$CASE_OUTPUT/result.json" <<'PYCASE'
 import json,sys
 r=json.load(open(sys.argv[1]))

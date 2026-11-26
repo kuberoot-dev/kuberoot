@@ -2,10 +2,13 @@
 """One real signed-upgrade failure experiment, with raw observations preserved.
 Use a separate test-key image for injected signed faults; never bypass trust.
 """
-import argparse,datetime,json,os,pathlib,shlex,subprocess,time
+import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);a=p.parse_args()
-root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.output;assert d.is_relative_to(root);d.mkdir(parents=True,exist_ok=False)
+root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.output;assert d.is_relative_to(root)
+required=(a.golden/'system.raw').stat().st_blocks*512+1024**3
+if shutil.disk_usage(root).free<required:raise SystemExit('Insufficient PVC headroom for a fresh raw clone plus evidence; prepare capacity before this trial')
+d.mkdir(parents=True,exist_ok=False)
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
 env=dict(os.environ,VM_DIR=str(d),FAULT_FIXTURE="1");node_env=dict(env,KUBECONFIG=os.environ['NODE_KUBECONFIG']);G=str(scripts/'gateway-command.sh');name=f'E2-{a.product}-{a.case}-{a.repetition}';errors=[];metrics={};observer_started=False;recorder=None;fault_verified=False
 negative=a.case in ['tampered','untrusted']

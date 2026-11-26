@@ -12,7 +12,9 @@ for p in pathlib.Path('/proc').glob('[0-9]*/cmdline'):
  except (OSError,UnicodeError):continue
  if a[0].endswith('qemu-system-x86_64') and any(path in arg for path in sys.argv[1:] for arg in a):raise SystemExit('refusing to snapshot a running VM disk')
 PY
-base=$golden/cold-boot-forensic-base.qcow2
+base=${3:-$golden/cold-boot-forensic-base.qcow2}
+[[ $base == /work/field-edge/*.qcow2 ]] || exit 2
+if [[ $# -ge 3 ]]; then test -f "$base"; fi
 if ! test -f "$base"; then
  qemu-img convert -c -f raw -O qcow2 "$golden/system.raw" "$base.partial"
  qemu-img compare -f raw -F qcow2 "$golden/system.raw" "$base.partial"

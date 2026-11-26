@@ -14,8 +14,8 @@ mkdir -m 700 "$keydir"
 ln "$base" "$out-untrusted.tar"
 /work/fix-build/bin/kuberoot-release sign "$out-untrusted.tar" "$keydir/release.key"
 # A byte added after the tar end marker changes the digest but keeps the original
-# signature. The request carries this new digest, so transport SHA verification
-# succeeds and the cryptographic trust verifier must reject the substitution.
+# signature. The request carries the matching new digest, so rejection cannot
+# be attributed to a mismatched requested checksum; signature trust must fail.
 cp --reflink=auto "$base" "$out-tampered.tar"
 printf '\001' >> "$out-tampered.tar"
 cp "$base.sig" "$out-tampered.tar.sig"
