@@ -57,6 +57,8 @@ for ident in ids:
   lines+=['','p95 — nearest rank; десять повторов дают слабую оценку хвоста. Таблица использует исправленный boot-readiness-v2, если он есть; ранние обрывы старого драйвера сохранены ниже и не смешиваются с новой выборкой. Все неудачи и измеренные этапы сохранены по отдельности.','']
  if ident=='E2':
   lines+=['Сводка E2 учитывает только upgrade-client-disconnect-v2. Первый v1 сохранён как история ошибки окна наблюдения: ОС откатилась и ACK сохранились, но фиксированные 65 секунд после возврата API не оставили полных 60 секунд устойчивой работы W. Это не доказательство дефекта отката; v2 ожидает устойчивое окно адаптивно, максимум 240 секунд.','']
+ if ident=='E2' and any(r.get('metrics',{}).get('unexpected_block_io_failures') for r in selected):
+  lines+=['Отдельно сохранён невалидный прогон с неожиданными ошибками дискового backend QEMU до загрузки B. Заданный init-crash в нём не достигнут; это не результат отката. Диагностика, ACK и диск сохранены, повтор выполняется в отдельном каталоге. Успешная проверка scratch-файла на PVC не устанавливает причину исходного EIO.','']
  if ident=='E2' and any(r.get('metrics',{}).get('faulty_release_marked_good') for r in selected):
   lines+=['Предложено исправление: [PR #63 — application health gate](https://github.com/kuberoot-dev/kuberoot/pull/63). Проверки HTTP status/bodySHA256 задаются явно в Upgrade; откат root не отменяет миграцию общего state. Unit/codegen пройдены. '+('Полевые повторы исправленного образа приведены отдельным продуктом ниже.' if any(r.get('product')=='kuberoot-health-52db7b1' for r in selected) else 'Полевые повторы исправленного образа ещё не выполнены; успешный эффект исправления пока не заявляется.'),'']
  if ident not in ['E-B1','E-B2','E-B3','E1']:
@@ -73,7 +75,7 @@ for ident in ids:
    lines.append(f'| {label} | {len(items)} / {len(items)-len(valid)} | {passed} / {failed} | {duration} | {max(losses) if losses else "—"} |')
   lines+=['','Вне сводки — сбои fixture и прежний протокол E2; это не итоговый результат DUT. Отсутствующее время не заменяется нулём; measured/unsupported/not measured не считаются passed. Все исходные записи и причины ниже.','']
  for r in selected:
-  label=r['product']+(f", repetition {r['repetition']}" if 'repetition' in r else '')
+  label=r['product']+(' / '+str(r['fault_phase']) if r.get('fault_phase') else '')+(f", repetition {r['repetition']}" if 'repetition' in r else '')
   lines+=[f"### {label}",'',f"Статус: **{r.get('status','не указан')}**. {r.get('reason','')}",'']
   if ident=='E2':lines += ['Протокол: `'+r.get('measurement_protocol','не указан')+'`.','']
   if r.get('metrics'):
