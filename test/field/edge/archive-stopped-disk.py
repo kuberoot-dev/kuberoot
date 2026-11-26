@@ -17,6 +17,7 @@ expected=subprocess.check_output(base+['sha256sum',source],env=env,text=True).sp
 destination.parent.mkdir(parents=True,exist_ok=True);partial=destination.with_suffix('.partial');digest=hashlib.sha256();size=0
 process=subprocess.Popen(base+['cat',source],env=env,stdout=subprocess.PIPE)
 with partial.open('xb') as f:
+ os.fchmod(f.fileno(),0o600)  # Full guest disks include private cluster state.
  while data:=process.stdout.read(8*1024**2):f.write(data);digest.update(data);size+=len(data)
  f.flush();os.fsync(f.fileno())
 assert process.wait()==0
