@@ -17,7 +17,10 @@ for REPETITION in $(seq 1 10); do
  export BUNDLE_URL=http://10.0.2.2:15004/0.1.0-field-$lane-$CASE.tar
  export BUNDLE_SHA256=$(cut -d' ' -f1 "$base-$CASE.tar.sha256")
   export REPETITION CASE_OUTPUT=$FIELD_ROOT/results/E2-v2-$PRODUCT-$CASE-$REPETITION
-  name=t-E2-v2-$PRODUCT-$CASE-$REPETITION
+  if test -f "$CASE_OUTPUT/retry.json"; then
+   export CASE_OUTPUT=$(python3 "$FIELD_SCRIPTS/reviewed-retry.py" "$CASE_OUTPUT")
+  fi
+  name=t-${CASE_OUTPUT##*/}
   if test -f "$CASE_OUTPUT/published"; then continue; fi
   if test -e "$CASE_OUTPUT"; then
    printf 'Interrupted case requires evidence review: %s\n' "$CASE_OUTPUT" >&2;exit 2

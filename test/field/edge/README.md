@@ -655,3 +655,21 @@ Before an E2 capture, if PVC free space is below 5 GiB,
 Go compiler cache. It refuses any active DUT or Go compiler and writes a
 before/after byte-count manifest. Source, module cache, built artifacts and
 measurement evidence are not in this cleanup target.
+
+### Unexpected storage errors during E2
+
+E2 injects service faults, not storage errors. `upgrade-fault-trial.py` therefore
+records QMP block error counters before shutdown and classifies unexpected I/O
+failures as `invalid-fixture`. A native preboot Upgrade failure ends observation
+without waiting for the rollback deadline. Keep the original capture, client
+records and stopped disk; never count this as an observed service-fault rollback.
+An explicit `retry.json` in a published, preserved invalid directory may name a
+new `-attempt2` directory with a nonempty review reason. `reviewed-retry.py`
+validates the record and disk preservation before the runner follows it.
+
+`eio-diagnosis-scene.sh` and `eio-block-counters.py` preserve the exact supplemental
+commands used for the main init-crash repetition 2 incident (2026-11-26).
+They inspect native Upgrade/BootEntry state and live QMP write/read/flush errors.
+The observed eight write errors occurred before the target boot; their cause
+was not established. A successful subsequent scratch-file test would not
+prove that the original storage fault was fixed.

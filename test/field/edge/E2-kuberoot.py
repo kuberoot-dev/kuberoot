@@ -90,6 +90,8 @@ try:
      metrics['rejection_message']=row['upgrade']['status'].get('message');metrics['boot_selection_unchanged']=stable_slots(before)==stable_slots(slots);finished=True
      if not metrics['boot_selection_unchanged']:errors.append('boot selection changed for rejected bundle')
      if 'signature does not match any trusted release key' not in (metrics['rejection_message'] or ''):errors.append('failure was not the expected cryptographic trust rejection')
+    elif not negative and not seen_target and phase=='Failed':
+     metrics['preboot_failure_message']=row['upgrade']['status'].get('message');errors.append('upgrade failed before target boot; intended fault not reached');finished=True
     elif negative and phase in ['Writing','Staged']:
      errors.append('untrusted/tampered bundle reached write/selection');finished=True
     elif seen_target and current['release']==original and current['state']=='Good':
@@ -127,6 +129,11 @@ finally:
  if observer_started:
   try:gateway(f'touch /home/observer/{name}.stop',check=False)
   except Exception:pass
+ try:
+  counters=command(str(d/'qmp.sock'),'query-blockstats');(d/'block-counters.json').write_text(json.dumps(counters,indent=2))
+  metrics['unexpected_block_io_failures']=sum(int(x.get('stats',{}).get(k,0)) for x in counters for k in ['failed_wr_operations','failed_rd_operations','failed_flush_operations'])
+  if metrics['unexpected_block_io_failures']:errors.append('unexpected QEMU backend I/O errors; trial invalid')
+ except Exception as exc:metrics['block_counters_error']=str(exc)
  try:command(str(d/'qmp.sock'),'quit')
  except Exception:pass
  if recorder:
@@ -134,5 +141,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'measurement_protocol':'upgrade-client-disconnect-v2','scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not control and not fault_verified) or metrics.get('driver_overloads') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed healthy control accepted and retained acknowledged records' if control else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
+record={'measurement_protocol':'upgrade-client-disconnect-v2','scenario_id':'E2','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'repetition':a.repetition,'fault_seed':None,'fault_phase':a.case,'vcpu':2,'ram_mib':4096,'topology':'fresh raw/UEFI; real signed bundle; cached W; external gateway observer','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('automatic_rollback_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':[],'status':'invalid-fixture' if (not negative and not control and not fault_verified) or metrics.get('driver_overloads') or metrics.get('unexpected_block_io_failures') else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'observed healthy control accepted and retained acknowledged records' if control else 'observed rejection/automatic rollback and retained acknowledged records','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)
