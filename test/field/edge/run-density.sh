@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
+bash "$FIELD_SCRIPTS/rerun-boot-fixture-failures.sh"
 for product in release main k3s talos; do
  source "$FIELD_SCRIPTS/select-product.sh" "$product"
  # Original installed disk remains the cold-boot golden; density uses a fresh clone.

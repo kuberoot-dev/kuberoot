@@ -28,13 +28,14 @@ for ident in ids:
  if ident=='E-B2':
   lines+=['| Продукт | Запусков / ошибок | API median / p95, s | Fresh Ready median / p95, s | DNS median / p95, s | New pod median / p95, s |','|---|---:|---:|---:|---:|---:|']
   for product in dict.fromkeys(r['product'] for r in selected):
-   runs=[r for r in selected if r['product']==product]
+   all_runs=[r for r in selected if r['product']==product]
+   runs=[r for r in all_runs if r.get('measurement_protocol')=='boot-readiness-v2'] or all_runs
    def pair(key):
     values=sorted(r['metrics'][key] for r in runs if key in r.get('metrics',{}))
     return '—' if not values else f'{statistics.median(values):.2f} / {values[max(0,math.ceil(.95*len(values))-1)]:.2f}'
    values=[pair(k) for k in ['api_ready_seconds','node_ready_fresh_heartbeat_seconds','coredns_answer_seconds','new_pod_serves_seconds']]
    lines.append('| '+product+' | '+str(len(runs))+' / '+str(sum(r.get('status')=='failed' for r in runs))+' | '+' | '.join(values)+' |')
-  lines+=['','p95 — nearest rank; десять повторов дают слабую оценку хвоста. Все неудачи и измеренные этапы сохранены по отдельности.','']
+  lines+=['','p95 — nearest rank; десять повторов дают слабую оценку хвоста. Таблица использует исправленный boot-readiness-v2, если он есть; ранние обрывы старого драйвера сохранены ниже и не смешиваются с новой выборкой. Все неудачи и измеренные этапы сохранены по отдельности.','']
  for r in selected:
   label=r['product']+(f", repetition {r['repetition']}" if 'repetition' in r else '')
   lines+=[f"### {label}",'',f"Статус: **{r.get('status','не указан')}**. {r.get('reason','')}",'']

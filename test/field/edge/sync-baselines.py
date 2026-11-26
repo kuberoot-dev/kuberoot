@@ -23,7 +23,8 @@ while True:
      assert destination.startswith(('02-edge/img/','02-edge/raw/')) and '..' not in destination
      assert origin.startswith('/work/field-edge/')
      copy(origin,root/destination)
-    stem=f"{r['scenario_id']}-{r['product']}-{r.get('repetition','run')}"
+    stamp=re.sub(r'[^0-9A-Za-z]', '-', r.get('time_utc','unknown'))
+    stem=f"{r['scenario_id']}-{r['product']}-{r.get('repetition','run')}-{stamp}"
     record=root/'02-edge/raw'/f'{stem}-published-result.json'
     record.write_text(json.dumps(r,indent=2)+'\n')
     subprocess.run(['python3',str(scripts/'update-results.py'),'--article-root',str(root),'--record',str(record)],check=True)

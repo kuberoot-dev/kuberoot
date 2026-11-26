@@ -198,3 +198,13 @@ lab key only after matching the baked trusted public key. These bundles and
 or evidence that rollback/application health gates work. The `/health` endpoint
 on W can expose incompatible record formatting without changing its append/HTTP
 contract. An OS rollback cannot undo arbitrary persistent-data migrations.
+
+Cold-boot measurement protocol `boot-readiness-v2` waits for DNS and the new
+NodePort response until the common 300-second power-on deadline. A Ready pod
+alone does not imply CoreDNS/Service forwarding is ready. All unsuccessful DNS
+attempts retain timestamps, return codes and output. The first three release
+runs used an erroneous one-shot four-second exec timeout; those records and
+forensic disks remain, and `rerun-boot-fixture-failures.sh` repeats them into
+separate paths before density. Statistical summaries use v2 when available;
+the original failed attempts remain individually visible. The aggregate PNG
+contains measured milestones only; missing values are not assigned a time.
