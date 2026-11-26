@@ -18,6 +18,24 @@ while True:
   for line in output.stdout.splitlines():
    r=json.loads(line)
    if (r.get('scenario_id'),r.get('product'),r.get('time_utc')) in known:continue
+   if r.get('artifact_transfers'):
+    for destination,origin in r['artifact_transfers'].items():
+     assert destination.startswith(('02-edge/img/','02-edge/raw/')) and '..' not in destination
+     assert origin.startswith('/work/field-edge/')
+     copy(origin,root/destination)
+    stem=f"{r['scenario_id']}-{r['product']}-{r.get('repetition','run')}"
+    record=root/'02-edge/raw'/f'{stem}-published-result.json'
+    record.write_text(json.dumps(r,indent=2)+'\n')
+    subprocess.run(['python3',str(scripts/'update-results.py'),'--article-root',str(root),'--record',str(record)],check=True)
+    with (root/'02-edge/ARTIFACTS.md').open('a') as f:
+     f.write(f"\n### {r['scenario_id']} — {r['product']}, repetition {r.get('repetition','—')}\n\n")
+     f.write(f"Source `{r.get('source_commit')}`, image `{r.get('image_digest')}`. Status {r['status']}.\n\n")
+     for artifact in r['artifact_paths']:
+      description='Реальная serial-консоль загрузки' if '-serial.' in artifact else 'Реальный запуск, состояние терминала или исходный вывод'
+      f.write(f"- `{artifact}` — {r['scenario_id']}: {description}.\n")
+     f.write('\nMetrics: `'+json.dumps(r.get('metrics',{}),ensure_ascii=False)+'`.\n')
+    print(json.dumps({'published':stem,'status':r['status']}),flush=True)
+    continue
    if r.get('scenario_id')!='E-B1':continue
    sample=next(pathlib.Path(x).name for x in r['artifact_paths'] if x.endswith('-samples.jsonl'))
    stem=sample.removesuffix('-samples.jsonl')

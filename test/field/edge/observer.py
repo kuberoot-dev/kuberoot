@@ -5,12 +5,14 @@ A scheduled request that cannot be dispatched is recorded as driver_overload;
 this invalidates the load lane rather than silently reducing its rate.
 """
 import argparse
+import base64
 import concurrent.futures
 import datetime
 import json
 import os
 import pathlib
-import subprocess
+import ssl
+import tempfile
 import threading
 import time
 import urllib.request
@@ -22,6 +24,7 @@ def main():
     ap.add_argument('--append', required=True)
     ap.add_argument('--seconds', type=float, required=True)
     ap.add_argument('--output', type=pathlib.Path, required=True)
+    ap.add_argument('--stop-file', type=pathlib.Path)
     ap.add_argument('--kubeconfig', type=pathlib.Path, help='Enable 0.2 Hz ConfigMap create/read/delete probes')
     args = ap.parse_args()
     # Exclusive create prevents accidentally overwriting an acknowledgement log.
@@ -29,6 +32,23 @@ def main():
     lock = threading.Lock()
     slots = threading.BoundedSemaphore(100)
     origin = time.monotonic()
+
+    api = None
+    credentials_dir = None
+    if args.kubeconfig:
+        config = json.loads(args.kubeconfig.read_text())
+        context = next(c['context'] for c in config['contexts'] if c['name'] == config['current-context'])
+        cluster = next(c['cluster'] for c in config['clusters'] if c['name'] == context['cluster'])
+        user = next(u['user'] for u in config['users'] if u['name'] == context['user'])
+        assert cluster['server'].startswith('https://') and not cluster.get('insecure-skip-tls-verify')
+        tls = ssl.create_default_context(cadata=base64.b64decode(cluster['certificate-authority-data']).decode())
+        credentials_dir = tempfile.TemporaryDirectory(prefix='edge-observer-tls-')
+        cert = pathlib.Path(credentials_dir.name) / 'cert.pem'
+        key = pathlib.Path(credentials_dir.name) / 'key.pem'
+        for path, field in [(cert, 'client-certificate-data'), (key, 'client-key-data')]:
+            path.write_bytes(base64.b64decode(user[field])); path.chmod(0o600)
+        tls.load_cert_chain(cert, key)
+        api = (cluster['server'].rstrip('/') + '/api/v1/namespaces/field/configmaps', tls)
 
     def log(record):
         with lock:
@@ -43,18 +63,23 @@ def main():
                   'utc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
         try:
             if kind == 'api':
-                env = dict(os.environ, KUBECONFIG=str(args.kubeconfig))
                 name = f'field-probe-{number}'
-                base = ['kubectl', '--request-timeout=2s', '-n', 'field']
-                def k(*parts):
-                    return subprocess.check_output(base + list(parts), env=env, timeout=3, stderr=subprocess.STDOUT, text=True)
+                def request(method, suffix='', data=None):
+                    began = time.monotonic()
+                    try:
+                        req = urllib.request.Request(api[0] + suffix, data=json.dumps(data).encode() if data is not None else None,
+                            method=method, headers={'Content-Type': 'application/json'})
+                        with urllib.request.urlopen(req, context=api[1], timeout=2) as response:
+                            return json.load(response)
+                    finally:
+                        record.setdefault('api_operations', []).append({'method': method, 'latency_seconds': time.monotonic()-began})
                 try:
-                    k('create', 'configmap', name, f'--from-literal=number={number}')
-                    value = k('get', 'configmap', name, '-o', 'jsonpath={.data.number}')
+                    request('POST', data={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':name},'data':{'number':str(number)}})
+                    value = request('GET', '/' + name)['data']['number']
                     record['ok'] = value == str(number)
                     if not record['ok']: record['error'] = 'ConfigMap read mismatch'
                 finally:
-                    try: k('delete', 'configmap', name, '--ignore-not-found=true', '--wait=false')
+                    try: request('DELETE', '/' + name)
                     except Exception as exc: record['cleanup_error'] = str(exc)
                 return
             data = f'{number:020d}'.encode() + b'W' * 1004 if kind == 'append' else None
@@ -77,6 +102,7 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=100) as pool:
         tick = 0
         while tick / 20 < args.seconds:
+            if args.stop_file and args.stop_file.exists(): break
             scheduled = tick / 20
             time.sleep(max(0, origin + scheduled - time.monotonic()))
             probes = [('http', tick)] + ([('append', tick // 2)] if tick % 2 == 0 else [])
@@ -90,6 +116,8 @@ def main():
                          'scheduled_seconds': scheduled, 'error': 'driver_overload'})
             tick += 1
     out.close()
+    args.output.with_suffix(args.output.suffix + ".done").touch()
+    if credentials_dir: credentials_dir.cleanup()
 
 
 if __name__ == '__main__':

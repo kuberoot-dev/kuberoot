@@ -5,15 +5,15 @@ No previous VM may use the fixed DUT MAC. Measurements are external wall time.
 """
 import argparse,datetime,json,os,pathlib,shlex,signal,subprocess,time
 from qmp import command
-p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--image',required=True)
-a=p.parse_args();assert '@sha256:' in a.image
+p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--image',required=True);p.add_argument('--image-digest',required=True);p.add_argument('--source-commit',required=True)
+p.add_argument('--repetition',type=int,choices=range(1,11)); a=p.parse_args();assert '@sha256:' in a.image
 scripts=pathlib.Path(__file__).resolve().parent
-a.output.mkdir(parents=True,exist_ok=False)
+a.output.mkdir(parents=True,exist_ok=True)
 def k(*args,check=True):
  r=subprocess.run(['kubectl','--request-timeout=2s',*args],text=True,capture_output=True,timeout=4)
  if check and r.returncode: raise RuntimeError(r.stderr)
  return r
-for repetition in range(1,11):
+for repetition in ([a.repetition] if a.repetition else range(1,11)):
  d=a.output/str(repetition);d.mkdir()
  for f in ['system.raw','vars.fd']:
   subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
@@ -65,10 +65,12 @@ for repetition in range(1,11):
   if recorder:
    os.killpg(recorder.pid,signal.SIGINT)
    recorder.wait(timeout=10)
-   subprocess.run(['python3','/work/scripts/render.py',str(d/'serial.cast')],check=True)
-   subprocess.run(['/work/bin/agg','--font-size','16','--theme','monokai','--last-frame-duration','5',str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
- result={'scenario_id':'E-B2','product':a.product,'repetition':repetition,'start_utc':utc0.isoformat(),'metrics':metrics,'errors':errors,'status':'measured' if not errors else 'failed','vcpu':2,'ram_mib':4096,'topology':'same multicast LAN and gateway; fresh raw disk and OVMF vars clone','workload_image':a.image,'artifact_paths':[str(d/'serial.log')]}
- (d/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
+   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
+   hold=str(max(5,15.1-timing['playback_seconds']))
+   subprocess.run(['/work/bin/agg','--font-size','16','--theme','monokai','--last-frame-duration',hold,str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
+ result={'scenario_id':'E-B2','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'fault_seed':None,'fault_phase':'installed cold boot','outage_seconds':None,'acknowledged_record_loss':None,'recovery_seconds':metrics.get('new_pod_serves_seconds'),'manual_actions':[],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'reason':'all four boot milestones measured' if not errors else '; '.join(errors),'repetition':repetition,'start_utc':utc0.isoformat(),'metrics':metrics,'errors':errors,'status':'measured' if not errors else 'failed','vcpu':2,'ram_mib':4096,'topology':'same multicast LAN and gateway; fresh raw disk and OVMF vars clone','workload_image':a.image,'artifact_paths':[str(d/'serial.log')]}
+ (d/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps({key:result[key] for key in ["product","repetition","status","metrics","errors"]}),flush=True)
+ with (a.output/'runs.jsonl').open('a') as f:f.write(json.dumps(result)+'\n')
  # Successful disks can be reused/recreated; keep failed disks for diagnosis.
  if not errors:(d/'system.raw').unlink()
  time.sleep(2)

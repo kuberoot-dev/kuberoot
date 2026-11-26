@@ -22,7 +22,7 @@ PY
 # All L2 forwarding uses unprivileged multicast. Gateway guests own NAT/netem.
 network_create() { require_stand; }
 vm_start() {
-  local id=$1 media=${2:-} d="${VM_DIR:-$FIELD_ROOT/vm-$1}"
+  local id=$1 media=${2:-${SEED_MEDIA:-}} d="${VM_DIR:-$FIELD_ROOT/vm-$1}"
   [[ $id =~ ^[123]$ ]] || return 1
   require_stand
   [[ $d == "$FIELD_ROOT/"* ]] || return 1
@@ -44,10 +44,18 @@ CHECK
   local drives=()
   test -z "${BOOT_ISO:-}" || drives+=(-cdrom "$BOOT_ISO")
   test -z "$media" || drives+=(-drive "file=$media,format=raw,if=virtio,snapshot=on")
+  local systemdrive=(-drive "file=$d/system.raw,format=raw,if=virtio,cache=none")
+  if [[ ${BLOCK_FAULTS:-0} == 1 ]]; then
+    systemdrive=(-blockdev "driver=file,filename=$d/system.raw,node-name=physical,cache.direct=on,cache.no-flush=off"
+      -blockdev driver=raw,file=physical,node-name=disk
+      -object throttle-group,id=field-throttle
+      -blockdev driver=throttle,file=disk,throttle-group=field-throttle,node-name=throttled
+      -device virtio-blk-pci,drive=throttled,id=system,werror=report,rerror=report)
+  fi
   qemu-system-x86_64 -name "field-edge-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 -rtc "base=${RTC_BASE:-utc}" \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive "if=pflash,format=raw,file=$d/vars.fd" "${drives[@]}" \
-    -drive "file=$d/system.raw,format=raw,if=virtio,cache=none" \
+    "${systemdrive[@]}" \
     -netdev "socket,id=lan,mcast=230.78.0.1:17801,localaddr=127.0.0.1" \
     -device "virtio-net-pci,netdev=lan,mac=52:54:00:78:00:0$id" \
     -qmp "unix:$d/qmp.sock,server=on,wait=off" \

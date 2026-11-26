@@ -10,7 +10,7 @@ APT::Install-Recommends "false";
 APT::Install-Suggests "false";
 EOF
 apt-get update
-apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf asciinema curl ca-certificates python3 python3-pil jq iproute2 iptables fonts-dejavu-core age squashfs-tools cpio zstd
+apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf asciinema curl ca-certificates python3 python3-pil jq iproute2 iptables fonts-dejavu-core age squashfs-tools cpio zstd genisoimage openssh-client python3-matplotlib procps
 apt-get clean
 /work/bin/agg --version
 /work/bin/kubectl version --client

@@ -6,7 +6,7 @@ allocates guest filesystem extents, while avoiding 30 GiB of zero writes to the
 shared lab PVC. This models filesystem fullness, not flash wear. /relieve works
 without the Kubernetes API. Never mount the workshop host/PVC into this pod.
 """
-import http.server,json,os,pathlib
+import errno,http.server,json,os,pathlib
 root=pathlib.Path('/state'); target=root/'field-enospc'; root.mkdir(exist_ok=True)
 class Handler(http.server.BaseHTTPRequestHandler):
  def do_POST(self):
@@ -18,7 +18,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     target.unlink(missing_ok=True)
     st=os.statvfs(root); total=st.f_blocks*st.f_frsize; used=(st.f_blocks-st.f_bfree)*st.f_frsize
     amount=max(0,int(total*pct/100)-used)
-    with target.open('wb') as f: os.posix_fallocate(f.fileno(),0,amount); os.fsync(f.fileno())
+    with target.open('wb') as f:
+     allocated=0; chunk=64*1024**2
+     while allocated<amount:
+      size=min(chunk,amount-allocated)
+      try: os.posix_fallocate(f.fileno(),allocated,size); allocated+=size
+      except OSError as exc:
+       if exc.errno!=errno.ENOSPC: raise
+       if chunk<=4096: error='ENOSPC reached';break
+       chunk=max(4096,chunk//16)
+     os.fsync(f.fileno())
    else: raise ValueError('unknown operation')
   except Exception as exc: error=str(exc)
   st=os.statvfs(root); data=json.dumps({'error':error,'free_bytes':st.f_bfree*st.f_frsize,'available_bytes':st.f_bavail*st.f_frsize,'total_bytes':st.f_blocks*st.f_frsize}).encode()

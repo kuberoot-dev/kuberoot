@@ -24,6 +24,7 @@ for ident in ids:
    for key,val in r['metrics'].items():lines.append(f'| `{key}` | {val if val is not None else "не измерено"} |')
    lines+=['']
   lines+=[f"Источник: `{r.get('source_commit','не указан')}`; образ: `{r.get('image_digest','не указан')}`.",'']
+  for note in r.get('measurement_notes',[]): lines += [note,'']
   for artifact in r.get('artifact_paths',[]):lines.append(f'- `{artifact}`')
   lines+=['']
 lines+=['## Применимость','','Выводы об отказоустойчивости и сравнении продуктов требуют завершённых отказных испытаний; baseline сам по себе их не доказывает.','']

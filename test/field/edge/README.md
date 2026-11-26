@@ -84,8 +84,8 @@ remain separate from completed suite results.
 ## Execution status and next stages
 
 The userspace gateway and clean installed release DUT have been exercised.
-The 30-minute E-B1 release collector is running; it is not yet a completed
-measurement. New `E-B2.py`, `E-B3.py`, `E1.sh`, `prepare-k3s.sh`, `build-main.sh`,
+The 30-minute E-B1 release collector completed 61/61 valid samples. Main is
+built and its baseline is in progress; competitors have not yet been measured. New `E-B2.py`, `E-B3.py`, `E1.sh`, `prepare-k3s.sh`, `build-main.sh`,
 `storage-stressor.py` and application workload deployment are implementations
 awaiting their first runtime validation, not evidence that these tests passed.
 The full table still requires execution in order, competitor runs, fault lanes
@@ -123,3 +123,29 @@ this loop is only E-B1, not completion of the suite.
 `E6.py` is an unexecuted RTC/API checkpoint driver. It deliberately does not
 claim full E6 pass from API recovery alone: application recovery, TLS diagnosis,
 CA expiry derivation and every manual recovery operation remain mandatory.
+
+The block fixture was exercised with real scratch I/O on QEMU 7.2.22:
+`check-block-fixture.sh` wrote data, enabled a 100 IOPS throttle, reopened the
+raw node onto a blkdebug filter, observed a real EIO write failure, removed the
+filter and verified successful writes/readback. This is a harness check, not E4.
+`BLOCK_FAULTS=1 vm_start 1` selects the explicit file → raw → throttle graph;
+`block-fault.py` changes limits and swaps the raw node's child to/from blkdebug.
+No VM reboot or host block device manipulation is required to inject/relieve EIO.
+The guest may still need recovery after its filesystem reacts to EIO; that is
+an outcome to measure, not something the harness should conceal.
+See the [QMP blockdev-reopen reference](https://www.qemu.org/docs/master/interop/qemu-qmp-ref.html#command-blockdev-reopen)
+and [QEMU 7.2.22 blkdebug implementation](https://github.com/qemu/qemu/blob/v7.2.22/block/blkdebug.c).
+
+`run-cold-boots.sh` runs E-B2 only after the four idle baselines. It caches the
+pinned workload image, cleanly stops each golden disk, and creates a fresh raw
+and NVRAM clone per repetition. Each repetition has its own real terminal GIF;
+the first also records QEMU serial boot. Node Ready must have a fresh heartbeat.
+Failed disks are retained. The Ubuntu NoCloud seed remains attached on later
+boots to preserve disk order and datasource identity. `publish-boot.py` records
+explicit artifact transfer paths; the Mac sync process publishes only after
+copying them. These boot scenarios await runtime validation.
+
+Density HTTPS probes use strict mTLS with the kubeconfig's TLS server name,
+including when connecting through the localhost tunnel. They measure complete
+fresh-connection HTTPS requests, not kubectl process startup. The observer's
+ConfigMap operations similarly preserve strict TLS verification.

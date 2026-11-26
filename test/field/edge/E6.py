@@ -7,6 +7,8 @@ import argparse,datetime,json,os,pathlib,subprocess,time
 from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--beyond-ca',required=True,help='UTC ISO timestamp strictly beyond the recorded CA notAfter');a=p.parse_args()
 scripts=pathlib.Path(__file__).resolve().parent;a.output.mkdir(parents=True,exist_ok=False)
+config=json.loads(subprocess.check_output(['kubectl','config','view','-o','json'],text=True))
+assert all(c['cluster']['server'].startswith('https://') and not c['cluster'].get('insecure-skip-tls-verify') for c in config['clusters']), 'RTC tests require strict TLS'
 now=datetime.datetime.now(datetime.timezone.utc)
 cases=[('minus-24h',now-datetime.timedelta(days=1)),('plus-400d',now+datetime.timedelta(days=400)),('beyond-ca',datetime.datetime.fromisoformat(a.beyond_ca.replace('Z','+00:00')))]
 subprocess.run([str(scripts/'wan-impairment.sh'),'blackhole'],check=True)
