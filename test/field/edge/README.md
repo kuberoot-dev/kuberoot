@@ -454,3 +454,17 @@ The implementation is checked against the pinned upstream
 [sd-boot implementation](https://github.com/siderolabs/talos/blob/55021d7c274f6bc207bf18efa2a684a31a35cd9f/internal/app/machined/pkg/runtime/v1alpha1/bootloader/sdboot/sdboot.go)
 and [fallback controller](https://github.com/siderolabs/talos/blob/55021d7c274f6bc207bf18efa2a684a31a35cd9f/internal/app/machined/pkg/controllers/runtime/drop_upgrade_fallback.go).
 These references define observation hooks, not test results.
+
+Forensic disk sharing uses `share-disk-blocks.py`: create an empty qcow2 overlay
+on the stopped source, **safe rebase** it onto an immutable reference so QEMU
+materializes only differing clusters, compress the resulting overlay, then
+compare every logical byte with the original. `qemu-img convert -B` by itself
+retains allocated source clusters and did not reduce these historical disks.
+The helper never removes original evidence. Callers replace/unlink originals
+only after successful comparison; backing files remain permanently retained.
+A real 2 MiB fixture with a 4 KiB mutation passed round-trip comparison in the
+pod and produced a 270336-byte allocated delta.
+
+Terminal PNGs show the last 30 actual wrapped transcript lines. Full command
+output is always retained in the corresponding raw text file; the bounded PNG
+avoids a many-thousand-pixel scrolling screenshot.

@@ -23,6 +23,6 @@ if ! test -f "$base"; then
 fi
 out=${failed%/system.raw}/failed.qcow2
 test ! -e "$out"
-qemu-img convert -c -f raw -O qcow2 -F qcow2 -B "$base" "$failed" "$out"
+python3 "$FIELD_SCRIPTS/share-disk-blocks.py" "$failed" "$base" "$out" --source-format raw
 qemu-img compare -f raw -F qcow2 "$failed" "$out"
 rm -- "$failed"

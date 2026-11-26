@@ -111,6 +111,6 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
  with (a.output/'runs.jsonl').open('a') as f:f.write(json.dumps(result)+'\n')
  if errors:
   # Preserve exact failed disk bytes as a verified delta against the kept golden.
-  run(['qemu-img','convert','-c','-f','raw','-O','qcow2','-B',base,'-F','qcow2',d/'system.raw',d/'failed.qcow2'])
+  run(['python3',scripts/'share-disk-blocks.py',d/'system.raw',base,d/'failed.qcow2','--source-format','raw'])
   run(['qemu-img','compare','-f','raw','-F','qcow2',d/'system.raw',d/'failed.qcow2'])
  (d/'system.raw').unlink()
