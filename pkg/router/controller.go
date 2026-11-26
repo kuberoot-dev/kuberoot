@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/netip"
@@ -53,12 +54,14 @@ type Controller struct {
 	trial                 trial
 	dnsmasq, bird         *Daemon
 	ruleset               string
+	rulesetDigest         [sha256.Size]byte
+	rulesetObserved       bool
 	dnsmasqConf, birdConf string
 	listers               map[string]cache.GenericLister
 }
 
-// Run watches the resources and reconciles on every change, and every half
-// minute to refresh what the status reports (leases, BGP sessions).
+// Run watches the resources and reconciles on every change, and every ten
+// seconds to repair kernel drift and refresh leases and BGP sessions.
 func (c *Controller) Run(ctx context.Context) error {
 	for _, d := range []string{c.RunDir, c.StateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -92,8 +95,8 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	for {
 		c.reconcile(ctx)
-		// Every half minute, and right at the end of a trial.
-		wait := 30 * time.Second
+		// Leave headroom within the thirty-second drift recovery window.
+		wait := 10 * time.Second
 		if !c.trial.Deadline.IsZero() {
 			wait = min(wait, time.Until(c.trial.Deadline)+time.Second)
 		}
@@ -258,10 +261,15 @@ func (c *Controller) reconcile(ctx context.Context) {
 func (c *Controller) confirmedFile() string { return filepath.Join(c.StateDir, "confirmed.json") }
 
 func (c *Controller) applyRuleset(rs string) error {
-	// Applied again when the table went missing, say flushed by hand.
-	if rs == c.ruleset && exec.Command("nft", "list", "table", "inet", Table).Run() == nil {
-		return nil
+	// Table existence alone does not detect a removed or changed rule. Compare
+	// the kernel's stateless rendering with the last successful installation;
+	// packet counters must not turn ordinary traffic into configuration drift.
+	if rs == c.ruleset && c.rulesetObserved {
+		if current, err := readRuleset(); err == nil && sha256.Sum256(current) == c.rulesetDigest {
+			return nil
+		}
 	}
+	c.rulesetObserved = false
 	cmd := exec.Command("nft", "-f", "-")
 	cmd.Stdin = strings.NewReader(rs)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -269,7 +277,17 @@ func (c *Controller) applyRuleset(rs string) error {
 		return fmt.Errorf("nft: %v: %s", err, bytes.TrimSpace(out))
 	}
 	c.ruleset = rs
+	current, err := readRuleset()
+	if err != nil {
+		return fmt.Errorf("read installed nft table: %w", err)
+	}
+	c.rulesetDigest = sha256.Sum256(current)
+	c.rulesetObserved = true
 	return nil
+}
+
+func readRuleset() ([]byte, error) {
+	return exec.Command("nft", "--stateless", "--numeric", "list", "table", "inet", Table).Output()
 }
 
 func (c *Controller) applyDnsmasq(conf string) error {
