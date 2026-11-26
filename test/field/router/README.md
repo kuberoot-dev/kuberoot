@@ -95,3 +95,9 @@ of positive NAT reachability. This does not assert the R6 negative-filter gate.
 `forwarding.py` is prepared for later R-B2: 5×60s TCP P8 and UDP64 in each
 direction, preserving iperf JSON and QEMU CPU time. It does not automatically
 claim generator headroom or a pass; evaluate the full baseline and CPU limits.
+
+`capture.sh` accepts AGG_FPS (default15); the live Debian serial cast was
+rerendered at5fps to stay below8MiB, without dropping transcript lines.
+`sync-baselines.py` runs on the Mac with only kubectl/file operations: it archives
+completed r2/Debian idle windows and appends partial R-B1 rows/documents, never
+converts them into a whole-suite pass. It cannot execute the remaining tests.

@@ -8,7 +8,7 @@ mkdir -p /work/field/{casts,img,raw}
 asciinema rec --overwrite --cols 110 --rows 30 -q -c "bash '$script'; result=\$?; printf '%s\n' \"\$result\" > '/work/field/casts/$name.exit'; exit \"\$result\"" "/work/field/casts/$name.cast" </dev/null
 python3 /work/retime.py "/work/field/casts/$name.cast" "/work/field/casts/$name.retimed.cast" "/work/field/raw/$name.txt" > "/work/field/casts/$name.timing.json"
 [[ $(cat "/work/field/casts/$name.exit") == 0 ]] || { echo "scene failed; retained raw/cast, do not publish" >&2; exit 1; }
-agg --font-size 16 --theme dracula "/work/field/casts/$name.retimed.cast" "/work/field/img/$name.gif"
+agg --fps-cap "${AGG_FPS:-15}" --font-size 16 --theme dracula "/work/field/casts/$name.retimed.cast" "/work/field/img/$name.gif"
 python3 - "$name" <<'PY'
 import sys
 from PIL import Image
