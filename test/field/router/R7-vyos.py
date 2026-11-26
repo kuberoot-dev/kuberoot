@@ -35,8 +35,8 @@ while not (raw / 'vyos-fabric-setup.exit').exists():
     time.sleep(3)
 guest('client', 'ip route replace 10.64.0.0/12 via 192.168.10.1')
 # second upstream VLAN on the WAN interface, native CLI
-dut("configure; set interfaces ethernet eth0 vif 20 address 198.18.20.1/24; commit; exit")
-dut("ip -6 addr add fd42:1::1/64 dev eth0 2>/dev/null; ip -6 addr add fd42:2::1/64 dev eth0.20 2>/dev/null; true")
+dut("configure; set interfaces ethernet eth1 vif 20 address 198.18.20.1/24; commit; exit")
+dut("ip -6 addr add fd42:1::1/64 dev eth1 2>/dev/null; ip -6 addr add fd42:2::1/64 dev eth1.20 2>/dev/null; true")
 guest('gateway', 'systemctl stop bird; ip netns add upstream2 2>/dev/null; ip link add link test0 name upstream2 type vlan id 20 2>/dev/null; ip link set upstream2 netns upstream2 2>/dev/null; ip netns exec upstream2 ip link set lo up; ip netns exec upstream2 ip addr add 198.18.20.2/24 dev upstream2 2>/dev/null; ip netns exec upstream2 ip link set upstream2 up; ip netns exec upstream2 ip route add default via 198.18.20.1 2>/dev/null; ip -6 addr add fd42:1::2/64 dev test0 2>/dev/null; ip netns exec upstream2 ip -6 addr add fd42:2::2/64 dev upstream2 2>/dev/null; mkdir -p /run/field-bird')
 # enable bgpd via native CLI, then peers via vtysh (same FRR as the debian leg)
 dut("configure; set protocols bgp system-as 65000; set protocols bgp router-id 198.18.0.1; commit; exit")

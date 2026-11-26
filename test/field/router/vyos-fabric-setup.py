@@ -40,11 +40,17 @@ if i == 0:
 
 commands = [
     'configure',
-    'set interfaces ethernet eth0 address 198.18.0.1/24',
-    'set interfaces ethernet eth1 address 192.168.10.1/24',
-    'set interfaces ethernet eth2 address dhcp',
+    # The installed image names the NICs by MAC: eth1 = WAN (:01), eth2 = LAN (:02), eth3 = observer (:03).
+    'delete interfaces ethernet eth1 address',
+    'delete interfaces ethernet eth2 address',
+    'delete interfaces ethernet eth3 address',
+    'delete nat source rule 10',
+    'set service dns forwarding allow-from 192.168.10.0/24',
+    'set interfaces ethernet eth1 address 198.18.0.1/24',
+    'set interfaces ethernet eth2 address 192.168.10.1/24',
+    'set interfaces ethernet eth3 address dhcp',
     'set protocols static route 0.0.0.0/0 next-hop 198.18.0.2',
-    'set nat source rule 10 outbound-interface name eth0',
+    'set nat source rule 10 outbound-interface name eth1',
     'set nat source rule 10 source address 192.168.10.0/24',
     'set nat source rule 10 translation address masquerade',
     'set service ssh',

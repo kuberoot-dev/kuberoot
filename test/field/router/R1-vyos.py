@@ -25,7 +25,10 @@ def inject(script):
     print('$ ssh vyos-production (config session)', flush=True)
     print(script, flush=True)
     try:
-        p = subprocess.run(['ssh', '-F', '/work/field/private/production-ssh.conf', 'vyos-production'],
+        # Non-interactive VyOS config sessions need the script template; the
+        # commit-confirm prompt is answered on the next line.
+        script = 'source /opt/vyatta/etc/functions/script-template\n' + script.replace('commit-confirm 1\n', 'commit-confirm 1\ny\nexit\n')
+        p = subprocess.run(['ssh', '-F', '/work/field/private/production-ssh.conf', 'vyos-production', 'vbash', '-s'],
                            input=script, capture_output=True, text=True, timeout=25)
         print(p.stdout + p.stderr, flush=True)
         return p.returncode
@@ -35,16 +38,16 @@ def inject(script):
 
 phases = [
     ('address',
-     'configure\nset interfaces ethernet eth0 address 198.18.0.99/24\ndelete interfaces ethernet eth0 address 198.18.0.1/24\ncommit-confirm 1\n',
-     '198.18.0.1/24 present on eth0'),
+     'configure\nset interfaces ethernet eth1 address 198.18.0.99/24\ndelete interfaces ethernet eth1 address 198.18.0.1/24\ncommit-confirm 1\n',
+     '198.18.0.1/24 present on eth1'),
     ('return-route',
      'configure\ndelete protocols static route 0.0.0.0/0\ncommit-confirm 1\n',
      'default route present'),
     ('vlan',
-     'configure\nset interfaces ethernet eth0 vif 999 address 198.18.0.1/24\ndelete interfaces ethernet eth0 address 198.18.0.1/24\ncommit-confirm 1\n',
+     'configure\nset interfaces ethernet eth1 vif 999 address 198.18.0.1/24\ndelete interfaces ethernet eth1 address 198.18.0.1/24\ncommit-confirm 1\n',
      'untagged management restored'),
     ('firewall',
-     'configure\nset firewall ipv4 name FIELDLOCK default-action drop\nset interfaces ethernet eth0 firewall local name FIELDLOCK\ncommit-confirm 1\n',
+     'configure\nset firewall ipv4 input filter rule 10 action drop\nset firewall ipv4 input filter rule 10 inbound-interface name eth1\nset firewall ipv4 input filter rule 10 description FIELDLOCK\ncommit-confirm 1\n',
      'local firewall removed'),
 ]
 
@@ -82,16 +85,18 @@ for phase, script, expect in phases:
     rebooted = None
     reverted = None
     if recovered_at is not None:
-        p = production('uptime; show interfaces ethernet eth0; show protocols static route 0.0.0.0/0; show firewall ipv4 name FIELDLOCK 2>/dev/null; show interfaces ethernet eth0 vif 999 2>/dev/null', timeout=15)
+        p = production('cut -d. -f1 /proc/uptime; ip -br addr show eth1; ip route show default; sudo nft list ruleset | grep -c FIELDLOCK || true; ip -br link show eth1.999 2>&1', timeout=15)
         out = p.stdout
-        rebooted = 'up' in out.splitlines()[0] if out else None
-        # crude uptime parse: minutes
+        up = int(out.split()[0]) if out.split() and out.split()[0].isdigit() else None
+        rebooted = None if up is None else up < (time.monotonic() - start)
         reverted = {
+            'uptime_s': up,
             'address_gone': '198.18.0.99' not in out,
             'mgmt_address_back': '198.18.0.1/24' in out,
-            'default_route_back': '0.0.0.0/0' in out or 'next-hop' in out,
-            'fieldlock_gone': 'FIELDLOCK' not in out,
-            'vif999_gone': 'vif 999' not in out,
+            'default_route_back': 'default via 198.18.0.2' in out,
+            'fieldlock_gone': '\n0\n' in out,
+            'vif999_gone': 'eth1.999' not in out.split('does not exist')[0] if 'eth1.999' in out else True,
+            'raw': out,
         }
     subprocess.run(['/work/field/guest-command', 'client', 'pkill fping; cat /tmp/R1-fwd.txt'],
                    capture_output=True, text=True, timeout=20)
