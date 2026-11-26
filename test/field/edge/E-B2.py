@@ -21,7 +21,7 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
  recorder=None
  if repetition==1:
   (d/'serial.log').touch()
-  shell='date -u; tail -n +1 -F '+shlex.quote(str(d/'serial.log'))
+  shell=shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--stop-file',str(d/'serial.stop')])
   recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',shell,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
  t0=time.monotonic();utc0=datetime.datetime.now(datetime.timezone.utc)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(scripts)],env=env,check=True)
@@ -63,7 +63,7 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
   try: command(str(d/'qmp.sock'),'quit')
   except Exception as exc: errors.append('QMP stop: '+str(exc))
   if recorder:
-   os.killpg(recorder.pid,signal.SIGINT)
+   (d/'serial.stop').touch()
    recorder.wait(timeout=10)
    timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
    hold=str(max(5,15.1-timing['playback_seconds']))

@@ -22,7 +22,7 @@ show kill -9 "$(cat "$VM_DIR/pid")"
 cp "$VM_DIR/serial.log" "$D/before-cut-serial.log"
 show vm_start 1
 # Record the actual serial stream of the recovery, separately from the API view.
-asciinema rec --cols 110 --rows 30 -q -c "date -u; timeout 180 tail -n +1 -F '$VM_DIR/serial.log'; date -u" "$D/recovery.cast" > "$D/serial-recorder.log" 2>&1 &
+asciinema rec --cols 110 --rows 30 -q -c "python3 '$FIELD_SCRIPTS/serial-follow.py' '$VM_DIR/serial.log' --stop-file '$D/serial.stop' --max-seconds 180" "$D/recovery.cast" > "$D/serial-recorder.log" 2>&1 &
 serial_recorder=$!
 show date -u
 # Keep the blackhole for a full hour measured from the fault, including reboot.

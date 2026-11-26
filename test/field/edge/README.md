@@ -164,3 +164,13 @@ stream, rechecks the source hash, writes a manifest, and only then removes the
 source inside our pod. Restoring that file with kubectl cp restores the original
 bytes. Never archive an active disk or another workload's files. The Mac runs
 only a file transfer and SHA256, not VM or build tools.
+
+`serial-follow.py` reads the actual QEMU serial file, follows truncation on
+restart, and runs `date -u` every 30 seconds and at the boundaries. Its stop file
+ends the capture cleanly; no synthetic console events are inserted. E-B2/E3/E1
+use it for serial GIFs. `E4.py` implements individual fresh-clone storage/W
+subcases (100/20 IOPS, 90/95/100% fullness, EIO). It is not yet runtime-validated
+and deliberately labels a W-only success as a subcase: upgrade safety must be
+checked separately before E4 as a whole can pass. The guest-local ENOSPC
+injector is a critical-priority pod with an independent HTTP relief endpoint;
+it mounts the DUT state directory, never the workshop host/PVC.

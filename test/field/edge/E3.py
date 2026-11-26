@@ -3,7 +3,7 @@
 Upgrade phases require a product-specific hook that returns only at that phase.
 No hook means ordinary writes only; this does NOT claim upgrade-phase coverage.
 """
-import argparse,datetime,json,os,pathlib,random,shlex,subprocess,sys,time
+import argparse,datetime,json,os,pathlib,random,shlex,signal,subprocess,sys,time
 from qmp import command
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--image-digest',required=True);p.add_argument('--source-commit',required=True);p.add_argument('--seed',type=int,default=20261125);p.add_argument('--phase-hook',type=pathlib.Path);p.add_argument('--repetition',type=int,choices=range(1,31));a=p.parse_args()
 scripts=pathlib.Path(__file__).resolve().parent;root=pathlib.Path('/work/field-edge')
@@ -19,7 +19,7 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
  rng=random.Random(a.seed+repetition)
  phase=phases[repetition%len(phases)];name=f'E3-{a.product}-{repetition+1:02d}';d=a.output/name;d.mkdir()
  run(['qemu-img','convert','-f','qcow2','-O','raw',base,d/'system.raw']);run(['cp',a.golden/'vars.fd',d/'vars.fd'])
- env=dict(os.environ,VM_DIR=str(d));errors=[];metrics={};cut_epoch=None
+ env=dict(os.environ,VM_DIR=str(d));errors=[];metrics={};cut_epoch=None;recorder=None
  try:
   run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',scripts],env=env)
   deadline=time.monotonic()+300
@@ -34,6 +34,8 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   if phase!='writes':run([a.phase_hook,phase],env=env)
   offset=rng.uniform(2,8) if phase=='writes' else rng.uniform(0,.25)
   time.sleep(offset)
+  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop')]),str(d/'recovery.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+  time.sleep(.2)
   kill_command=['kill','-9',str(int((d/'pid').read_text()))]
   print('$ ',end='',flush=True)
   for ch in shlex.join(kill_command): print(ch,end='',flush=True);time.sleep(.01)
@@ -76,6 +78,11 @@ for repetition in ([a.repetition-1] if a.repetition else range(30)):
   try:command(str(d/'qmp.sock'),'quit')
   except Exception:pass
   time.sleep(2)
+  if recorder:
+   (d/'serial.stop').touch();recorder.wait(timeout=10)
+   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'recovery.cast')],text=True))
+   hold=str(max(5,15.1-timing['playback_seconds']))
+   run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',hold,d/'recovery.retimed.cast',d/'recovery.gif'])
  result={'scenario_id':'E3','product':a.product,'image_digest':a.image_digest,'source_commit':a.source_commit,'repetition':repetition+1,'fault_seed':a.seed,'fault_phase':phase,'fault_epoch':cut_epoch,'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone + fresh OVMF vars; same multicast LAN/gateway; observer outside DUT','metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'failed' if errors else 'passed-W','reason':'; '.join(errors) if errors else 'W and bootID gates passed; product boot-slot state requires separate verification','artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
  (d/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
  with (a.output/'runs.jsonl').open('a') as f:f.write(json.dumps(result)+'\n')
