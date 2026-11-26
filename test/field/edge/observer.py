@@ -9,6 +9,9 @@ import base64
 import concurrent.futures
 import datetime
 import json
+import http.client
+import socket
+import urllib.parse
 import os
 import pathlib
 import ssl
@@ -49,7 +52,7 @@ def main():
         for path, field in [(cert, 'client-certificate-data'), (key, 'client-key-data')]:
             path.write_bytes(base64.b64decode(user[field])); path.chmod(0o600)
         tls.load_cert_chain(cert, key)
-        api = (cluster['server'].rstrip('/') + '/api/v1/namespaces/field/configmaps', tls)
+        api = (cluster['server'].rstrip('/') + '/api/v1/namespaces/field/configmaps', tls, cluster.get('tls-server-name'))
 
     def log(record):
         with lock:
@@ -70,6 +73,24 @@ def main():
                     try:
                         req = urllib.request.Request(api[0] + suffix, data=json.dumps(data).encode() if data is not None else None,
                             method=method, headers={'Content-Type': 'application/json'})
+                        endpoint = urllib.parse.urlsplit(req.full_url)
+                        if api[2] and api[2] != endpoint.hostname:
+                            # Observation via hostfwd retains the real certificate
+                            # identity from kubeconfig. Normal gateway requests
+                            # keep the original urllib transport unchanged.
+                            connection = http.client.HTTPSConnection(endpoint.hostname, endpoint.port or 443, timeout=2, context=api[1])
+                            raw = socket.create_connection((endpoint.hostname, endpoint.port or 443), timeout=2)
+                            try:
+                                connection.sock = api[1].wrap_socket(raw, server_hostname=api[2])
+                                connection.request(method, endpoint.path, body=req.data, headers={'Content-Type': 'application/json'})
+                                response = connection.getresponse()
+                                body = response.read()
+                                if not 200 <= response.status < 300:
+                                    raise RuntimeError(f'HTTP {response.status}: {body[:200]!r}')
+                                return json.loads(body)
+                            finally:
+                                connection.close()
+                                raw.close()
                         with urllib.request.urlopen(req, context=api[1], timeout=2) as response:
                             return json.load(response)
                     finally:

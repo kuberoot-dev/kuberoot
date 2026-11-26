@@ -23,10 +23,17 @@ def stamp():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 try:
  before=node3();oldname=before['metadata']['name'];oldboot=before['status']['nodeInfo']['bootID'];env['OLD_NODE_NAME']=oldname
  (d/'node-before.json').write_text(json.dumps(before,indent=2));typed(['export','KUBECONFIG='+env['KUBECONFIG']]);typed(['kubectl','get','nodes','-o','wide']);print(kube('get','nodes','-o','wide').stdout,flush=True)
- observer=subprocess.Popen(['python3',str(s/'observer.py'),'--http','http://127.0.0.1:28081','--append','http://127.0.0.1:28091','--kubeconfig',env['KUBECONFIG'],'--seconds','1800','--stop-file',str(d/'observer.stop'),'--output',str(d/'observer.jsonl')],stdout=(d/'observer.log').open('w'),stderr=subprocess.STDOUT)
+ observer_config=d/'observer-kubeconfig.private.json'
+ observer_config.write_text(subprocess.check_output(['kubectl','config','view','--raw','--minify','-o','json'],env=env,text=True));observer_config.chmod(0o600)
+ observer=subprocess.Popen(['python3',str(s/'observer.py'),'--http','http://127.0.0.1:28081','--append','http://127.0.0.1:28091','--kubeconfig',str(observer_config),'--seconds','1800','--stop-file',str(d/'observer.stop'),'--output',str(d/'observer.jsonl')],stdout=(d/'observer.log').open('w'),stderr=subprocess.STDOUT)
  serial=shlex.join(['python3',str(s/'serial-follow.py'),str(h/'n3/serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds','1800'])
  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',serial,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
- time.sleep(30);typed(['date','-u']);subprocess.run(['date','-u']);typed(['python3',str(s/'qmp.py'),str(h/'n3/qmp.sock'),'quit']);command(str(h/'n3/qmp.sock'),'quit');fault=time.monotonic();service_success=0
+ time.sleep(30)
+ if observer.poll() is not None:raise RuntimeError('external observer exited before E7 injection; inspect private observer log')
+ initial=[json.loads(line) for line in (d/'observer.jsonl').read_text().splitlines() if line.endswith('}')]
+ for kind in ['http','append','api']:
+  if not any(r['kind']==kind and r.get('ok') for r in initial):raise RuntimeError('external '+kind+' baseline failed before E7 injection')
+ typed(['date','-u']);subprocess.run(['date','-u']);typed(['python3',str(s/'qmp.py'),str(h/'n3/qmp.sock'),'quit']);command(str(h/'n3/qmp.sock'),'quit');fault=time.monotonic();service_success=0
  with (d/'node-detection.jsonl').open('x') as out:
   while time.monotonic()-fault<125:
    node=node3();http=False
