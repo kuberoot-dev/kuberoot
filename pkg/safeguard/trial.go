@@ -60,12 +60,17 @@ func (t *Trial[C]) Decide(candidate C, rev string, g *Guard, unhealthy string, n
 		return t.Confirmed, t.ConfirmedRev, false
 	}
 	changed := false
+	within := g.ConfirmWithin
+	if within <= 0 {
+		within = 2 * time.Minute
+	}
 	if t.Pending != rev {
-		within := g.ConfirmWithin
-		if within <= 0 {
-			within = 2 * time.Minute
-		}
 		t.Pending, t.Deadline = rev, now.Add(within)
+		changed = true
+	} else if latest := now.Add(within); t.Deadline.After(latest) {
+		// A deadline kept on disk is wall-clock time. If the clock went back
+		// across a restart, the trial must not outlive its own length.
+		t.Deadline = latest
 		changed = true
 	}
 	if unhealthy != "" {

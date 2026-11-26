@@ -109,3 +109,20 @@ func TestReturningToBaselineClearsPersistedTrialAndRollback(t *testing.T) {
 		}
 	}
 }
+
+func TestClockGoingBackDoesNotStretchATrial(t *testing.T) {
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	guard := &Guard{ConfirmWithin: time.Minute}
+	var tr Trial[string]
+	tr.Decide("a", "a", guard, "", now)
+	tr.Decide("b", "b", guard, "", now)
+	// After a restart the node's clock reads a day earlier: the kept
+	// deadline is a day and a minute away, but the trial lasts a minute.
+	back := now.Add(-24 * time.Hour)
+	if _, rev, save := tr.Decide("b", "b", guard, "", back); rev != "b" || !save || !tr.Deadline.Equal(back.Add(time.Minute)) {
+		t.Fatalf("deadline %s after the clock went back, want %s", tr.Deadline, back.Add(time.Minute))
+	}
+	if _, rev, _ := tr.Decide("b", "b", guard, "", back.Add(time.Minute)); rev != "a" || tr.RolledBack != "b" {
+		t.Fatalf("trial outlived its length: running %s", rev)
+	}
+}
