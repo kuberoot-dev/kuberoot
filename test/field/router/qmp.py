@@ -3,7 +3,7 @@
 import json,socket,sys
 from pathlib import Path
 name,cmd=sys.argv[1:3]
-if name not in ('r1','r2','openwrt','vyos','debian'): raise SystemExit('unknown field VM')
+if name not in ('r1','r2','openwrt','vyos','debian','client','gateway'): raise SystemExit('unknown field VM')
 s=socket.socket(socket.AF_UNIX);s.settimeout(10)
 s.connect(str(Path('/work/vms')/name/'qmp.sock'))
 f=s.makefile('rwb',buffering=0)
