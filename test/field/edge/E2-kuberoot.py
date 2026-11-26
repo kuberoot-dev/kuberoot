@@ -46,7 +46,7 @@ try:
  request={'apiVersion':'node.kuberoot.dev/v1alpha1','kind':'Upgrade','metadata':{'name':'field-bad-release'},'spec':{'url':a.bundle_url,'sha256':a.bundle_sha256,'reboot':not negative}}
  (d/'upgrade-request.json').write_text(json.dumps(request,indent=2));typed(['date','-u']);subprocess.run(['date','-u'],check=True)
  start=time.monotonic();fault_epoch=time.time();nk('create','-f',str(d/'upgrade-request.json'),visible=True)
- seen_target=False;last_print=None;finished=False
+ seen_target=False;last_print=None;finished=False;wan_cut=False
  with (d/'observations.jsonl').open('x') as out:
   while time.monotonic()-start<a.deadline:
    row={'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds':time.monotonic()-start}
@@ -54,6 +54,9 @@ try:
     slots=slot_snapshot();row['bootentries']=slots;current=next(s for s in slots['items'] if s['status'].get('booted'))['status'];row['booted']=current
     if current['release']==a.target_version:
      seen_target=True
+     if not negative and not wan_cut:
+      subprocess.run(['bash',str(scripts/'wan-impairment.sh'),'blackhole'],check=True);wan_cut=True
+      metrics['wan_disconnected_after_target_boot']=True
      if not negative and not fault_verified:
       try:
        fault_log=nk('get','--raw','/apis/node.kuberoot.dev/v1alpha1/nodeservices/field-test-fault/log')
@@ -109,6 +112,7 @@ try:
  typed(['date','-u']);subprocess.run(['date','-u'],check=True);nk('get','bootentries',visible=True)
 except Exception as exc:errors.append(str(exc))
 finally:
+ subprocess.run(['bash',str(scripts/'wan-impairment.sh'),'clean'],check=False)
  if observer_started:
   try:gateway(f'touch /home/observer/{name}.stop',check=False)
   except Exception:pass

@@ -365,3 +365,7 @@ generated controlplane file and intermediate without-legacy file are not the
 active config. The registry CA is a laboratory transport CA, not an image
 signature policy. The real Distribution registry/cosign preparation script is
 unexecuted and remains separate from completed product tests.
+
+E2 Talos now has a real installer-extension driver and separate corrupt-blob / foreign-cosign-image fixtures. Only the lab transport CA is configured; default image authorization remains unchanged. The driver records extension logs, HTTP fault proof, boot IDs, actual upgrade output, serial/VGA and full boot-partition digests for negative cases. Runtime validation is pending; prepared code is not a completed test.
+
+`capacity-at-wan-boundary.py` pauses only the queue parent after a measured run and ACPI shutdown, while its compressor finishes. `deduplicate-forensic-disks.py` preserves historical failed disks as verified qcow2 deltas against an immutable first failed disk, comparing all logical bytes before replacing the old standalone file. The backing file must never be deleted.
