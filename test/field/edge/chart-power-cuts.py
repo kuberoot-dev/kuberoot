@@ -10,5 +10,5 @@ plt.rcParams.update({'font.size':19});fig,ax=plt.subplots(figsize=(12,7),layout=
 for row in rows:
  value=row.get('recovery_seconds');x=row['repetition']
  if value is not None:ax.scatter(x,value,s=100,c='#217346' if row['status'].startswith('passed') else '#bd3039')
- else:ax.scatter(x,0,s=130,c='#bd3039',marker='x');ax.annotate('not recovered',(x,0),xytext=(0,10),textcoords='offset points',rotation=90,fontsize=11)
-ax.axhline(180,linestyle='--',color='#bd3039',label='180 s target');ax.set(xlabel='Seeded power cut (repetition)',ylabel='Recovery to 60 s sustained W success, s',title=r['product']+' · power-cut recovery',xlim=(.3,30.7),ylim=(-15,max(210,*[x.get('recovery_seconds') or 0 for x in rows])*1.15));ax.grid(alpha=.2);ax.legend();fig.savefig(current/'recovery-curve.png',dpi=150)
+ else:ax.scatter(x,1.03,s=130,c='#bd3039',marker='x',transform=ax.get_xaxis_transform(),clip_on=False);ax.text(x,1.07,'N/R',transform=ax.get_xaxis_transform(),ha='center',fontsize=10,clip_on=False)
+ax.axhline(180,linestyle='--',color='#bd3039',label='180 s target');ax.set(xlabel='Seeded power cut (repetition)',ylabel='Recovery to 60 s sustained W success, s',title=r['product']+' · power-cut recovery\nN/R above plot: no measured recovery time',xlim=(.3,30.7),ylim=(-15,max(210,*[x.get('recovery_seconds') or 0 for x in rows])*1.15));ax.grid(alpha=.2);ax.legend();fig.savefig(current/'recovery-curve.png',dpi=150)
