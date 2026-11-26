@@ -25,7 +25,7 @@ record = {
     'network_method': 'socket multicast; gateway VM owns netem/NAT',
     'outage_seconds': None, 'acknowledged_record_loss': None,
     'recovery_seconds': None, 'manual_actions': [],
-    'artifact_paths': ['02-edge/raw/phase2-preflight.txt'],
+    'artifact_paths': ['02-edge/raw/phase2-userspace-preflight.txt'],
 }
 print(json.dumps(record, indent=2))
 if '--record' in sys.argv:

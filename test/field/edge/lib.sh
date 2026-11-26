@@ -10,10 +10,10 @@ require_stand() {
   python3 "$FIELD_SCRIPTS/preflight.py"
 }
 show() {
-  python3 - "$*" <<'PY'
-import sys,time
+  python3 - "$@" <<'PY'
+import sys,time,shlex
 print('$ ',end='',flush=True)
-for ch in sys.argv[1]:
+for ch in shlex.join(sys.argv[1:]):
     print(ch,end='',flush=True); time.sleep(.012)
 print()
 PY
@@ -22,9 +22,22 @@ PY
 # All L2 forwarding uses unprivileged multicast. Gateway guests own NAT/netem.
 network_create() { require_stand; }
 vm_start() {
-  local id=$1 media=${2:-} d="$FIELD_ROOT/vm-$1"
+  local id=$1 media=${2:-} d="${VM_DIR:-$FIELD_ROOT/vm-$1}"
   [[ $id =~ ^[123]$ ]] || return 1
   require_stand
+  [[ $d == "$FIELD_ROOT/"* ]] || return 1
+  python3 - "$id" <<'CHECK'
+import pathlib,sys
+memory=4096
+for path in pathlib.Path('/proc').glob('[0-9]*/cmdline'):
+    try: args=path.read_bytes().decode().split('\0')
+    except (OSError,UnicodeError): continue
+    if not args or not args[0].endswith('qemu-system-x86_64'): continue
+    if '-name' in args and args[args.index('-name')+1]=='field-edge-'+sys.argv[1]:
+        raise SystemExit('DUT with this ID is still running; stop it explicitly first')
+    if '-m' in args: memory+=int(args[args.index('-m')+1])
+if memory>13312: raise SystemExit('Guest RAM would exceed 13 GiB; reduce topology before launching')
+CHECK
   mkdir -p "$d"
   test -f "$d/system.raw" || qemu-img create -f raw "$d/system.raw" 32G
   test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"

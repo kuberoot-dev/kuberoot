@@ -53,3 +53,55 @@ The self-test passed inside the workshop pod. No image build or VM ran on Mac.
 The next step is product pinning/preload,
 clean disk installation and E-B1, continuing in table order. Per-test orchestration,
 full workload deployment, repetition accounting and GIFs remain to be implemented.
+
+## Revised fixture and measurements
+
+`prepare-gateway.sh` boots a 512 MiB Debian bookworm VM. The verified official
+cloud image lives under `downloads/`; NoCloud seed is a virtio disk because the
+cloud kernel did not discover the SATA CD seed. `gateway-command.sh` executes
+its displayed SSH command inside this guest. `wan-impairment.sh` applies clean,
+blackhole, loss/jitter or 2 Mbit/s profiles there. Management SSH terminates on
+the gateway, so a WAN blackhole does not silently block the local observer.
+
+`prepare-kuberoot.sh` installs published v0.1.0 on a fresh raw 32 GiB disk,
+with DHCP on the multicast LAN. After installation, detach the install medium
+and start the installed disk. Preserve installation serial output first.
+`E-B1.py` samples whole-node kubelet telemetry and QMP virtual-block write
+counters every 30 seconds for 1800 seconds. `availableBytes` is kubelet's
+availability metric, not a direct /proc/meminfo MemAvailable reading. Filesystem
+used bytes refer to the kubelet-reported state filesystem, not both A/B slots.
+`start-baseline.sh` waits for disk compaction to end and add-ons to become ready,
+settles for 180 seconds, then records the baseline and appends its JSON result.
+A missing sample makes the run incomplete; raw errors remain in the sample log.
+
+`capture.sh NAME SCRIPT` records real typed commands with asciinema, retimes
+idle gaps, renders GIF/PNG inside the pod and refuses GIFs over 8 MiB.
+`qmp.py SOCKET COMMAND [JSON_ARGUMENTS]` makes an actual QMP call, reporting
+errors. `deploy-workload.sh` requires PYTHON_IMAGE pinned by digest, deploys ten
+HTTP replicas plus an fsync append service on a PVC. Deployment/observer trials
+remain separate from completed suite results.
+
+## Execution status and next stages
+
+The userspace gateway and clean installed release DUT have been exercised.
+The 30-minute E-B1 release collector is running; it is not yet a completed
+measurement. New `E-B2.py`, `E-B3.py`, `E1.sh`, `prepare-k3s.sh`, `build-main.sh`,
+`storage-stressor.py` and application workload deployment are implementations
+awaiting their first runtime validation, not evidence that these tests passed.
+The full table still requires execution in order, competitor runs, fault lanes
+and per-test artifacts. Do not open the completion PR before that work is done.
+
+Observer `--kubeconfig` enables a separate 0.2 Hz ConfigMap create/read/delete
+loop. API probe failures do not masquerade as acknowledged application records.
+For WAN impairment, ingress is redirected to IFB *inside the gateway guest*;
+LAN egress must remain untouched so local service probes are not artificially
+delayed by a WAN fault. Blackholes also block gateway upstream DNS queries.
+`storage-stressor.py` uses guest filesystem fallocate; this consumes guest free
+extents without writing 30 GiB of zeros onto the lab PVC. It tests ENOSPC, not
+physical flash wear or host PVC exhaustion.
+
+The shared builder PVC is full. `build-main.sh` builds in this pod after idle
+sampling, using source commit 1b29543967ae6fce971f0bf818000a6b04374b52. It reuses
+the unchanged release kernel/userland and the previously validated exact
+kubepkg commit 22170c1213a4, rebuilds all kuberoot binaries and the initrd,
+and signs with the existing private test-series key. Never publish that key.
