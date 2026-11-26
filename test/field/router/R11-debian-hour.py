@@ -2,7 +2,7 @@
 import json,subprocess,time
 from pathlib import Path
 raw=Path('/work/field/raw')
-while not (raw/'R7-debian-full2.exit').exists():time.sleep(3)
+while not (raw/'R3-debian.exit').exists():time.sleep(3)
 def qmp():return json.loads(subprocess.check_output(['python3','/work/field/qmp.py','debian','query-blockstats']))
 def guest(cmd):return subprocess.run(['/work/field/guest-command','debian',cmd],capture_output=True,text=True)
 print(time.strftime('%FT%TZ',time.gmtime()),'native nft configuration write load: offered 10/s, one full observed hour',flush=True)

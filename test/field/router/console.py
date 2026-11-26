@@ -2,7 +2,7 @@
 """Run a real guest shell command over serial, preserving exit status."""
 import argparse,re,select,socket,sys,time,uuid
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('vm',choices=['openwrt','vyos','debian']);p.add_argument('command');p.add_argument('--timeout',type=int,default=120);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('vm',choices=['openwrt','vyos','debian','r1','r2']);p.add_argument('command');p.add_argument('--timeout',type=int,default=120);a=p.parse_args()
 s=socket.socket(socket.AF_UNIX);s.settimeout(10);s.connect('/work/vms/'+a.vm+'/serial.sock');s.setblocking(False)
 def until(pattern,seconds):
  end=time.monotonic()+seconds;data=b''

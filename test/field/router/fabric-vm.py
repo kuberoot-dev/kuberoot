@@ -16,12 +16,14 @@ key=Path('/work/field/private/id_ed25519.pub').read_text().strip()
 (d/'network-config').write_text(json.dumps({'version':2,'ethernets':{'mgmt0':{'match':{'macaddress':'52:54:00:30:00:01'},'set-name':'mgmt0','dhcp4':True},'test0':{'match':{'macaddress':f'52:54:00:40:{port%100:02x}:02'},'set-name':'test0'},'direct0':{'match':{'macaddress':f'52:54:00:40:{port%100:02x}:03'},'set-name':'direct0'}}}))
 subprocess.run(['cloud-localds','--network-config='+str(d/'network-config'),str(d/'seed.img'),str(d/'user-data'),str(d/'meta-data')],check=True)
 segments={'client':[(31,'lan'),(33,'direct')],'gateway':[(32,'site'),(34,'wan')],'sink':[(34,'wan'),(33,'direct')]}[a.name]
-args=['qemu-system-x86_64','-name',a.name,'-enable-kvm','-cpu','host','-smp',os.environ.get('ENDPOINT_VCPU','1'),'-m',os.environ.get('ENDPOINT_RAM_MIB','768'),'-machine','q35',
+args=['qemu-system-x86_64','-name',a.name,'-enable-kvm','-cpu','host','-smp',os.environ.get('ENDPOINT_VCPU','1'),'-m',os.environ.get('ENDPOINT_RAM_MIB','768'),'-machine','q35','-boot','order=c',
  '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
- '-drive',f'if=pflash,format=raw,file={d}/vars.fd','-drive',f'file={d}/sys.qcow2,format=qcow2,if=virtio,cache=none',
+ '-drive',f'if=pflash,format=raw,file={d}/vars.fd','-drive',f'file={d}/sys.qcow2,format=qcow2,if=none,id=system,cache=none','-device','virtio-blk-pci,drive=system,bootindex=1',
  '-drive',f'file={d}/seed.img,format=raw,if=virtio,readonly=on',
- '-netdev',f'user,id=management,hostfwd=tcp:127.0.0.1:{port}-:22','-device',f'virtio-net-pci,netdev=management,mac=52:54:00:30:00:01']
+ '-netdev',f'user,id=management,hostfwd=tcp:127.0.0.1:{port}-:22','-device',f'virtio-net-pci,romfile=,netdev=management,mac=52:54:00:30:00:01']
 for idx,(seg,label) in enumerate(segments,2):
- args+=['-netdev',f'socket,id={label},mcast=230.31.0.{seg}:130{seg},localaddr=127.0.0.1','-device',f'virtio-net-pci,id={label},netdev={label},mac=52:54:00:40:{port%100:02x}:{idx:02x}']
+ args+=['-netdev',f'socket,id={label},mcast=230.31.0.{seg}:130{seg},localaddr=127.0.0.1','-device',f'virtio-net-pci,romfile=,id={label},netdev={label},mac=52:54:00:40:{port%100:02x}:{idx:02x}']
+if a.name=='gateway' and os.environ.get('FIELD_PHASE1_PEER')=='1':
+ args+=['-netdev','socket,id=phase1,mcast=230.0.0.3:12003,localaddr=127.0.0.1','-device','virtio-net-pci,romfile=,netdev=phase1,mac=52:54:00:40:20:04']
 args+=['-chardev',f'socket,id=ser,path={d}/serial.sock,server=on,wait=off,logfile={d}/console.log,logappend=on','-serial','chardev:ser','-qmp',f'unix:{d}/qmp.sock,server=on,wait=off','-display','none','-daemonize','-pidfile',str(d/'pid')]
 (d/'launch.json').write_text(json.dumps({'started_at':time.time(),'argv':args},indent=2)+'\n');subprocess.run(args,check=True)

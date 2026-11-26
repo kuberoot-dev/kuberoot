@@ -2,7 +2,7 @@
 """Two actual BIRD upstreams on distinct VLANs, FRR RIB/FIB and sampled traffic."""
 import json,subprocess,time,ipaddress,os
 from pathlib import Path
-raw=Path('/work/field/raw')
+raw=Path('/work/field/raw');ram_label=os.environ.get('FIELD_DUT_RAM_GIB','2')+'GiB'
 def guest(vm,cmd,timeout=90):
  print(time.strftime('%FT%TZ',time.gmtime()),'$ guest-command',vm,cmd,flush=True)
  p=subprocess.run(['/work/field/guest-command',vm,cmd],capture_output=True,text=True,timeout=timeout);print(p.stdout+p.stderr,flush=True);return p
@@ -11,7 +11,7 @@ def put(vm,path,data):
  subprocess.run(['/work/field/guest-command',vm,'cat >'+path],input=data,text=True,check=True)
 while not (raw/'R5-debian.exit').exists():time.sleep(3)
 guest('client','ip route replace 10.64.0.0/12 via 192.168.10.1')
-put('debian','/etc/systemd/network/04-field-upstream2.network','[Match]\nName=upstream2\n[Network]\nAddress=198.18.20.1/24\nAddress=fd42:2::1/64\nLinkLocalAddressing=no\n')
+put('debian','/etc/systemd/network/04-field-upstream2.network','[Match]\nName=upstream2\n[Network]\nAddress=198.18.20.1/24\nAddress=fd42:2::1/64\nLinkLocalAddressing=ipv6\n')
 guest('debian','cp /etc/frr/frr.conf /tmp/R7-frr-before.conf; nft list ruleset >/tmp/R7-nft-before; nft flush ruleset; ip link add link enp0s2 name upstream2 type vlan id 20; ip addr add 198.18.20.1/24 dev upstream2; ip link set upstream2 up; ip -6 addr add fd42:1::1/64 dev enp0s2; ip -6 addr add fd42:2::1/64 dev upstream2')
 guest('gateway','systemctl stop bird; ip netns add upstream2; ip link add link test0 name upstream2 type vlan id 20; ip link set upstream2 netns upstream2; ip netns exec upstream2 ip link set lo up; ip netns exec upstream2 ip addr add 198.18.20.2/24 dev upstream2; ip netns exec upstream2 ip link set upstream2 up; ip netns exec upstream2 ip route add default via 198.18.20.1; ip -6 addr add fd42:1::2/64 dev test0; ip netns exec upstream2 ip -6 addr add fd42:2::2/64 dev upstream2; mkdir -p /run/field-bird')
 config='frr defaults traditional\nhostname field-debian\nservice integrated-vtysh-config\nrouter bgp 65000\n bgp router-id 198.18.0.1\n no bgp ebgp-requires-policy\n no bgp network import-check\n'
@@ -43,7 +43,7 @@ for count in [int(x) for x in os.environ.get('FIELD_PREFIX_COUNTS','10000,100000
    except (ValueError,KeyError):v6ok=False
   if fib==count and both and v6ok:break
   time.sleep(3)
- (raw/f'R7-debian-{count}-2GiB.json').write_text(json.dumps(rows,indent=2)+'\n')
+ (raw/f'R7-debian-{count}-{ram_label}.json').write_text(json.dumps(rows,indent=2)+'\n')
  # Sample 1000 deterministic destinations; endpoints own these /32s.
  addresses=[str(ipaddress.IPv4Address(int(ipaddress.IPv4Address('10.64.0.0'))+i*(count//1000))) for i in range(1000)]
  for side in [1,2]:
@@ -52,7 +52,7 @@ for count in [int(x) for x in os.environ.get('FIELD_PREFIX_COUNTS','10000,100000
   guest('gateway',f'sh /tmp/R7-samples-{side}.sh')
  put('client','/tmp/R7-samples.txt','\n'.join(addresses)+'\n')
  p=guest('client','fping -c 1 -t 1000 -i 2 -f /tmp/R7-samples.txt',60)
- (raw/f'R7-debian-{count}-samples.txt').write_text(p.stdout+p.stderr)
+ (raw/(f'R7-debian-{count}-samples'+('-'+ram_label if count>=800000 else '')+'.txt')).write_text(p.stdout+p.stderr)
  if ipv6:
   addresses6=[str(ipaddress.IPv6Address(int(ipaddress.IPv6Address('fd42:100::'))+i*(ipv6//1000))) for i in range(1000)]
   for side in [1,2]:
@@ -61,5 +61,5 @@ for count in [int(x) for x in os.environ.get('FIELD_PREFIX_COUNTS','10000,100000
   guest('debian','sysctl -w net.ipv6.conf.all.forwarding=1; ip -6 addr replace fd42:10::1/64 dev enp0s3')
   guest('client','ip -6 addr replace fd42:10::2/64 dev test0; ip -6 route replace fd42:100::/64 via fd42:10::1')
   guest('gateway','ip -6 route replace fd42:10::/64 via fd42:1::1; ip netns exec upstream2 ip -6 route replace fd42:10::/64 via fd42:2::1')
-  put('client','/tmp/R7-samples6.txt','\n'.join(addresses6)+'\n');p=guest('client','fping -6 -c 1 -t 1000 -i 2 -f /tmp/R7-samples6.txt',60);(raw/f'R7-debian-{count}-samples6.txt').write_text(p.stdout+p.stderr)
-(raw/('R7-debian-full2.exit' if os.environ.get('FIELD_IPV6_COUNT') else 'R7-debian-small.exit')).write_text('0\n')
+  put('client','/tmp/R7-samples6.txt','\n'.join(addresses6)+'\n');p=guest('client','fping -6 -c 1 -t 1000 -i 2 -f /tmp/R7-samples6.txt',60);(raw/f'R7-debian-{count}-samples6-{ram_label}.txt').write_text(p.stdout+p.stderr)
+(raw/('R7-debian-full'+os.environ.get('FIELD_DUT_RAM_GIB','2')+'.exit' if os.environ.get('FIELD_IPV6_COUNT') else 'R7-debian-small.exit')).write_text('0\n')

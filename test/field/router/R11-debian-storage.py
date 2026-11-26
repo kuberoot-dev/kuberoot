@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Dedicated actual nft config filesystem: IOPS limits, fullness and visible errors."""
-import json,subprocess,time
+import json,subprocess,time,os
 from pathlib import Path
 raw=Path('/work/field/raw')
 while not (raw/'R4-debian-isolation.exit').exists():time.sleep(3)
@@ -15,7 +15,19 @@ if Path(image).exists():raise SystemExit('existing storage trial preserved')
 subprocess.run(['qemu-img','create','-f','raw',image,'128M'],check=True)
 qmp('blockdev-add',{'driver':'file','node-name':'field-state-file','filename':image})
 qmp('blockdev-add',{'driver':'raw','node-name':'field-state','file':'field-state-file'})
-qmp('device_add',{'driver':'virtio-blk-pci','drive':'field-state','id':'fieldstate','serial':'fieldstate'})
+try:
+ qmp('device_add',{'driver':'virtio-blk-pci','drive':'field-state','id':'fieldstate','serial':'fieldstate'})
+except subprocess.CalledProcessError as e:
+ # Q35 root bus may reject PCI hotplug. Preserve evidence and attach at boot.
+ (raw/'R11-debian-hotplug-rejection.txt').write_text(str(e)+'\n'+str(e.stdout)+'\n'+str(e.stderr))
+ pid=Path('/work/vms/debian/pid').read_text().strip();argv=Path('/proc/'+pid+'/cmdline').read_bytes().split(b'\0');argv=[x.decode() for x in argv if x]
+ guest('debian','sync');qmp('quit',{});time.sleep(3);Path('/work/vms/debian/pid').unlink(missing_ok=True)
+ argv+=['-drive','file='+image+',format=raw,if=none,id=field-state,cache=none','-device','virtio-blk-pci,drive=field-state,id=fieldstate,serial=fieldstate']
+ subprocess.run(argv,check=True)
+ for _ in range(90):
+  if guest('debian','true').returncode==0:break
+  time.sleep(2)
+ else:raise SystemExit('explicit storage-device boot failed')
 time.sleep(3)
 p=guest('debian','cp -a /var/lib/field-config /root/R11-config-before; cp -a /etc/nftables.conf /root/R11-nft-before; mkfs.ext4 -F /dev/disk/by-id/virtio-fieldstate; mount /dev/disk/by-id/virtio-fieldstate /var/lib/field-config; cp /root/R11-nft-before /var/lib/field-config/rules.nft; rm /etc/nftables.conf; ln -s /var/lib/field-config/rules.nft /etc/nftables.conf; sync; df -B1 /var/lib/field-config')
 if p.returncode:raise SystemExit('state FS setup failed')
