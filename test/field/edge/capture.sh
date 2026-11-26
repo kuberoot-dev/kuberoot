@@ -4,6 +4,7 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 name=${1:?capture-name}; script=${2:?scene-script}
 [[ $name =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
+if [[ $name == t-E2-* ]];then python3 "$FIELD_SCRIPTS/prepare-run-capacity.py";fi
 out=$FIELD_ROOT/captures
 mkdir -p "$out"
 export COLUMNS=110 LINES=30 TERM=xterm-256color

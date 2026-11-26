@@ -649,3 +649,9 @@ was nevertheless marked Good. The fixed health-gate lane therefore also runs
 ten pod-network trials, in addition to the healthy control and c/d cases.
 This is protection with explicitly configured application checks; it is not
 a claim that the default API-only gate detects every data-plane failure.
+
+Before an E2 capture, if PVC free space is below 5 GiB,
+`prepare-run-capacity.py` may retire only `build-main/gocache`, a reproducible
+Go compiler cache. It refuses any active DUT or Go compiler and writes a
+before/after byte-count manifest. Source, module cache, built artifacts and
+measurement evidence are not in this cleanup target.
