@@ -9,8 +9,12 @@ p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required
 p.add_argument('--repetition',type=int,choices=range(1,11)); a=p.parse_args();assert '@sha256:' in a.image
 scripts=pathlib.Path(__file__).resolve().parent
 a.output.mkdir(parents=True,exist_ok=True)
-def k(*args,check=True):
- r=subprocess.run(['kubectl','--request-timeout=2s',*args],text=True,capture_output=True,timeout=4)
+def k(*args,check=True,request_timeout=2):
+ try:
+  r=subprocess.run(['kubectl',f'--request-timeout={request_timeout}s',*args],text=True,capture_output=True,timeout=request_timeout+3)
+ except subprocess.TimeoutExpired as exc:
+  if check: raise
+  r=subprocess.CompletedProcess(exc.cmd,124,'',str(exc))
  if check and r.returncode: raise RuntimeError(r.stderr)
  return r
 for repetition in ([a.repetition] if a.repetition else range(1,11)):
@@ -52,13 +56,24 @@ for repetition in ([a.repetition] if a.repetition else range(1,11)):
    r=k('-n','default','get','pod',name,'-o','json',check=False)
    if r.returncode==0 and any(c['type']=='Ready' and c['status']=='True' for c in json.loads(r.stdout).get('status',{}).get('conditions',[])):break
    time.sleep(1)
-  r=k('-n','default','exec',name,'--','python3','-c','import socket; print(socket.gethostbyname("kubernetes.default.svc.cluster.local"))')
+  else: raise RuntimeError('new pod not Ready within 300 seconds')
+  attempts=[]
+  while time.monotonic()<deadline:
+   r=k('-n','default','exec',name,'--','python3','-c','import socket; socket.setdefaulttimeout(3); print(socket.gethostbyname("kubernetes.default.svc.cluster.local"))',check=False,request_timeout=10)
+   attempts.append({'elapsed_seconds':time.monotonic()-t0,'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr})
+   (d/'dns-attempts.json').write_text(json.dumps(attempts,indent=2))
+   if r.returncode==0 and r.stdout.strip():break
+   time.sleep(1)
+  else: raise RuntimeError('CoreDNS did not answer within 300 seconds: '+r.stderr)
   metrics['dns_answer']=r.stdout.strip();metrics['coredns_answer_seconds']=time.monotonic()-t0
-  k('-n','default','expose','pod',name,'--type=NodePort','--port=8080')
-  svc=json.loads(k('-n','default','get','service',name,'-o','json').stdout)
+  k('-n','default','expose','pod',name,'--type=NodePort','--port=8080',request_timeout=10)
+  svc=json.loads(k('-n','default','get','service',name,'-o','json',request_timeout=10).stdout)
   port=svc['spec']['ports'][0]['nodePort']
-  r=subprocess.run([str(scripts/'gateway-command.sh'),f'curl --fail --max-time 2 http://10.78.0.11:{port}/'],text=True,capture_output=True,timeout=10)
-  if r.returncode or 'Directory listing' not in r.stdout:raise RuntimeError('new pod HTTP response missing/wrong')
+  while time.monotonic()<deadline:
+   r=subprocess.run([str(scripts/'gateway-command.sh'),f'curl --fail --max-time 2 http://10.78.0.11:{port}/'],text=True,capture_output=True,timeout=10)
+   if r.returncode==0 and 'Directory listing' in r.stdout:break
+   time.sleep(1)
+  else: raise RuntimeError('new pod HTTP response missing/wrong within 300 seconds')
   metrics['new_pod_serves_seconds']=time.monotonic()-t0
  except Exception as exc:errors.append(str(exc))
  finally:
