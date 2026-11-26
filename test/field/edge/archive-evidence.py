@@ -6,7 +6,7 @@ import gzip,hashlib,json,pathlib,shutil
 
 def archive(path):
  path=pathlib.Path(path);assert path.is_relative_to(pathlib.Path('/work/field-edge'))
- if path.suffix!='.jsonl' and path.name not in ['records','recovered-records']:return path
+ if path.suffix!='.jsonl' and path.name not in ['records','recovered-records'] and not path.name.endswith('-records'):return path
  target=path.with_name(path.name+'.gz');proof=target.with_name(target.name+'.integrity.json')
  if not path.exists() and target.exists():
   with gzip.open(target,'rb') as f:actual=hashlib.file_digest(f,'sha256').hexdigest()

@@ -53,6 +53,11 @@ while True:
      f.write('\nMetrics: `'+json.dumps(r.get('metrics',{}),ensure_ascii=False)+'`.\n')
     print(json.dumps({'published':stem,'status':r['status']}),flush=True)
     continue
+   if r.get('status') in ['not measured','unsupported'] and not r.get('artifact_paths'):
+    stamp=re.sub(r'[^0-9A-Za-z]', '-',r.get('time_utc','unknown'));product=re.sub(r'[^0-9A-Za-z-]','-',r['product'])
+    record=root/'02-edge/raw'/f'{r["scenario_id"]}-{product}-{stamp}-published-result.json';record.write_text(json.dumps(r,indent=2)+'\n')
+    subprocess.run(['python3',str(scripts/'update-results.py'),'--article-root',str(root),'--record',str(record)],check=True)
+    print(json.dumps({'published':r['product'],'status':r['status']}),flush=True);continue
    if r.get('scenario_id')!='E-B1':continue
    sample=next(pathlib.Path(x).name for x in r['artifact_paths'] if x.endswith('-samples.jsonl'))
    stem=sample.removesuffix('-samples.jsonl')
