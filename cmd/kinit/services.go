@@ -160,8 +160,7 @@ func supervise(ctx context.Context, s service, verbose bool) {
 			log.Printf("%s exited (%s), restarting in %s", s.name, exit, backoff)
 		}
 		setStatus(s.name, func(st *supervisor.ServiceStatus) {
-			st.State, st.PID, st.LastExit = supervisor.StateRestarting, 0, exit
-			st.Restarts++
+			recordExit(st, exit, requested)
 		})
 		ran := time.Since(started)
 		if ran > healthyRun {
@@ -285,4 +284,14 @@ type prefixWriter struct {
 func (p *prefixWriter) Write(b []byte) (int, error) {
 	_, err := p.w.Write(append([]byte(p.prefix), b...))
 	return len(b), err
+}
+
+// recordExit excludes operator-requested restarts from probation failures.
+// Generation shutdowns return from supervise before reaching this function.
+func recordExit(st *supervisor.ServiceStatus, exit string, requested bool) {
+	st.State, st.PID, st.LastExit = supervisor.StateRestarting, 0, exit
+	st.Restarts++
+	if !requested {
+		st.UnrequestedExits++
+	}
 }

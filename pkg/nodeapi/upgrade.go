@@ -47,7 +47,7 @@ func (bootEntryStorage) snapshot(context.Context) (map[string]runtime.Object, er
 	}
 	out := map[string]runtime.Object{}
 	for _, e := range entries {
-		st := node.BootEntryStatus{Release: e.Release, State: e.State, TriesLeft: int32(e.Left), Booted: e.Booted, Default: e.Default, SortVersion: int32(e.Version)}
+		st := node.BootEntryStatus{Failure: e.Failure, Release: e.Release, State: e.State, TriesLeft: int32(e.Left), Booted: e.Booted, Default: e.Default, SortVersion: int32(e.Version)}
 		name := "slot-" + e.Slot
 		out[name] = &node.BootEntry{
 			ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(string(nodeUID()) + "-" + name), ResourceVersion: resourceVersion(st)},
@@ -280,65 +280,59 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 		klog.Errorf("boot assessment: %v", err)
 		return
 	}
-	onProbation, fallback := upgrade.Probation(entries)
+	onProbation, _ := upgrade.Probation(entries)
 	if !onProbation {
 		return
 	}
 	klog.Infof("boot assessment: slot %s is on probation", upgrade.CurrentSlot())
-	const window, deadline = 30 * time.Second, 5 * time.Minute
-	start := time.Now()
-	var healthySince time.Time
-	var restarts int
-	for time.Since(start) < deadline {
+	assessment := upgrade.Assessment{Start: time.Now()}
+	deadlineCtx, cancel := context.WithTimeout(ctx, upgrade.ProbationDeadline)
+	defer cancel()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		var statuses []supervisor.ServiceStatus
+		ready := false
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(5 * time.Second):
+		case <-deadlineCtx.Done():
+		case <-ticker.C:
+			statuses, err = kinit.Services(deadlineCtx)
+			// Check crash evidence before a potentially slow readiness request.
+			if err == nil && upgrade.CrashLoop(statuses) == "" {
+				if m, _ := membership.Load(); m != nil && m.Role != membership.RoleControlPlane {
+					ready = memberReady(deadlineCtx, nodeName)
+				} else {
+					ready = clusterReady(deadlineCtx)
+				}
+			}
 		}
-		ok, total := healthy(ctx, kinit, nodeName)
-		if !ok || total != restarts {
-			healthySince, restarts = time.Time{}, total
-			continue
+		if ctx.Err() != nil {
+			return
 		}
-		if healthySince.IsZero() {
-			healthySince = time.Now()
-		}
-		if time.Since(healthySince) >= window {
-			if _, err := upgrade.MarkGood(); err != nil {
-				klog.Errorf("boot assessment: mark good: %v", err)
+		good, reason := assessment.Observe(time.Now(), ready, statuses)
+		if reason != "" {
+			reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses))
+			if err != nil {
+				klog.Errorf("boot assessment: record failure: %v", err)
 				return
 			}
-			klog.Infof("boot assessment: slot %s is good", upgrade.CurrentSlot())
+			klog.Errorf("boot assessment: %s; reboot=%v", reason, reboot)
+			if reboot {
+				_ = kinit.Reboot(ctx)
+			}
+			return
+		}
+		if good {
+			if _, err := upgrade.MarkGood(); err != nil {
+				klog.Errorf("boot assessment: mark good: %v", err)
+			} else {
+				klog.Infof("boot assessment: slot %s is good", upgrade.CurrentSlot())
+			}
 			return
 		}
 	}
-	if !fallback {
-		// Rebooting would only boot this slot again.
-		klog.Errorf("boot assessment: slot %s did not come up healthy and no other slot ever did; staying", upgrade.CurrentSlot())
-		return
-	}
-	klog.Errorf("boot assessment: slot %s did not come up healthy, rebooting", upgrade.CurrentSlot())
-	_ = kinit.Reboot(ctx)
-}
-
-func healthy(ctx context.Context, kinit *supervisor.Client, nodeName string) (bool, int) {
-	statuses, err := kinit.Services(ctx)
-	if err != nil {
-		return false, 0
-	}
-	restarts := 0
-	for _, st := range statuses {
-		restarts += st.Restarts
-		if st.State != supervisor.StateRunning {
-			return false, restarts
-		}
-	}
-	// A control plane that joined runs its own API server: it is healthy as
-	// any cluster is, not as a worker with only the kubelet's credentials.
-	if m, _ := membership.Load(); m != nil && m.Role != membership.RoleControlPlane {
-		return memberReady(ctx, nodeName), restarts
-	}
-	return clusterReady(), restarts
 }
 
 // memberReady: a member has no API server of its own; it is healthy when the
@@ -361,7 +355,7 @@ func memberReady(ctx context.Context, nodeName string) bool {
 }
 
 // clusterReady: the control plane node is healthy when its API server is ready.
-func clusterReady() bool {
+func clusterReady(ctx context.Context) bool {
 	const pki = "/var/lib/kuberoot/pki/"
 	cert, err := tls.LoadX509KeyPair(pki+"admin.crt", pki+"admin.key")
 	if err != nil {
@@ -374,7 +368,11 @@ func clusterReady() bool {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(ca)
 	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{Certificates: []tls.Certificate{cert}, RootCAs: pool}}}
-	resp, err := client.Get("https://127.0.0.1:6443/readyz")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://127.0.0.1:6443/readyz", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
