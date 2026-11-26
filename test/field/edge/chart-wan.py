@@ -20,9 +20,9 @@ for d in directories:
   p99.append(samples[math.ceil(.99*len(samples))-1] if samples else float('nan'))
  fig,axes=plt.subplots(2,1,figsize=(11,10),sharex=True,layout='constrained')
  axes[0].bar(x,failed,width=.85,color='#b64b4b');axes[0].set_yscale('symlog',linthresh=1);axes[0].set_ylabel('Failed requests / minute (symlog)')
- axes[1].plot(x,p99,'o-',markersize=3);axes[1].set_yscale('log');axes[1].set_ylabel('Client p99 latency (ms)');axes[1].set_xlabel('Minutes from WAN blackhole')
+ axes[1].plot(x,p99,'o-',markersize=3);axes[1].set_yscale('log');axes[1].set_ylabel('All requests p99 (ms)\nIncludes failed requests');axes[1].set_xlabel('Minutes from WAN blackhole')
  for ax in axes:
-  ax.axvspan(0,60,color='gray',alpha=.1,label='WAN blackhole')
+  ax.axvspan(0,(float((d/'wan-restored-epoch').read_text())-fault)/60 if (d/'wan-restored-epoch').exists() else 60,color='gray',alpha=.1,label='WAN blackhole')
   ax.axvline((cut-fault)/60,color='black',linestyle='--',label='Power cut')
   if (d/'wan-restored-epoch').exists():ax.axvline((float((d/'wan-restored-epoch').read_text())-fault)/60,color='#217346',linestyle=':',label='WAN restored')
   ax.grid(axis='y',alpha=.2)
@@ -37,6 +37,8 @@ if all((d/'result.json').exists() for d in all_cases):
   value=r.get('recovery_seconds')
   if value is None:ax.text(i,10,'Not recovered',ha='center',rotation=90);continue
   ax.bar(i,value,color='#3b788c' if r['status']=='passed' else '#bd3039');ax.text(i,value*1.06,f'{value:.1f} s',ha='center')
+ for i,r in enumerate(rows):
+  if r.get('metrics',{}).get('recovered_before_wan_restored') is False:labels[i]+='\nafter WAN return'
  ax.set_xticks(range(4),labels);ax.set_ylabel('Recovery after power cut (s, log scale)');ax.axhline(180,color='red',linestyle='--',label='180 s threshold');ax.legend();ax.set_yscale('log');ax.set_ylim(10,max(240,max((r.get('recovery_seconds') or 0) for r in rows)*1.4));ax.grid(axis='y',alpha=.2)
  ax.set_title('E1: first 60 s of sustained W success\nOne observation per product; continuity errors reported separately')
  fig.savefig(root/'captures'/('chart-wan-'+os.environ.get('WAN_RUN_LABEL','gateway-v2')+'-recovery.png'),dpi=150)
