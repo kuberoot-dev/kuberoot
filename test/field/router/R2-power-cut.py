@@ -39,7 +39,13 @@ for _ in range(100):
  except FileNotFoundError:break
  time.sleep(.05)
 Path('/work/vms/r1/pid').unlink(missing_ok=True)
-subprocess.run(['bash','/work/field/phase1-vm.sh','router','1'],check=True)
+for attempt in range(20):
+ restart=subprocess.run(['bash','/work/field/phase1-vm.sh','router','1'],capture_output=True,text=True)
+ print(restart.stdout+restart.stderr,flush=True)
+ if restart.returncode==0:break
+ if 'write' not in restart.stderr or 'lock' not in restart.stderr:raise SystemExit('unexpected QEMU start failure')
+ time.sleep(1)
+else:raise SystemExit('QEMU image lock did not clear after power cut')
 api=None;forward=None;retained=False;boot=None;deadline=time.monotonic()+240
 while time.monotonic()<deadline:
  q=run(['get','bootentries','-o','json'],quiet=True)

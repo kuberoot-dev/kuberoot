@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Unprivileged equal-product fabric; run exclusively in the workshop pod."""
-import argparse,json,subprocess,time
+import argparse,json,subprocess,time,os
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('name',choices=['client','gateway','sink']);a=p.parse_args()
 root=Path('/work/vms'); d=root/a.name;d.mkdir(exist_ok=True)
@@ -16,7 +16,7 @@ key=Path('/work/field/private/id_ed25519.pub').read_text().strip()
 (d/'network-config').write_text(json.dumps({'version':2,'ethernets':{'mgmt0':{'match':{'macaddress':'52:54:00:30:00:01'},'set-name':'mgmt0','dhcp4':True},'test0':{'match':{'macaddress':f'52:54:00:40:{port%100:02x}:02'},'set-name':'test0'},'direct0':{'match':{'macaddress':f'52:54:00:40:{port%100:02x}:03'},'set-name':'direct0'}}}))
 subprocess.run(['cloud-localds','--network-config='+str(d/'network-config'),str(d/'seed.img'),str(d/'user-data'),str(d/'meta-data')],check=True)
 segments={'client':[(31,'lan'),(33,'direct')],'gateway':[(32,'site'),(34,'wan')],'sink':[(34,'wan'),(33,'direct')]}[a.name]
-args=['qemu-system-x86_64','-name',a.name,'-enable-kvm','-cpu','host','-smp','1','-m','768','-machine','q35',
+args=['qemu-system-x86_64','-name',a.name,'-enable-kvm','-cpu','host','-smp',os.environ.get('ENDPOINT_VCPU','1'),'-m',os.environ.get('ENDPOINT_RAM_MIB','768'),'-machine','q35',
  '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
  '-drive',f'if=pflash,format=raw,file={d}/vars.fd','-drive',f'file={d}/sys.qcow2,format=qcow2,if=virtio,cache=none',
  '-drive',f'file={d}/seed.img,format=raw,if=virtio,readonly=on',

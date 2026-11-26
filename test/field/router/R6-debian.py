@@ -6,7 +6,7 @@ def guest(vm,cmd,timeout=90):
  print(time.strftime('%FT%TZ',time.gmtime()),'$ guest-command',vm,cmd if len(cmd)<1000 else cmd[:80]+' [generated file transfer, full source in script]',flush=True)
  p=subprocess.run(['/work/field/guest-command',vm,cmd],capture_output=True,text=True,timeout=timeout);print(p.stdout+p.stderr,flush=True);return p
 while not (raw/'R4-debian-reuse-reboot.summary.json').exists():time.sleep(2)
-guest('debian','if ! test -f /tmp/field-nft-before-R6.conf; then cp /etc/nftables.conf /tmp/field-nft-before-R6.conf; nft list ruleset >/tmp/field-before-R6.nft; fi')
+guest('debian','if ! test -f /root/field-nft-before-R6.conf; then cp /etc/nftables.conf /root/field-nft-before-R6.conf; nft list ruleset >/root/field-before-R6.nft; fi')
 for vm in ['client','sink']:
  code=base64.b64encode(Path('/work/field/udp-probes.py').read_bytes()).decode();guest(vm,f'echo {code} | base64 -d >/tmp/udp-probes.py')
 guest('sink','nohup python3 /tmp/udp-probes.py server --seconds 1200 >/tmp/R6-server.log 2>&1 </dev/null &')
@@ -38,5 +38,5 @@ for count in ([int(x) for x in sys.argv[1:]] or [100,1000,10000,20000]):
  time.sleep(max(0,67-(time.monotonic()-t)))
  data=subprocess.check_output(['/work/field/guest-command','client',f'cat /tmp/R6-{count}-probes.jsonl']);(raw/f'R6-debian-{count}-probes.jsonl').write_bytes(data)
  (raw/'R6-debian-scale.json').write_text(json.dumps(rows,indent=2)+'\n')
-guest('debian','cp /tmp/field-nft-before-R6.conf /etc/nftables.conf; nft flush ruleset; nft -f /tmp/field-before-R6.nft')
+guest('debian','cp /root/field-nft-before-R6.conf /etc/nftables.conf; nft flush ruleset; nft -f /root/field-before-R6.nft')
 (raw/'R6-debian.exit').write_text('0\n')
