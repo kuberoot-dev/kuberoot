@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Publish only explicitly listed public evidence. Never walk private VM configs."""
 import argparse,json,pathlib,subprocess
+import importlib.util
+_spec=importlib.util.spec_from_file_location("archive_evidence",pathlib.Path(__file__).with_name("archive-evidence.py"));_archive=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_archive)
 p=argparse.ArgumentParser();p.add_argument('directory',type=pathlib.Path);p.add_argument('capture');a=p.parse_args()
 root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().parent;d=a.directory
 assert d.is_relative_to(root) and a.capture.startswith('t-') and '/' not in a.capture
@@ -15,12 +17,13 @@ public=['restore-status.jsonl','serial-redacted.log','live-serial-redacted.log',
 for filename in public:
  if r['scenario_id']=='E8' and filename=='serial.log':continue
  f=d/filename
- if not f.exists():continue
+ if not f.exists() and not f.with_name(f.name+'.gz').exists():continue
  target='02-edge/'+('img/' if f.suffix in ['.gif','.png'] else 'raw/')+a.capture+'-'+filename
  if filename=='recovery-curve.png':target='02-edge/img/chart-power-cuts-'+r['product']+'.png'
  transfers[target]=str(f)
 for filename in ['console.gif','console.png','timing.json']:
  f=d/'vga'/filename
  if f.exists():transfers['02-edge/'+('raw/' if filename.endswith('.json') else 'img/')+a.capture+'-vga-'+filename]=str(f)
+transfers=_archive.archive_transfers(transfers)
 r['artifact_transfers']=transfers;r['artifact_paths']=list(transfers)
 with (root/'results.jsonl').open('a') as f:f.write(json.dumps(r)+'\n')

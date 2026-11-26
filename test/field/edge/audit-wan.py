@@ -5,7 +5,7 @@ This produces supplementary evidence; it never overwrites a recorded run.
 import argparse,datetime,json,pathlib,collections
 p=argparse.ArgumentParser();p.add_argument('directory',type=pathlib.Path);p.add_argument('--monitor',type=pathlib.Path,default=pathlib.Path('/work/field-edge/fabric-monitor.jsonl'));a=p.parse_args();d=a.directory
 fault=float((d/'fault-epoch').read_text());cut=float((d/'power-cut-epoch').read_text());original=json.loads((d/'result.json').read_text());recovery=original['recovery_seconds'];end=fault+3600
-rows=[json.loads(x) for x in (d/'observer.jsonl').read_text().splitlines()]
+rows=[json.loads(x) for x in ((d/'observer.jsonl').read_text() if (d/'observer.jsonl').exists() else __import__('gzip').open(d/'observer.jsonl.gz','rt').read()).splitlines()]
 def epoch(r):return datetime.datetime.fromisoformat(r['utc']).timestamp()
 service=[r for r in rows if r['kind'] in ['http','append'] and r.get('utc')]
 pre=[r for r in service if fault<=epoch(r) and epoch(r)+r.get('latency_seconds',0)<cut]

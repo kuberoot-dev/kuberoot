@@ -8,7 +8,7 @@ root=pathlib.Path('/work/field-edge');directories=[pathlib.Path(x) for x in sys.
 plt.rcParams.update({'font.size':18})
 for d in directories:
  record=json.loads((d/'result.json').read_text());fault=float((d/'fault-epoch').read_text());cut=float((d/'power-cut-epoch').read_text());bins=collections.defaultdict(list)
- for line in (d/'observer.jsonl').read_text().splitlines():
+ for line in ((d/'observer.jsonl').read_text() if (d/'observer.jsonl').exists() else __import__('gzip').open(d/'observer.jsonl.gz','rt').read()).splitlines():
   r=json.loads(line)
   if r['kind'] not in ['http','append'] or 'utc' not in r:continue
   minute=math.floor((datetime.datetime.fromisoformat(r['utc']).timestamp()-fault)/60)
