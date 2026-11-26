@@ -35,5 +35,10 @@ for lane in release-testkey main k3s talos; do
   python3 "$FIELD_SCRIPTS/chart-power-cuts.py" "$directory"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$directory" "$name"
   touch "$directory/published"
+  python3 - "$directory/result.json" <<'PYCASE'
+import json,sys
+r=json.load(open(sys.argv[1]))
+if r['status']=='invalid-fixture':raise SystemExit('Repair power-cut fixture before repeats: '+r['reason'])
+PYCASE
  done
 done

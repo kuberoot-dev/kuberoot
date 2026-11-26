@@ -5,6 +5,10 @@ source "$(dirname "$0")/lib.sh"
 for lane in main k3s; do
  source "$FIELD_SCRIPTS/select-product.sh" "$lane"
  export HA_ROOT=$FIELD_ROOT/ha-$lane
+ test ! -f "$HA_ROOT/E5/published" || continue
+ if test -e "$HA_ROOT/E5";then
+  printf 'Review interrupted E5 trial before reuse: %s\n' "$HA_ROOT/E5" >&2;exit 2
+ fi
  unset ETCD_LEADER
  if [[ $lane == main ]]; then
   export ARTIFACT_DIR=$FIELD_ROOT/build-main/out/amd64 KUBEROOT_VERSION=0.1.0-field-main.1b29543
@@ -21,4 +25,5 @@ for lane in main k3s; do
  for id in 1 2 3;do
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$HA_ROOT/n$id/system.raw" "$VM_DIR"
  done
+ touch "$HA_ROOT/E5/published"
 done

@@ -4,6 +4,10 @@ source "$(dirname "$0")/lib.sh"
 for lane in main talos k3s;do
  source "$FIELD_SCRIPTS/select-product.sh" "$lane"
  export HA_ROOT=$FIELD_ROOT/ha-$lane
+ test ! -f "$HA_ROOT/E7/published" || continue
+ if test -e "$HA_ROOT/E7";then
+  printf 'Review interrupted E7 trial before reuse: %s\n' "$HA_ROOT/E7" >&2;exit 2
+ fi
  if [[ $lane == talos ]];then
   bash "$FIELD_SCRIPTS/prepare-ha-talos.sh"
  else
@@ -30,4 +34,5 @@ for lane in main talos k3s;do
  if test -f "$HA_ROOT/n3-retired/system.raw";then
   PRESERVED_DISK_OUTPUT=$HA_ROOT/n3-retired/retired-E7.qcow2 bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$HA_ROOT/n3-retired/system.raw" "$VM_DIR"
  fi
+ touch "$HA_ROOT/E7/published"
 done
