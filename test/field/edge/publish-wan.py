@@ -41,6 +41,10 @@ if (d/'vga/console.gif').exists():
  transfers['02-edge/img/'+capture+'-vga.gif']=str(d/'vga/console.gif')
  transfers['02-edge/img/'+capture+'-vga.png']=str(d/'vga/console.png')
  transfers['02-edge/raw/'+name+'-vga-timing.json']=str(d/'vga/timing.json')
+if (d/'vga-after-wan').exists():
+ for filename in ['console.gif','console.png','timing.json']:
+  source=d/'vga-after-wan'/filename;assert source.is_file(),str(source)
+  transfers['02-edge/'+('raw/' if filename.endswith('.json') else 'img/')+capture+'-vga-after-wan-'+filename]=str(source)
 for filename in ['missing-image-error.txt','record-retrieval-error.txt','continuation.json','wan-restored-epoch']:
  if (d/filename).exists() and (d/filename).stat().st_size:transfers['02-edge/raw/'+name+'-'+filename]=str(d/filename)
 if (d/'wan-restored-epoch').exists():
