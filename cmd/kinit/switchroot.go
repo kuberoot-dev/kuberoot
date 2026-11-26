@@ -54,9 +54,12 @@ func switchRoot() error {
 		if err != nil {
 			return err
 		}
-		// data=journal: edge nodes lose power mid-write, and delayed allocation
-		// would leave freshly unpacked image layers as zero-filled files.
-		if err := unix.Mount(state, newRoot+"/var", "ext4", unix.MS_NOSUID|unix.MS_NODEV, "data=journal"); err != nil {
+		// Edge nodes lose power mid-write. With delayed allocation, freshly
+		// unpacked image layers could come back as zero-filled files; nodelalloc
+		// allocates blocks at write time, and ordered mode writes them before the
+		// metadata that points at them. data=journal gave the same guarantee by
+		// writing every byte twice, which wears the flash these nodes boot from.
+		if err := unix.Mount(state, newRoot+"/var", "ext4", unix.MS_NOSUID|unix.MS_NODEV, "data=ordered,nodelalloc"); err != nil {
 			return fmt.Errorf("mount state: %w", err)
 		}
 	}
