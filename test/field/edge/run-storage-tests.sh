@@ -44,6 +44,7 @@ PYTALOS
   if test -e "$CASE_OUTPUT"; then printf 'Review interrupted storage trial: %s\n' "$CASE_OUTPUT" >&2;exit 2;fi
   name=t-E4-$PRODUCT-$CASE
   bash "$FIELD_SCRIPTS/capture.sh" "$name" "$FIELD_SCRIPTS/E4-scene.sh"
+  python3 "$FIELD_SCRIPTS/chart-storage.py" "$CASE_OUTPUT"
   python3 "$FIELD_SCRIPTS/publish-case.py" "$CASE_OUTPUT" "$name"
   touch "$CASE_OUTPUT/published"
   bash "$FIELD_SCRIPTS/preserve-failed-disk.sh" "$CASE_OUTPUT/system.raw" "$GOLDEN"
