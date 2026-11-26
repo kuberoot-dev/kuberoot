@@ -65,6 +65,7 @@ CHECK
     -netdev "socket,id=lan,mcast=230.78.0.1:17801,localaddr=127.0.0.1" \
     -device "virtio-net-pci,netdev=lan,mac=52:54:00:78:00:0$id" \
     -qmp "unix:$d/qmp.sock,server=on,wait=off" \
+    -qmp "unix:$d/qmp-events.sock,server=on,wait=off" \
     -serial "file:$d/serial.log" -display none -daemonize -pidfile "$d/pid"
   date -u +%FT%TZ > "$d/boot-start.txt"
 }

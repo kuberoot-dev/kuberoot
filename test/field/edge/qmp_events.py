@@ -1,11 +1,16 @@
-"""Passive QMP event collection; no guest or block-device changes."""
+"""Passive QMP event collection; no guest or block-device changes.
+
+A QEMU QMP socket serves one client at a time, so the recorder uses its own
+monitor (qmp-events.sock). Holding qmp.sock would starve the driver's
+query-blockstats/quit and leave a finished DUT running.
+"""
 import datetime,json,socket,threading
 
 class Recorder:
  def __init__(self,directory):
   self.output=(directory/'qmp-events.jsonl').open('x')
   self.socket=socket.socket(socket.AF_UNIX);self.socket.settimeout(10)
-  self.socket.connect(str(directory/'qmp.sock'));self.stream=self.socket.makefile('rwb',buffering=0)
+  self.socket.connect(str(directory/'qmp-events.sock'));self.stream=self.socket.makefile('rwb',buffering=0)
   self.write({'greeting':json.loads(self.stream.readline())})
   self.stream.write(b'{"execute":"qmp_capabilities","id":"event-recorder"}\n')
   while True:
