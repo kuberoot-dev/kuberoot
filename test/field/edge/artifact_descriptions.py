@@ -20,6 +20,8 @@ SCENES = {
 def describe(path, scenario):
  name=Path(path).name
  if name.endswith('.integrity.json'):return 'SHA256 и размеры для проверки точности gzip-архива'
+ if 'measurement-summary' in name:return 'Читаемая сводка фактически измеренных E2 величин из result.json'
+ if 'bootentries-before-view' in name or 'bootentries-after-view' in name:return 'Проекция сохранённого BootEntry с указанием исходного файла: имя слота и полный status'
  if 'serial' in name or 'recovery.cast' in name or 'recovery.gif' in name:return 'Настоящая serial-консоль QEMU при загрузке/восстановлении с видимыми часами'
  if '-vga-' in name:return 'Настоящий VGA framebuffer QEMU и временные отметки'
  if name.startswith('chart-'):return 'График измеренных величин: '+SCENES.get(scenario,scenario)
