@@ -2,7 +2,8 @@
 """R-B2 measurements, never labels a fabric-limited result line rate."""
 import argparse,json,os,subprocess,time
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('product');p.add_argument('profile');p.add_argument('--direct',action='store_true');p.add_argument('--mode',choices=['tcp','udp64','both'],default='both');p.add_argument('--seconds',type=int,default=60);p.add_argument('--repeats',type=int,default=5);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('product');p.add_argument('profile');p.add_argument('--direct',action='store_true');p.add_argument('--udp-rate',default='10M');p.add_argument('--keep-going',action='store_true');p.add_argument('--mode',choices=['tcp','udp64','both'],default='both');p.add_argument('--seconds',type=int,default=60);p.add_argument('--repeats',type=int,default=5);a=p.parse_args()
+while Path('/work/field/benchmark.pause').exists():time.sleep(5)
 base=Path('/work/field/raw');out=base/f'R-B2-{a.product}-{a.profile}.jsonl'
 if out.exists():raise SystemExit('Existing run; preserve and use a distinct profile')
 def cpu(vm):
@@ -14,7 +15,7 @@ for mode in (('tcp','udp64') if a.mode=='both' else (a.mode,)):
    target='198.18.33.2' if a.direct else '198.19.0.1'
    command=f'iperf3 -J -c {target} -t {a.seconds} -O 5 -P 8'
    if reverse:command+=' -R'
-   if mode=='udp64':command+=' -u -l 64 -b 10M'
+   if mode=='udp64':command+=' -u -l 64 -b '+a.udp_rate
    watched=['client','sink']+([] if a.direct else ['gateway'])+([] if a.direct else [a.product])
    before={v:cpu(v) for v in watched};pod_before=Path('/sys/fs/cgroup/cpu.stat').read_text();start=time.monotonic()
    proc=subprocess.run(['/work/field/guest-command','client',command],capture_output=True,text=True,timeout=a.seconds+60)
@@ -24,4 +25,6 @@ for mode in (('tcp','udp64') if a.mode=='both' else (a.mode,)):
    with out.open('a') as f:f.write(json.dumps(row)+'\n')
    print(time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()), command, flush=True)
    print(json.dumps({'product':a.product,'profile':a.profile,'mode':mode,'reverse':reverse,'repeat':repeat+1,'exit':proc.returncode,'elapsed_s':elapsed,'receiver':data.get('end',{}).get('sum_received',data.get('end',{}).get('sum',{})) if data else None,'cpu_core_seconds':row['cpu_core_seconds']}),flush=True)
-   if proc.returncode or not data or 'error' in data:raise SystemExit('failed probe; preserve partial run')
+   if proc.returncode or not data or 'error' in data:
+    print('failed probe; raw evidence retained',flush=True)
+    if not a.keep_going:raise SystemExit(1)

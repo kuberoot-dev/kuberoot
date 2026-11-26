@@ -11,7 +11,7 @@ def apply(text,phase,count):
 for count in [100,1000,10000,20000]:
  rules=['flush ruleset','table inet fieldscale {','chain forward { type filter hook forward priority 0; policy drop;','ct state established,related accept']
  for i in range(count):rules.append(f'ip saddr 203.{(i>>16)&255}.{(i>>8)&255}.{i&255} udp dport 9000 drop comment "rule-{i}"')
- rules+=['iifname "enp0s3" oifname "enp0s2" udp dport 9000 accept','} }']
+ rules+=['iifname "enp0s3" oifname "enp0s2" udp dport 9000 accept','}','}']
  text='\n'.join(rules)+'\n';Path('/tmp/fieldscale.nft').write_text(text)
  apply(text,'full-replace',count)
  listing=json.loads(subprocess.check_output(['nft','-j','-a','list','chain','inet','fieldscale','forward']))

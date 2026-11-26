@@ -33,7 +33,7 @@ case "$name" in
   [[ ! -f $d/seed.img ]] || extra=(-drive "file=$d/seed.img,format=raw,if=virtio,readonly=on");;
 esac
 # Equal userspace socket fabric; third NIC is isolated observation only.
-qemu-system-x86_64 -name "$name" -enable-kvm -cpu host -smp 2 -m 2048 -machine q35 -boot order=c \
+qemu-system-x86_64 -name "$name" -enable-kvm -cpu host -smp "${DUT_VCPU:-2}" -m "${DUT_RAM_MIB:-2048}" -machine q35 -boot order=c \
  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
  -drive "if=pflash,format=raw,file=$d/vars.fd" -drive "$drive" -device virtio-blk-pci,drive=system,bootindex=1 "${extra[@]}" \
  -netdev socket,id=wan,mcast=230.31.0.32:13032,localaddr=127.0.0.1 \

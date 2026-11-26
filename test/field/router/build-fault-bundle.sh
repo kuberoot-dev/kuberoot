@@ -1,6 +1,8 @@
 #!/bin/bash
 # Run only inside the pod. Fault instrumentation is explicit in the version.
 set -euo pipefail
+export PATH=/work/toolchain/go/bin:$PATH
+export GOCACHE=/work/build-main/gocache GOPATH=/work/build-main/gopath GOMAXPROCS=2 GOFLAGS="-p=2 -buildvcs=false"
 mode=${1:?crash, noforward or console}; base_root=${2:?rootfs directory}; version=${3:?unique version}
 case $mode in crash|noforward|console);; *) exit 2;; esac
 work=/work/field-faults/$version

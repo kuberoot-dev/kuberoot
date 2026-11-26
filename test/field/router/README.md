@@ -101,3 +101,45 @@ rerendered at5fps to stay below8MiB, without dropping transcript lines.
 `sync-baselines.py` runs on the Mac with only kubectl/file operations: it archives
 completed r2/Debian idle windows and appends partial R-B1 rows/documents, never
 converts them into a whole-suite pass. It cannot execute the remaining tests.
+
+## Continued field run
+
+`R1-address.py` changes the real production eth0 address under a 60-second
+Safeguard and polls for a recorded rollback; `--reboot` injects QMP reset at
+20 seconds. The observer does not repair the guest. `R1-stale-confirm.py`
+submits revision N after N+1 is pending. `R3-conflicts.py` submits an obsolete
+resourceVersion, and `R3-replay.sh` reapplies an unconfirmed route every 10 s.
+These initial lifecycle phases use the existing phase-1 multicast client/peer
+LANs and production user-net WAN. They are not final-G throughput comparisons.
+
+`fault-artifact-server.py` serves actual bundle bytes with a declared full
+length and a disconnect at 25%, or with a truncated declared length.
+`build-fault-bundle.sh` produces explicitly named, signed lab images: crash,
+forwarding disabled while the router stays alive, or a serial fault console.
+The console variant is instrumentation for kernel/storage fault injection;
+it is not a claimed native product management interface. Do not use its
+footprint as an uninstrumented production baseline.
+
+`forwarding-observer.py` probes c1 → r1 → r2 → c2 over the phase-1 multicast
+LAN/transit segments and returns HTTP 200 only for a fresh successful reply.
+`R2-upgrade-trial.py` records all boot states and contemporaneous forwarding
+observations, plus the real serial log. A Good slot with failed forwarding is
+an unsafe promotion, regardless of whether the harness expected rejection.
+
+`forwarding.py` records full iperf JSON and QEMU CPU time. Its CPU interval
+includes the 5-second warmup; throughput comes from iperf's measured interval.
+The direct fabric's 80 Mbit/s offered UDP64 load lost packets; the 8 Mbit/s
+retry is a separate offered-load experiment, not a discovered maximum PPS.
+No fabric-limited result is labelled hardware line rate. `DEFER_RENDER=1`
+records casts and transcripts without spending CPU on GIF rendering during
+benchmarks. `/work/field/render.pause` defers ordinary capture rendering.
+
+`test-idle-summary.py` uses synthetic fixtures only for regression tests.
+The summary accepts one second of OSConfig bootTime rounding only when all
+service PID/start/restart identities stay fixed and block counters remain
+monotonic. It rejects actual boot changes, service restarts and counter resets.
+
+Scripts being present does not mean their scenarios ran. Raw output and the
+article's JSONL/RESULTS determine execution status. In particular, the TCP
+flow, UDP probe and Linux firewall-scale drivers were prepared before their
+first execution; never cite their defaults as measured results.

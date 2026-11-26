@@ -11,9 +11,10 @@ for cmd in kinit kuberoot-node kuberoot-router; do
 done
 [[ -d $root ]] || cp -al /work/build-main/root "$root"
 for cmd in kuberoot-node kuberoot-router; do cp --remove-destination "$out/$cmd" "$root/usr/bin/$cmd"; done
+cp --remove-destination "$out/kinit" "$root/usr/sbin/kinit"
 cp --remove-destination distros/router/addons/*.yaml "$root/usr/share/kuberoot/addons/"
 cp --remove-destination distros/router/profile.yaml "$root/usr/share/kuberoot/profile.yaml"
-version=0.1.1-router.field.2
+version=${FIELD_VERSION:-0.1.1-router.field.3}
 rm "$root/etc/os-release"
 printf 'NAME="kuberoot"\nID=kuberoot\nVERSION_ID=%s\n' "$version" > "$root/etc/os-release"
 printf '%s\n' "$version" > "$out/VERSION"
