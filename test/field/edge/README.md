@@ -547,3 +547,17 @@ E2 provenance records include both the baseline image and the actual test
 payload: kuberoot target bundle SHA256/version, Talos installer manifest digest
 (the upgrade request uses `@sha256:`), and k3s laboratory package plus signed APT
 index digests. The base-image hash alone does not identify an injected release.
+
+### E1 when the Kubernetes API stays unavailable
+
+The observed Talos offline reboot left etcd/kubelet/trustd waiting for time sync
+(`TimeStatus.synced=false`). `E1-talos-time-sync-scene.sh` records those real
+states without changing NTP or the guest configuration. The original E1 scene
+can exit on its missing-image API request; `continue-failed-wan.py` retains that
+failed recording, waits for its parent queue to end, and performs the planned
+WAN relief only after the full hour. It records relief time, observes another
+340 seconds, exports the original observer evidence and preserves the stopped
+disk before publication. This is a collection continuation, not a guest repair.
+An unobservable missing-image error or unavailable durable log remains a failed
+or unknown gate, never a fabricated Kubernetes object or zero data loss.
+Supplementary real captures and their integrity manifests accompany the record.
