@@ -2,7 +2,7 @@
 """Publish completed machine records; never turn a pending row into unsupported.
 Runs on Mac for Markdown/JSON editing only; execution/plotting stays in pod.
 """
-import argparse,datetime,json,pathlib,math,statistics
+import argparse,datetime,json,pathlib,math,statistics,html
 p=argparse.ArgumentParser();p.add_argument('--article-root',type=pathlib.Path,required=True);p.add_argument('--record',type=pathlib.Path,required=True);a=p.parse_args()
 root=a.article_root;record=json.loads(a.record.read_text());db=root/'results/edge.jsonl'
 records=[json.loads(x) for x in db.read_text().splitlines() if x.strip()]
@@ -14,6 +14,11 @@ if added:
 method='Все продукты используют одинаковые непривилегированные L2-сегменты QEMU socket multicast. NAT, netem/tbf, IFB и blackhole выполняются внутри Linux gateway VM; NET_ADMIN/TUN в pod не нужны. Прикладные пробы проходят через DUT, SSH/user-net служит управлению. Forwarding сравнивается относительно измеренного потолка этой сети, не как line rate. Диски ограничиваются QEMU throttle groups, ENOSPC создаётся внутри гостевого state, EIO — blkdebug. Power cut останавливает QEMU, RTC задаётся на VM. Прежний отказ admission — история, а не текущая блокировка.'
 lines=['# Edge: результаты полевой серии','','Серия ещё выполняется. Phase 1 и проверки harness не засчитаны как результаты новых тестов.','',method,'']
 ids=['E-B1','E-B2','E-B3']+[f'E{i}' for i in range(1,11)]
+def table_value(value):
+ if value is None:return 'не измерено'
+ text=json.dumps(value,ensure_ascii=False) if isinstance(value,(dict,list)) else str(value)
+ return html.escape(text,quote=False).replace('|','\\|').replace('\r','').replace('\n','<br>')
+
 for ident in ids:
  lines+=['## '+ident,'']
  selected=[r for r in records if r.get('scenario_id')==ident]
@@ -65,7 +70,7 @@ for ident in ids:
   lines+=[f"### {label}",'',f"Статус: **{r.get('status','не указан')}**. {r.get('reason','')}",'']
   if r.get('metrics'):
    lines+=['| Метрика | Измерение |','|---|---|']
-   for key,val in r['metrics'].items():lines.append(f'| `{key}` | {val if val is not None else "не измерено"} |')
+   for key,val in r['metrics'].items():lines.append(f'| `{key}` | {table_value(val)} |')
    lines+=['']
   lines+=[f"Источник: `{r.get('source_commit','не указан')}`; образ: `{r.get('image_digest','не указан')}`.",'']
   for note in r.get('measurement_notes',[]): lines += [note,'']

@@ -84,7 +84,7 @@ remain separate from completed suite results.
 ## Execution status and next stages
 
 The baseline rows E-B1, E-B2 and E-B3 are complete for all four products.
-Corrected E1 release passed; main, k3s and Talos remain in the sequential queue.
+Corrected E1 release and main passed; k3s and Talos remain in the sequential queue.
 `after-wan-prepare.sh` waits for all four corrected records and the E1 queue to
 exit, then builds and runs E2 main. It does not yet chain every remaining lane.
 Use the article STAND_LOG and machine records for the current runtime position.
