@@ -22,7 +22,7 @@ CONF
 for table in 'ip fieldnat' 'inet fieldfilter'; do
  if nft list table $table >/dev/null 2>&1; then nft delete table $table; fi
 done
-nft -f - <<'NFT' 
+nft -f - <<'NFT'
 table ip fieldnat {
  chain postrouting { type nat hook postrouting priority srcnat; policy accept;
   oifname "enp0s2" ip saddr 192.168.30.0/24 masquerade

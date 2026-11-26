@@ -26,3 +26,27 @@ Do not apply it or weaken namespace policy. The existing pod remains intact.
 
 Preserve credentials on the PVC only. Do not commit kubeconfigs, keys or raw
 Secret objects. Every result needs its precise build, topology and limitations.
+
+## Current preparation state
+
+The initial pod was evicted for its injected 2 GiB ephemeral-storage limit.
+It was recreated unchanged on ws3, preserving the PVC; apt cache now lives on
+`/work/apt-cache`, with no recommended packages installed. The old ws1 measurements
+must not be silently combined with the new runs. CPU/memory limits remain 6/14Gi.
+
+`debian-seed.sh` creates private SSH material on the PVC and cloud-init for the
+Debian guest. Never copy `/work/field/private` into public artifacts.
+`debian-gateway.sh` runs **inside that guest** and configures its own LAN,
+nftables, dnsmasq and FRR. `openwrt-gateway.sh` is the equivalent UCI preparation.
+These use user-net for preparation only; they are not approved throughput profiles.
+
+`capture.sh` saves the child exit code independently of asciinema, rejects a failed
+scene before rendering, and checks 15–60 seconds / <8 MiB. A real `exit 7` probe
+was rejected with no GIF produced. `console.py` similarly propagates the guest
+command's exit code. `R-B1-*.sh` are snapshots, not full R-B1 acceptance tests.
+
+The background idle sample on r2 begins after 600 seconds of settling and observes
+3600 seconds. `summarize-idle.py` rejects a short hour, any failed API samples,
+reboots or reset block counters; `plot-idle.py` labels short windows incomplete.
+QMP guest writes are not host/device flash write amplification. Service cgroups,
+QEMU RSS and guest Total−Free are separate metrics; none is MemAvailable.
