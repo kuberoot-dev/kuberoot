@@ -9,7 +9,7 @@ root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().p
 assert a.output.is_relative_to(root) and a.golden.is_relative_to(root)
 d=a.output;d.mkdir(parents=True,exist_ok=False);name=f'E4-{a.product}-{a.case}'
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
-env=dict(os.environ,VM_DIR=str(d),BLOCK_FAULTS='1');errors=[];metrics={};relieved=None;fault=None;recorder=None;fault_active=False;churn=None
+env=dict(os.environ,VM_DIR=str(d),BLOCK_FAULTS='1');errors=[];metrics={};relieved=None;fault=None;recorder=None;fault_active=False;churn=None;upgrade_audit=None
 G=str(scripts/'gateway-command.sh')
 def gateway(cmd,check=True):return subprocess.run([G,cmd],check=check,text=True,capture_output=True,timeout=45)
 def show(args):
@@ -36,12 +36,14 @@ try:
   if r.returncode==0:break
   time.sleep(2)
  else:raise RuntimeError('W unavailable before storage injection')
+ before_boot=json.loads(subprocess.check_output(['kubectl','get','nodes','-o','json'],env=env,text=True))['items'][0]['status']['nodeInfo']['bootID']
  show(['python3',scripts/'storage-churn.py','deploy','--output',d/'churn-deployment.json'])
  churn=subprocess.Popen(['python3',str(scripts/'storage-churn.py'),'run','--output',str(d/'churn.jsonl'),'--stop-file',str(d/'churn.stop')],env=env,stdout=(d/'churn-commands.txt').open('w'),stderr=subprocess.STDOUT)
  subprocess.run(['bash',str(scripts/'prepare-observer.sh')],env=env,check=True)
  # The injector is preloaded on the golden disk, with a critical priority and
  # independent HTTP endpoint so relief does not depend on a responsive API.
  if a.case.startswith('full-'):metrics['initial_filesystem']=occupancy('relieve')
+ with (d/'storage-inventory.jsonl').open('a') as inv:inv.write(json.dumps({'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'phase':'before-fault','inventory':occupancy('inventory')})+'\n')
  gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 1200 --stop-file /home/observer/{name}.stop --output /home/observer/{name}.jsonl >/home/observer/{name}.log 2>&1 </dev/null &')
  time.sleep(60)
  serial=shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds','1000'])
@@ -69,17 +71,41 @@ try:
   metrics['host_capacity_guard']=host_abort
   if host_abort:raise RuntimeError('fixture capacity guard aborted fill before shared PVC exhaustion')
  (d/'fault-epoch').write_text(str(fault))
- if a.upgrade_hook:show([a.upgrade_hook,a.case])
+ if a.upgrade_hook:
+  print('$ python3 '+str(a.upgrade_hook),flush=True)
+  upgrade_audit=subprocess.Popen(['python3',str(a.upgrade_hook)],env=dict(env,CASE_OUTPUT=str(d),CASE=a.case),stdout=(d/'storage-upgrade-commands.txt').open('w'),stderr=subprocess.STDOUT)
  time.sleep(300 if 'iops' in a.case else 30 if a.case=='eio' else 120)
+ try:
+  with (d/'storage-inventory.jsonl').open('a') as inv:inv.write(json.dumps({'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'phase':'during-fault','inventory':occupancy('inventory')})+'\n')
+ except Exception as exc:metrics['fault_inventory_error']=str(exc)
  show(['date','-u'])
  if a.case.startswith('full-'):metrics['relieved_filesystem']=occupancy('relieve')
  else:block('eio-off' if a.case=='eio' else 'unthrottle')
  fault_active=False
  relieved=time.time();(d/'relief-epoch').write_text(str(relieved))
+ if upgrade_audit:
+  upgrade_audit.wait(timeout=210)
+  safety=json.loads((d/'storage-upgrade-result.json').read_text());metrics['upgrade_safety']=safety
+  if safety['error'] or safety['terminal_outcome'] is None:errors.append('upgrade safety could not be established: '+str(safety['error'] or 'no terminal outcome'))
+  if safety['false_success_under_all_disk_eio']:errors.append('upgrade falsely succeeded while all system-disk writes returned EIO')
+  if safety['requires_boot_validation']:
+   show(['date','-u']);show(['python3',scripts/'qmp.py',d/'qmp.sock','system_reset']);metrics['post_full_success_boot_validation_requested']=True
  while time.time()-relieved<360:
   pull_observations();metrics.update(recover_metrics())
   if metrics.get('recovery_seconds_first_60s_sustained_success') is not None:break
   time.sleep(5)
+ if metrics.get('post_full_success_boot_validation_requested'):
+  deadline=time.monotonic()+300
+  while time.monotonic()<deadline:
+   try:
+    node=json.loads(subprocess.check_output(['kubectl','--request-timeout=5s','get','nodes','-o','json'],env=env,text=True,timeout=8))['items'][0]
+    if node['status']['nodeInfo']['bootID']!=before_boot and any(c['type']=='Ready' and c['status']=='True' for c in node['status']['conditions']):
+     metrics['post_full_success_fresh_ready_boot']=True;break
+   except Exception:pass
+   time.sleep(3)
+  else:errors.append('success during ENOSPC was not followed by a valid fresh Ready boot')
+ with (d/'storage-inventory.jsonl').open('a') as inv:inv.write(json.dumps({'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'phase':'after-relief','inventory':occupancy('inventory')})+'\n')
+ metrics['datastore_observation_scope']='Real datastore/WAL and local backup file sizes before, during and after fault; size changes alone do not establish a compaction algorithm or retention policy.'
  after=command(str(d/'qmp.sock'),'query-blockstats');duration=time.monotonic()-before_time
  writes=lambda r:sum(x['stats']['wr_bytes'] for x in r)
  metrics['virtual_write_bytes_per_day_during_trial']=(writes(after)-writes(before))*86400/duration
@@ -107,6 +133,7 @@ try:
  if metrics.get('driver_overloads'):errors.append('observer dispatch overload')
 except Exception as exc:errors.append(str(exc))
 finally:
+ if upgrade_audit and upgrade_audit.poll() is None:upgrade_audit.terminate();upgrade_audit.wait(timeout=15)
  if churn:
   (d/'churn.stop').touch()
   try:churn.wait(timeout=20)
@@ -126,5 +153,5 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
-record={'scenario_id':'E4','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone; W + 50 log pods at about 1 KiB/s each; one pod replacement/10 s; QEMU throttle/blkdebug; guest-local fallocate; gateway observer','fault_seed':None,'fault_phase':a.case,'metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture-capacity' if metrics.get('host_capacity_guard') else 'failed' if errors else 'passed-W-subcase','reason':'; '.join(errors) if errors else 'storage/W subcase passed; upgrade safety is a separate mandatory lane','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'upgrade_hook_executed':bool(a.upgrade_hook),'artifact_paths':[str(d)]}
+record={'scenario_id':'E4','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone; W + 50 log pods at about 1 KiB/s each; one pod replacement/10 s; QEMU throttle/blkdebug; guest-local fallocate; gateway observer','fault_seed':None,'fault_phase':a.case,'metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture-capacity' if metrics.get('host_capacity_guard') else 'failed' if errors else 'passed-storage-upgrade-subcase' if a.upgrade_hook else 'passed-W-subcase','reason':'; '.join(errors) if errors else 'storage/W and requested native update-safety gates passed' if a.upgrade_hook else 'storage/W subcase passed; update safety is recorded in separate lanes','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'upgrade_hook_executed':bool(a.upgrade_hook),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

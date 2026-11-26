@@ -11,9 +11,16 @@ cancel_fill=threading.Event()
 root=pathlib.Path('/state'); target=root/'field-enospc'; root.mkdir(exist_ok=True)
 class Handler(http.server.BaseHTTPRequestHandler):
  def do_POST(self):
-  error=None
+  error=None; inventory=None
   try:
-   if self.path=='/relieve':
+   if self.path=='/inventory':
+    inventory=[]
+    for prefix in ['kine','etcd/member','kuberoot/backups','rancher/k3s/server/db']:
+     directory=pathlib.Path('/guest-state')/prefix
+     for f in directory.rglob('*') if directory.exists() else []:
+      if f.is_file() and not f.is_symlink():
+       st=f.stat();inventory.append({'path':str(f.relative_to('/guest-state')),'bytes':st.st_size,'allocated_bytes':st.st_blocks*512,'mtime':st.st_mtime})
+   elif self.path=='/relieve':
     cancel_fill.set();target.unlink(missing_ok=True)
    elif self.path.startswith('/fill/'):
     pct=int(self.path.rsplit('/',1)[1]); assert pct in (90,95,100)
@@ -33,6 +40,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
      os.fsync(f.fileno())
    else: raise ValueError('unknown operation')
   except Exception as exc: error=str(exc)
-  st=os.statvfs(root); data=json.dumps({'error':error,'free_bytes':st.f_bfree*st.f_frsize,'available_bytes':st.f_bavail*st.f_frsize,'total_bytes':st.f_blocks*st.f_frsize}).encode()
+  st=os.statvfs(root); data=json.dumps({'error':error,'datastore_and_backup_files':inventory,'free_bytes':st.f_bfree*st.f_frsize,'available_bytes':st.f_bavail*st.f_frsize,'total_bytes':st.f_blocks*st.f_frsize}).encode()
   self.send_response(200 if error is None else 507);self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
 http.server.ThreadingHTTPServer(('0.0.0.0',8081),Handler).serve_forever()

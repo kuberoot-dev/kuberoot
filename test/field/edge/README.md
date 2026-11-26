@@ -477,3 +477,19 @@ matched against the pinned manifest size; this differs explicitly from
 kuberoot's whole-bundle percentage. Gateway wire bytes are measured separately,
 never substituted for payload progress. Both lanes keep the actual artifact
 size and run two real 600-second connected windows 3600 seconds apart.
+
+E4 invokes `storage-upgrade-audit.py` during full-state and EIO faults, using a
+real signed kuberoot bundle, the declared good k3s APT package, or native Talos
+`--no-reboot` upgrade. Native command/status evidence is retained. A terminal
+success while every disk write returns EIO is flagged; state ENOSPC alone does
+not imply the separate boot partition is unwritable. Success during state
+ENOSPC therefore triggers an actual fresh-boot validation after relief. An API
+timeout is not reported as a safe rejection. The official release's unavailable
+signing key is not substituted silently: the named `release-testkey` lane covers
+its upgrade-safety cases with unchanged release binaries.
+
+The guest storage injector also exposes read-only metadata for known datastore,
+WAL and local backup paths. E4 saves file sizes before/during/after faults. This
+is an observation of default compaction/retention behavior, not an inferred
+retention guarantee. No datastore contents, private keys, or backup payloads are
+published. The only hostPath mounts are inside the product VM's Kubernetes.
