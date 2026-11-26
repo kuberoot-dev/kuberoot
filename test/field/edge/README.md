@@ -527,3 +527,18 @@ fixture. Incorrect HTTP content and acknowledged-record corruption remain
 separate measurements.
 
 `chart-storage.py` draws actual per-minute external W failures, API operation p99 and request counts, with UTC-derived fault/relief markers. Missing series produce no invented graph. `artifact_descriptions.py` distinguishes console, observer, integrity, boot-slot and chart evidence in the article manifest.
+
+## Sequential continuation
+
+After E2 main has completed and its findings have been reviewed, run
+`bash run-table-tail.sh` inside the pod. It calls the other E2 lanes, then
+E3–E10 in table order, checking machine-record coverage after each stage.
+Preparation checkpoints retain logs and refuse to overwrite interrupted setup.
+Completed trials are skipped by their runners; a partial trial requires evidence
+review and fixture repair. Product failures remain visible and do not become
+unsupported merely because an assertion failed. Completion of this wrapper
+alone does not satisfy required product fixes, reruns, artifact inspection,
+article conclusions or the final unmerged PR.
+
+`audit-suite.py RECORDS --through E3` limits the audit to that point in table
+order. Its unavailable-cell exception requires an explicitly recorded reason.
