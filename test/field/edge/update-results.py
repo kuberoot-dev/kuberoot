@@ -35,10 +35,13 @@ for ident in ids:
    lines+=['Первые release/main и частичный k3s признаны invalid-fixture: gateway с лимитом conntrack 4096 отбрасывал пакеты (dmesg сохранён). Исходные failed остаются ниже как история; их нельзя считать доказательством дефекта DUT. Все четыре продукта повторяются на одинаковом gateway с лимитом 65536 и ежесекундным контролем drops.','']
   valid=[r for r in selected if r.get('measurement_protocol')=='wan-gateway-conntrack-v2']
   if valid:
-   lines+=['| Продукт, исправленный fixture | Recovery, s | Acked lost | Ошибки до / после reset | Gateway drops | Статус |','|---|---:|---:|---:|---:|---|']
+   lines+=['| Продукт, исправленный fixture | Recovery, s | Acked lost | До reset: ошибки / запросы | После recovery: ошибки / запросы | Gateway drops | Статус |','|---|---:|---:|---:|---:|---:|---|']
    for item in valid:
     m=item.get('metrics',{});v=item.get('recovery_seconds');recovery='—' if v is None else f'{v:.2f}'
-    lines.append(f"| {item['product']} | {recovery} | {item.get('acknowledged_record_loss','—')} | {m.get('wan_blackhole_before_reset_failures','—')} / {m.get('wan_blackhole_after_recovery_failures','—')} | {m.get('gateway_conntrack_drop_delta','—')} | {item['status']} |")
+    loss=item.get('acknowledged_record_loss');loss='не измерено' if loss is None else loss
+    before=f"{m.get('wan_blackhole_before_reset_failures','—')} / {m.get('wan_blackhole_before_reset_requests','—')}"
+    after=f"{m.get('wan_blackhole_after_recovery_failures','—')} / {m.get('wan_blackhole_after_recovery_requests','—')}" if m.get('wan_blackhole_after_recovery_requests') else 'нет восстановления в окне'
+    lines.append(f"| {item['product']} | {recovery} | {loss} | {before} | {after} | {m.get('gateway_conntrack_drop_delta','—')} | {item['status']} |")
    lines+=['']
   lines+=['Непрерывность здесь имеет строгий лабораторный zero-error gate. Recovery — начало 60 s непрерывного успеха W; интервал самого reboot исключён из continuity. ACK durability и missing-image error проверяются отдельно.','']
  if ident=='E-B2':
