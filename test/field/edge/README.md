@@ -561,3 +561,12 @@ disk before publication. This is a collection continuation, not a guest repair.
 An unobservable missing-image error or unavailable durable log remains a failed
 or unknown gate, never a fabricated Kubernetes object or zero data loss.
 Supplementary real captures and their integrity manifests accompany the record.
+
+`build-health-image.sh` prepares the separate fix52db7b1 image only after the
+original main E2 wrong-content and incompatible-state findings are recorded.
+It refuses active DUTs and checks the exact tested source hashes. The source
+worktree is independent, all kuberoot binaries/initrd are rebuilt, the pinned
+main kernel/userland and laboratory signing trust are retained. A fresh
+`prepare-health-golden.sh` installation is exposed as the `health` lane;
+original main records/golden images remain unchanged. These image/preparation
+scripts have not yet run. Unit/codegen success is not a field rerun result.
