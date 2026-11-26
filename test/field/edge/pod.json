@@ -45,19 +45,8 @@
           {
             "mountPath": "/work",
             "name": "work"
-          },
-          {
-            "name": "tun",
-            "mountPath": "/dev/net/tun"
           }
-        ],
-        "securityContext": {
-          "capabilities": {
-            "add": [
-              "NET_ADMIN"
-            ]
-          }
-        }
+        ]
       }
     ],
     "restartPolicy": "Always",
@@ -68,13 +57,6 @@
         "name": "work",
         "persistentVolumeClaim": {
           "claimName": "kr-edge-stand-work"
-        }
-      },
-      {
-        "name": "tun",
-        "hostPath": {
-          "path": "/dev/net/tun",
-          "type": "CharDevice"
         }
       }
     ]

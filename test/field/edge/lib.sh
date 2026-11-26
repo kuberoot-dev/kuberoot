@@ -19,22 +19,12 @@ print()
 PY
   "$@"
 }
-network_create() {
-  require_stand
-  # A dedicated bridge in this pod's network namespace, never the cluster host.
-  ip link add efbr type bridge
-  ip address add 10.78.0.1/24 dev efbr
-  ip link set efbr up
-  for i in 1 2 3; do
-    ip tuntap add "eftap$i" mode tap
-    ip link set "eftap$i" master efbr up
-  done
-}
+# All L2 forwarding uses unprivileged multicast. Gateway guests own NAT/netem.
+network_create() { require_stand; }
 vm_start() {
   local id=$1 media=${2:-} d="$FIELD_ROOT/vm-$1"
   [[ $id =~ ^[123]$ ]] || return 1
   require_stand
-  test -e "/sys/class/net/eftap$id"
   mkdir -p "$d"
   test -f "$d/system.raw" || qemu-img create -f raw "$d/system.raw" 32G
   test -f "$d/vars.fd" || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$d/vars.fd"
@@ -44,7 +34,7 @@ vm_start() {
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive "if=pflash,format=raw,file=$d/vars.fd" "${drives[@]}" \
     -drive "file=$d/system.raw,format=raw,if=virtio,cache=none" \
-    -netdev "tap,id=lan,ifname=eftap$id,script=no,downscript=no" \
+    -netdev "socket,id=lan,mcast=230.78.0.1:17801,localaddr=127.0.0.1" \
     -device "virtio-net-pci,netdev=lan,mac=52:54:00:78:00:0$id" \
     -qmp "unix:$d/qmp.sock,server=on,wait=off" \
     -serial "file:$d/serial.log" -display none -daemonize -pidfile "$d/pid"

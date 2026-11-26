@@ -13,8 +13,6 @@ cap = int(status['CapEff'].strip(), 16)
 checks = {
     'linux': sys.platform == 'linux',
     'kvm': os.access('/dev/kvm', os.R_OK | os.W_OK),
-    'tun': os.access('/dev/net/tun', os.R_OK | os.W_OK),
-    'net_admin': bool(cap & (1 << 12)),
 }
 for name in ['qemu-system-x86_64', 'qemu-img', 'ip', 'tc', 'kubectl', 'asciinema', 'agg']:
     checks[name] = shutil.which(name) is not None
@@ -23,7 +21,8 @@ record = {
     'time_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
     'status': 'ready' if all(checks.values()) else 'blocked',
     'checks': checks, 'free_bytes': shutil.disk_usage('/work').free,
-    'reason': 'Missing: ' + ', '.join(k for k, v in checks.items() if not v),
+    'reason': ('Missing: ' + ', '.join(k for k, v in checks.items() if not v)) if not all(checks.values()) else 'Userspace QEMU fabric; no host privileges required',
+    'network_method': 'socket multicast; gateway VM owns netem/NAT',
     'outage_seconds': None, 'acknowledged_record_loss': None,
     'recovery_seconds': None, 'manual_actions': [],
     'artifact_paths': ['02-edge/raw/phase2-preflight.txt'],

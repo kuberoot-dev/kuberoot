@@ -5,13 +5,18 @@ This branch starts at kuberoot `b365f53` (origin/main fetched 2026-11-25).
 **The field suite has not run.** Do not interpret observer self-tests as product
 results, and do not substitute Phase 1 user-network/qcow2 measurements.
 
-## Current blocker
+## Network and storage method (author-approved revision)
 
-The existing `kr-edge-stand` pod has KVM but no NET_ADMIN or TUN device.
-Server dry-run of `pod.json` was rejected by namespace PodSecurity baseline:
-NET_ADMIN and the TUN hostPath are forbidden. An administrator-approved network
-fixture is required. No namespace policy was changed; no pod was deleted.
-The JSON manifest is a proposed fixture, not an instruction to bypass admission.
+All products use the same unprivileged QEMU socket multicast L2 fabric, with
+unique multicast groups/ports per segment. Small Linux gateway VMs perform
+routing, NAT, tc netem/tbf and nft blackholes inside the guest. Host NET_ADMIN,
+TUN and namespace policy changes are neither needed nor requested. Observer
+application probes traverse the DUT; management user-net hostfwd is separate.
+Before forwarding comparisons measure direct client-to-sink and Linux-router
+ceilings; results are relative to this fabric, never hardware line rate. If
+fabric-limited, report DUT CPU cores per Gbit/s. Storage faults use QEMU throttle
+groups, guest state filesystem filling and blkdebug EIO; power cuts kill QEMU;
+clock tests use per-VM RTC. No host device-mapper is used.
 
 Use `KUBECONFIG=~/workshop.txt kubectl --context admin@workshop -n tenant-kuberoot`
 for workshop access. All scripts and QEMU run **inside kr-edge-stand**;
@@ -23,8 +28,8 @@ Mac activity is restricted to source editing, git and kubectl.
   `/work/field-edge/preflight.jsonl`; exit 2 means blocked. This is not a field
   test outcome. Run with `/work/bin` on PATH.
 - `lib.sh`: guarded 2-vCPU/4096-MiB/32-GiB raw `cache=none` UEFI QEMU launch,
-  private bridge/TAP fixture, and command typing. It refuses missing prerequisites.
-  The launch fixture has not been exercised because admission is blocked.
+  userspace multicast fixture, and command typing. It refuses missing prerequisites.
+  The revised launch fixture still requires live validation.
   Before three-VM tests stop the old Phase 1 VM; total guest RAM must fit 14Gi.
 - `workload.py`: `/http` returns exactly 1024 bytes; `/append` accepts numbered
   1024-byte records and acknowledges only after fsync; `/records` exports bytes
@@ -45,6 +50,6 @@ Mac activity is restricted to source editing, git and kubectl.
   of deliberate loss. It tests the harness, not virtual power-loss durability.
 
 The self-test passed inside the workshop pod. No image build or VM ran on Mac.
-The next step is the approved network fixture, then product pinning/preload,
+The next step is product pinning/preload,
 clean disk installation and E-B1, continuing in table order. Per-test orchestration,
 full workload deployment, repetition accounting and GIFs remain to be implemented.
