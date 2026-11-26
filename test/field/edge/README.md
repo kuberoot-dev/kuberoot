@@ -632,3 +632,7 @@ OS payload storage. Its completed marker and absence of a live raw disk are
 required. Safe rebase and full logical-byte comparison are still mandatory
 before removing the new stopped raw disk. All backing images remain retained;
 this changes evidence storage only, never the fresh raw disks used for trials.
+
+`continue-after-main.py --parent PID` waits for the actual main runner to exit,
+requires ten valid v2 records for every main E2 case, then invokes the full
+table continuation. It never treats an early runner exit as completion.
