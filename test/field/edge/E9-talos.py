@@ -3,7 +3,7 @@
 import argparse,datetime,json,os,pathlib,re,shlex,subprocess,time
 from qmp import command
 import talos_trial as t
-p=argparse.ArgumentParser();p.add_argument('--cut-percent',type=int,choices=[10,50,90],required=True);a=p.parse_args();root=t.ROOT;s=t.S;golden=root/'talos';d=root/f'results/E9-talos-v1.14.7-{a.cut_percent}';d.mkdir();env=dict(os.environ,VM_DIR=str(d));G=str(s/'gateway-command.sh');metrics={};errors=[];manual=[];recorder=process=None;name=d.name;started=False
+p=argparse.ArgumentParser();p.add_argument('--cut-percent',type=int,choices=[10,50,90],required=True);a=p.parse_args();root=t.ROOT;s=t.S;golden=root/'talos';d=root/f'results/E9-talos-v1.14.7-{a.cut_percent}';d.mkdir();env=dict(os.environ,VM_DIR=str(d));G=str(s/'gateway-command.sh');metrics={};errors=[];manual=[];recorder=process=None;vga=None;name=d.name;started=False
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(golden/f),str(d/f)],check=True)
 def typed(args):print('$ '+shlex.join([str(x) for x in args]),flush=True)
 def gateway(cmd):return subprocess.run([G,cmd],text=True,capture_output=True,timeout=30)
@@ -22,6 +22,8 @@ try:
  gateway(f'nohup python3 /home/observer/observer.py --http http://10.78.0.11:30080 --append http://10.78.0.11:30081 --kubeconfig /home/observer/kubeconfig --seconds 4500 --stop-file /home/observer/{name}.stop --output /home/observer/{name}.jsonl >/home/observer/{name}.log 2>&1 </dev/null &')
  serial=shlex.join(['python3',str(s/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds','4500'])
  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',serial,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ if True:
+  vga=subprocess.Popen(['python3',str(s/'vga-capture.py'),'--qmp',str(d/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop'),'--seconds','4500','--interval','5'],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
  time.sleep(60);network('slow');start=time.monotonic();start_epoch=time.time();started=True;process=t.upgrade(d,no_reboot=False);window=0;connected=True;connected_at=time.monotonic();connected_seconds=0;cut=False;native_percent=None;last=None;unverified_boot=False;verified_seen=False
  with (d/'transfer-progress.jsonl').open('x') as out:
   while time.monotonic()-start<4200:
@@ -67,5 +69,6 @@ finally:
  except Exception:pass
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=15);subprocess.run(['python3',str(s/'render-serial.py'),str(d/'serial.cast')],check=True)
+ if vga:vga.wait(timeout=60)
 record={'scenario_id':'E9','product':'talos-v1.14.7','source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'fault_seed':None,'fault_phase':f'cut at requested {a.cut_percent}% native largest-layer progress; two actual 10-minute windows one hour apart','topology':'same multicast LAN and 2 Mbit/s gateway; official unchanged installer mirrored by digest','metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'outage_seconds':None,'recovery_seconds':None,'manual_actions':manual,'status':'failed' if errors else 'measured-limit' if not metrics.get('requested_cut_reached') else 'measured','reason':'; '.join(errors) if errors else 'native transfer and restart behavior measured; actual OCI layer size and cut denominator recorded','measurement_notes':['Native per-layer percentages are rounded by talosctl; largest-layer progress is explicitly not whole-image progress.','Forwarded gateway bytes include IPv4/TCP/TLS overhead; they are not treated as payload completion.','Actual artifact size is retained; no truncated or padded 200 MiB fake installer.','A restarted talosctl process is an operator retry, not claimed automatic resume.'],'artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

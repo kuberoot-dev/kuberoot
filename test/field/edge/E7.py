@@ -5,7 +5,7 @@ server process. Replacement hooks must return measured public evidence only.
 """
 import argparse,datetime,json,os,pathlib,shlex,subprocess,time,urllib.request
 from qmp import command
-p=argparse.ArgumentParser();p.add_argument('--ha-root',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--replace-hook',type=pathlib.Path,required=True);a=p.parse_args();root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;h=a.ha_root;assert h.is_relative_to(root);d=h/'E7';d.mkdir();env=dict(os.environ,HA_ROOT=str(h),KUBECONFIG=str(h/'kubeconfig-1'),CASE_OUTPUT=str(d));errors=[];metrics={};observer=None;recorder=None;fault_injected=False
+p=argparse.ArgumentParser();p.add_argument('--ha-root',type=pathlib.Path,required=True);p.add_argument('--product',required=True);p.add_argument('--replace-hook',type=pathlib.Path,required=True);a=p.parse_args();root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;h=a.ha_root;assert h.is_relative_to(root);d=h/'E7';d.mkdir();env=dict(os.environ,HA_ROOT=str(h),KUBECONFIG=str(h/'kubeconfig-1'),CASE_OUTPUT=str(d));errors=[];metrics={};observer=None;recorder=None;vga=None;fault_injected=False
 
 def typed(args):
  print('$ ',end='',flush=True)
@@ -28,6 +28,8 @@ try:
  observer=subprocess.Popen(['python3',str(s/'observer.py'),'--http','http://127.0.0.1:28081','--append','http://127.0.0.1:28091','--kubeconfig',str(observer_config),'--seconds','1800','--stop-file',str(d/'observer.stop'),'--output',str(d/'observer.jsonl')],stdout=(d/'observer.log').open('w'),stderr=subprocess.STDOUT)
  serial=shlex.join(['python3',str(s/'serial-follow.py'),str(h/'n3/serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds','1800'])
  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',serial,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ if a.product.startswith('talos'):
+  vga=subprocess.Popen(['python3',str(s/'vga-capture.py'),'--qmp',str(h/'n3/qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop'),'--seconds','1800','--interval','3'],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
  time.sleep(30)
  if observer.poll() is not None:raise RuntimeError('external observer exited before E7 injection; inspect private observer log')
  initial=[json.loads(line) for line in (d/'observer.jsonl').read_text().splitlines() if line.endswith('}')]
@@ -86,5 +88,6 @@ finally:
  except Exception:pass
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=15);subprocess.run(['python3',str(s/'render-serial.py'),str(d/'serial.cast')],check=True)
+ if vga:vga.wait(timeout=60)
 record={'scenario_id':'E7','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'node_count':3,'topology':'3 control planes; shared multicast peer LAN; separate user-net API observation; W via healthy node 1','fault_seed':None,'fault_phase':'stop node 3; block its observed Kube API path while host API remains; blank replacement with new MAC','metrics':metrics,'outage_seconds':None,'recovery_seconds':metrics.get('replacement_ready_seconds'),'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':metrics.get('operator_actions',[]),'status':'invalid-fixture' if not fault_injected else 'failed' if errors else 'passed','reason':'; '.join(errors) if errors else 'fault detection, replacement, revocation and membership gates passed','time_utc':stamp(),'artifact_paths':[str(d)],'measurement_notes':['API-path fault removes only the QEMU management port forward. The API server process itself is not stopped.','Application append storage remains on surviving node 1; this is not a claim of replicated-PVC failover.']}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

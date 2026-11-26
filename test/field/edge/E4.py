@@ -9,7 +9,7 @@ root=pathlib.Path('/work/field-edge');scripts=pathlib.Path(__file__).resolve().p
 assert a.output.is_relative_to(root) and a.golden.is_relative_to(root)
 d=a.output;d.mkdir(parents=True,exist_ok=False);name=f'E4-{a.product}-{a.case}'
 for f in ['system.raw','vars.fd']:subprocess.run(['cp','--sparse=always',str(a.golden/f),str(d/f)],check=True)
-env=dict(os.environ,VM_DIR=str(d),BLOCK_FAULTS='1');errors=[];metrics={};relieved=None;fault=None;recorder=None;fault_active=False;churn=None;upgrade_audit=None
+env=dict(os.environ,VM_DIR=str(d),BLOCK_FAULTS='1');errors=[];metrics={};relieved=None;fault=None;recorder=None;vga=None;fault_active=False;churn=None;upgrade_audit=None
 G=str(scripts/'gateway-command.sh')
 def gateway(cmd,check=True):return subprocess.run([G,cmd],check=check,text=True,capture_output=True,timeout=45)
 def show(args):
@@ -48,6 +48,8 @@ try:
  time.sleep(60)
  serial=shlex.join(['python3',str(scripts/'serial-follow.py'),str(d/'serial.log'),'--from-end','--stop-file',str(d/'serial.stop'),'--max-seconds','1000'])
  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',serial,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ if a.product.startswith('talos'):
+  vga=subprocess.Popen(['python3',str(scripts/'vga-capture.py'),'--qmp',str(d/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop'),'--seconds','1200','--interval','2'],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
  before=command(str(d/'qmp.sock'),'query-blockstats');before_time=time.monotonic()
  show(['date','-u']);fault=time.time();fault_active=True
  if a.case in ['100-iops','20-iops']:block(a.case)
@@ -153,5 +155,6 @@ finally:
   timing=json.loads(subprocess.check_output(['python3','/work/scripts/render.py',str(d/'serial.cast')],text=True))
   subprocess.run(['python3',str(scripts/'bound-cast.py'),str(d/'serial.retimed.cast')],check=True,stdout=(d/'serial-speed.json').open('w'))
   subprocess.run(['/work/bin/agg','-q','--font-size','16','--theme','monokai','--last-frame-duration',str(max(5,15.1-timing['playback_seconds'])),str(d/'serial.retimed.cast'),str(d/'serial.gif')],check=True)
+ if vga:vga.wait(timeout=60)
 record={'scenario_id':'E4','product':a.product,'source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'topology':'fresh raw clone; W + 50 log pods at about 1 KiB/s each; one pod replacement/10 s; QEMU throttle/blkdebug; guest-local fallocate; gateway observer','fault_seed':None,'fault_phase':a.case,'metrics':metrics,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'recovery_seconds':metrics.get('recovery_seconds_first_60s_sustained_success'),'outage_seconds':None,'manual_actions':[],'status':'invalid-fixture' if metrics.get('driver_overloads') else 'invalid-fixture-capacity' if metrics.get('host_capacity_guard') else 'failed' if errors else 'passed-storage-upgrade-subcase' if a.upgrade_hook else 'passed-W-subcase','reason':'; '.join(errors) if errors else 'storage/W and requested native update-safety gates passed' if a.upgrade_hook else 'storage/W subcase passed; update safety is recorded in separate lanes','time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'upgrade_hook_executed':bool(a.upgrade_hook),'artifact_paths':[str(d)]}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)

@@ -5,7 +5,7 @@ Keep actual UTC/monotonic timing in JSON; retime only playback, never pixels.
 import argparse,datetime,hashlib,json,pathlib,time
 from PIL import Image
 from qmp import command
-p=argparse.ArgumentParser();p.add_argument('--qmp',required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--stop-file',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=600);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--qmp',required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--stop-file',type=pathlib.Path,required=True);p.add_argument('--seconds',type=float,default=600);p.add_argument('--interval',type=float,default=1);a=p.parse_args();assert a.interval>=1
 a.output.mkdir(parents=True,exist_ok=False);start=time.monotonic();frames=[];events=[];last=None
 while time.monotonic()-start<a.seconds and not a.stop_file.exists():
  began=time.monotonic()
@@ -19,7 +19,7 @@ while time.monotonic()-start<a.seconds and not a.stop_file.exists():
    event['frame']=len(frames)
   events.append(event)
  except Exception as exc:events.append({'elapsed_seconds':time.monotonic()-start,'error':str(exc)})
- time.sleep(max(0,1-(time.monotonic()-began)))
+ time.sleep(max(0,a.interval-(time.monotonic()-began)))
 (a.output/'timing.json').write_text(json.dumps(events,indent=2))
 if not frames:raise SystemExit('No VGA frames captured')
 end=time.monotonic()-start

@@ -2,7 +2,7 @@
 """Talos native etcd snapshot reference, blank replacement and separate app RPO."""
 import datetime,hashlib,importlib.util,json,os,pathlib,shlex,subprocess,time,urllib.request
 from qmp import command
-root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;golden=root/'talos';d=root/'results/E8-talos-v1.14.7-valid';d.mkdir();source=d/'source';source.mkdir();new=d/'replacement';new.mkdir();private=d/'private';private.mkdir(mode=0o700);fixture=root/'restore-fixture';errors=[];metrics={};recorder=None;start=None
+root=pathlib.Path('/work/field-edge');s=pathlib.Path(__file__).resolve().parent;golden=root/'talos';d=root/'results/E8-talos-v1.14.7-valid';d.mkdir();source=d/'source';source.mkdir();new=d/'replacement';new.mkdir();private=d/'private';private.mkdir(mode=0o700);fixture=root/'restore-fixture';errors=[];metrics={};recorder=None;vga=None;start=None
 base=['talosctl','--talosconfig',str(golden/'config/talosconfig'),'--endpoints','127.0.0.1:15000','--nodes','10.78.0.11'];env=dict(os.environ,KUBECONFIG=str(golden/'kubeconfig'));G=str(s/'gateway-command.sh')
 def run(args,**kwargs):
  print('$ '+shlex.join([str(x) for x in args]),flush=True)
@@ -39,6 +39,8 @@ try:
  start=time.monotonic();run(['date','-u']);boot(new,iso=True)
  serial=shlex.join(['python3',str(s/'serial-follow.py'),str(new/'serial.log'),'--stop-file',str(d/'serial.stop'),'--max-seconds','1500'])
  recorder=subprocess.Popen(['asciinema','rec','--cols','110','--rows','30','-q','-c',serial,str(d/'serial.cast')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ if True:
+  vga=subprocess.Popen(['python3',str(s/'vga-capture.py'),'--qmp',str(new/'qmp.sock'),'--output',str(d/'vga'),'--stop-file',str(d/'serial.stop'),'--seconds','1500','--interval','2'],stdout=(d/'vga-capture.log').open('w'),stderr=subprocess.STDOUT)
  # Native initial unconfigured machine API. No enrolled TLS verification bypass.
  for _ in range(150):
   r=subprocess.run(['talosctl','--nodes','127.0.0.1:15000','apply-config','--insecure','--file',str(golden/'config/controlplane-fixed.yaml')],capture_output=True,text=True,timeout=15)
@@ -73,5 +75,6 @@ finally:
  stop(source);stop(new)
  if recorder:
   (d/'serial.stop').touch();recorder.wait(timeout=15);run(['python3',s/'render-serial.py',d/'serial.cast'])
+ if vga:vga.wait(timeout=60)
 record={'scenario_id':'E8','product':'talos-v1.14.7','source_commit':os.environ['SOURCE_COMMIT'],'image_digest':os.environ['IMAGE_DIGEST'],'vcpu':2,'ram_mib':4096,'fault_seed':None,'fault_phase':'valid native etcd snapshot reference','topology':'single Talos node lost; blank replacement; native snapshot on external local S3; separate app snapshot','metrics':metrics,'recovery_seconds':metrics.get('restore_seconds'),'outage_seconds':None,'acknowledged_record_loss':metrics.get('acknowledged_record_loss'),'manual_actions':['native Talos etcd snapshot to external storage','native initial machine configuration','native bootstrap --recover-from with hash verification','separate app snapshot restore via Kubernetes API'],'status':'failed' if errors else 'passed-reference','reason':'; '.join(errors) if errors else 'native etcd snapshot reference and separate app RPO passed','measurement_notes':['Reference lane covers valid native etcd snapshot recovery; it is not kuberoot StateBackup and does not include application volumes.','Initial Talos maintenance API is unauthenticated by design; enrolled machine API uses existing trust.','No original source disk participates in restore. Snapshot and private configuration are never published.'],'artifact_paths':[str(d)],'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
 (d/'result.json').write_text(json.dumps(record,indent=2));print(json.dumps(record),flush=True)
