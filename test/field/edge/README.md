@@ -734,3 +734,24 @@ This supersedes earlier chronological notes about retaining every failed disk.
 All three E2 product drivers now record QMP backend errors through
 `block_observations.py`; unexpected disk errors invalidate an E2 measurement
 on competitors as well as kuberoot. E4 intentional storage faults are separate.
+
+### Host-call observation variant for later E2 measurements
+
+After the third recurring preboot backend failure, subsequent E2 drivers for
+all products enable the same metadata-only observer built by
+`build-io-observation.sh`. `io_observation.py` checks the source/binary SHA256
+build manifest before launch and records both hashes in each result. Calls,
+buffers, return codes and errno pass through unchanged; only diagnostic metadata
+is appended. A real scalar/vector/sparse direct-I/O self-test gave byte-identical
+return-code output with and without the observer and logged actual EINVALs.
+This establishes pass-through behavior for those probes, not zero timing cost.
+Wall-clock durations are kept as measured without adjustment; earlier runs
+without `metrics.host_io_observation` used no host-call observer. Curves label
+this variant. The initial separate diagnostic experiment stays excluded.
+
+`chart-upgrade-trial.py` plots actual HTTP content correctness, fsync append ACKs
+and ConfigMap probes in ten-second bins, plus cumulative acknowledged records.
+Unknown record integrity remains unknown. Upgrade/BGood/rollback markers use
+saved observations only. Charts render in the pod after each E2 experiment;
+`backfill-e2-service-curves.py` adds a separate artifact manifest for earlier
+published runs without changing their measured records.

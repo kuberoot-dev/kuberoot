@@ -5,6 +5,7 @@ A manual rollback is never counted as automatic recovery.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from io_observation import enable as enable_io_observation
 from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--image',required=True);p.add_argument('--repetition',type=int,required=True);p.add_argument('--deadline',type=int,default=1500);a=p.parse_args()
@@ -36,6 +37,7 @@ def boot_digest():
  try:return json.loads(subprocess.check_output(['python3',str(s/'boot-partition-digests.py'),str(d/'system.raw')],text=True))
  finally:command(str(d/'qmp.sock'),'cont')
 try:
+ enable_io_observation(d,env,metrics)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(s)],env=env,check=True)
  for _ in range(150):
   r=kube('get','nodes','-o','json')

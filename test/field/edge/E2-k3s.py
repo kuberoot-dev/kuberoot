@@ -2,6 +2,7 @@
 """Real APT trust/integrity and k3s A→B trials with declared lab fault packaging."""
 import argparse,datetime,hashlib,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from io_observation import enable as enable_io_observation
 from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted'],required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--repetition',type=int,required=True);p.add_argument('--deadline',type=int,default=1500);a=p.parse_args()
@@ -34,6 +35,7 @@ def inventory():
  if r.returncode:raise RuntimeError(r.stderr)
  return r.stdout
 try:
+ enable_io_observation(d,env,metrics)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(s)],env=env,check=True)
  for _ in range(150):
   r=gateway('curl --silent --max-time 2 http://10.78.0.11:30080/http')

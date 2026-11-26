@@ -53,7 +53,12 @@ CHECK
       -blockdev driver=throttle,file=disk,throttle-group=field-throttle,node-name=throttled
       -device virtio-blk-pci,drive=throttled,id=system,werror=report,rerror=report)
   fi
-  qemu-system-x86_64 -name "field-edge-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 -rtc "base=${RTC_BASE:-utc}" \
+  local launch=(qemu-system-x86_64)
+  if [[ ${FIELD_IO_TRACE:-0} == 1 ]];then
+    test -f "$FIELD_ROOT/io-observation/qemu-io-observation.so"
+    launch=(env "LD_PRELOAD=$FIELD_ROOT/io-observation/qemu-io-observation.so" "FIELD_IO_DIAGNOSTIC_LOG=$d/host-io-syscalls.jsonl" qemu-system-x86_64)
+  fi
+  "${launch[@]}" -name "field-edge-$id" -enable-kvm -cpu host -smp 2 -m 4096 -machine q35 -rtc "base=${RTC_BASE:-utc}" \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive "if=pflash,format=raw,file=$d/vars.fd" "${drives[@]}" \
     "${systemdrive[@]}" \

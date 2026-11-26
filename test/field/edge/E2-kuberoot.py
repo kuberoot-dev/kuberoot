@@ -4,6 +4,7 @@ Use a separate test-key image for injected signed faults; never bypass trust.
 """
 import argparse,datetime,json,os,pathlib,shlex,shutil,subprocess,time
 from qmp import command
+from io_observation import enable as enable_io_observation
 from block_observations import collect as collect_block_observations
 from upgrade_observations import evaluate as evaluate_service, wait_for_service
 p=argparse.ArgumentParser();p.add_argument('--golden',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--case',choices=['init-crash','pod-network','wrong-content','incompatible-state','tampered','untrusted','healthy-control'],required=True);p.add_argument('--bundle-url',required=True);p.add_argument('--bundle-sha256',required=True);p.add_argument('--target-version',required=True);p.add_argument('--product',required=True);p.add_argument('--repetition',type=int,default=1);p.add_argument('--deadline',type=float,default=1500);p.add_argument('--health-checks',type=pathlib.Path);a=p.parse_args()
@@ -35,6 +36,7 @@ def gateway(cmd,check=True):return subprocess.run([G,cmd],text=True,capture_outp
 def slot_snapshot():return json.loads(nk('get','bootentries','-o','json'))
 def stable_slots(obj):return sorted([{'name':s['metadata']['name'],'status':s['status']} for s in obj['items']],key=lambda s:s['name'])
 try:
+ enable_io_observation(d,env,metrics)
  subprocess.run(['bash','-c','source "$1/lib.sh"; vm_start 1','_',str(scripts)],env=env,check=True)
  for i in range(150):
   try:
