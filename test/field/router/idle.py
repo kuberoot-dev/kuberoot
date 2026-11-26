@@ -22,3 +22,5 @@ with (base/f'R-B1-{name}-idle.jsonl').open('a',buffering=1) as out:
   if time.monotonic()-start>=seconds:break
   time.sleep(min(30,max(0,seconds-(time.monotonic()-start))))
 print(json.dumps({'complete':True,'vm':name,'elapsed_s':time.monotonic()-start,'path':str(base/f'R-B1-{name}-idle.jsonl')}))
+subprocess.run(['python3','/work/field/summarize-idle.py',str(base/f'R-B1-{name}-idle.jsonl')],check=True)
+subprocess.run(['python3','/work/field/plot-idle.py',str(base/f'R-B1-{name}-idle.jsonl'),f'/work/field/img/chart-R-B1-{name}-idle.png'],check=True)

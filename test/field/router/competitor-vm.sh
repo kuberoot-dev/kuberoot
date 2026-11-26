@@ -13,7 +13,15 @@ d=/work/vms/$name;mkdir -p "$d"
 extra=()
 case "$name" in
  openwrt)
-  [[ -f $d/sys.img ]] || gzip -dc /work/field/images/openwrt-24.10.8.img.gz > "$d/sys.img"
+  if [[ ! -f $d/sys.img ]]; then
+   # Official OpenWrt gzip has trailing metadata. GNU gzip status 2 is a
+   # warning after successful decompression; status 1 is fatal.
+   status=0
+   gzip -dc /work/field/images/openwrt-24.10.8.img.gz > "$d/sys.img.partial" || status=$?
+   [[ $status == 0 || $status == 2 ]] || exit "$status"
+   qemu-img info -f raw "$d/sys.img.partial" >/dev/null
+   mv "$d/sys.img.partial" "$d/sys.img"
+  fi
   drive="file=$d/sys.img,format=raw,if=virtio";;
  vyos)
   [[ -f $d/sys.qcow2 ]] || qemu-img create -q -f qcow2 "$d/sys.qcow2" 12G
