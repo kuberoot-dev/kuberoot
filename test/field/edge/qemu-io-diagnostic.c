@@ -22,9 +22,13 @@ static pthread_once_t once=PTHREAD_ONCE_INIT;
 static ssize_t(*real_pwritev64)(int,const struct iovec*,int,off64_t);
 static ssize_t(*real_pwrite64)(int,const void*,size_t,off64_t);
 static ssize_t(*real_pread64)(int,void*,size_t,off64_t);
+static ssize_t(*real_preadv64)(int,const struct iovec*,int,off64_t);
+static int(*real_fdatasync)(int);
+static int(*real_fsync)(int);
 static void resolve(void){
  real_pwritev64=dlsym(RTLD_NEXT,"pwritev64");real_pwrite64=dlsym(RTLD_NEXT,"pwrite64");real_pread64=dlsym(RTLD_NEXT,"pread64");
- if(!real_pwritev64||!real_pwrite64||!real_pread64)_exit(125);
+ real_preadv64=dlsym(RTLD_NEXT,"preadv64");real_fdatasync=dlsym(RTLD_NEXT,"fdatasync");real_fsync=dlsym(RTLD_NEXT,"fsync");
+ if(!real_pwritev64||!real_pwrite64||!real_pread64||!real_preadv64||!real_fdatasync||!real_fsync)_exit(125);
 }
 ssize_t pwritev64(int fd,const struct iovec *v,int n,off64_t off){
  pthread_once(&once,resolve);ssize_t r=real_pwritev64(fd,v,n,off);int e=errno;
@@ -38,5 +42,21 @@ ssize_t pwrite64(int fd,const void *b,size_t n,off64_t off){
 }
 ssize_t pread64(int fd,void *b,size_t n,off64_t off){
  static unsigned calls;pthread_once(&once,resolve);ssize_t r=real_pread64(fd,b,n,off);int e=errno;
- if(off==0&&n<=4096&&__atomic_fetch_add(&calls,1,__ATOMIC_RELAXED)<48){struct iovec v={b,n};report("pread64-probe",fd,&v,1,off,r,r<0?e:0);}errno=e;return r;
+ if(off==0&&n<=4096&&__atomic_fetch_add(&calls,1,__ATOMIC_RELAXED)<48){struct iovec v={b,n};report("pread64-probe",fd,&v,1,off,r,r<0?e:0);}
+ else if(r<0){struct iovec v={b,n};report("pread64",fd,&v,1,off,r,e);}
+ errno=e;return r;
+}
+
+ssize_t preadv64(int fd,const struct iovec *v,int n,off64_t off){
+ pthread_once(&once,resolve);ssize_t r=real_preadv64(fd,v,n,off);int e=errno;
+ if(r<0){report("preadv64",fd,v,n,off,r,e);}
+ errno=e;return r;
+}
+int fdatasync(int fd){
+ pthread_once(&once,resolve);int r=real_fdatasync(fd);int e=errno;
+ if(r<0){report("fdatasync",fd,NULL,0,-1,r,e);}errno=e;return r;
+}
+int fsync(int fd){
+ pthread_once(&once,resolve);int r=real_fsync(fd);int e=errno;
+ if(r<0){report("fsync",fd,NULL,0,-1,r,e);}errno=e;return r;
 }

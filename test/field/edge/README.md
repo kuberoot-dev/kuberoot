@@ -755,3 +755,5 @@ Unknown record integrity remains unknown. Upgrade/BGood/rollback markers use
 saved observations only. Charts render in the pod after each E2 experiment;
 `backfill-e2-service-curves.py` adds a separate artifact manifest for earlier
 published runs without changing their measured records.
+
+The metadata-only E2 host I/O observer also records failed preadv64/fsync/fdatasync calls. Per-run source and library SHA256 distinguish observer revisions; successful flushes and data are not logged, and underlying calls/results/errno are preserved. A live QEMU keeps its mapped library revision until it exits.
