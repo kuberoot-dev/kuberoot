@@ -47,19 +47,8 @@
             "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
             "name": "kube-api-access-mk8bn",
             "readOnly": true
-          },
-          {
-            "name": "tun",
-            "mountPath": "/dev/net/tun"
           }
-        ],
-        "securityContext": {
-          "capabilities": {
-            "add": [
-              "NET_ADMIN"
-            ]
-          }
-        }
+        ]
       }
     ],
     "dnsPolicy": "ClusterFirst",
@@ -129,13 +118,6 @@
               }
             }
           ]
-        }
-      },
-      {
-        "name": "tun",
-        "hostPath": {
-          "path": "/dev/net/tun",
-          "type": "CharDevice"
         }
       }
     ]

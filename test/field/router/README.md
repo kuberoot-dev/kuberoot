@@ -8,8 +8,8 @@ inside one Linux pod with KVM; nothing here touches the host network.
 ## Running
 
 The scripts expect a pod with `/dev/kvm`, a persistent volume on `/work` and
-`TMPDIR=/work/tmp`. `pod.json` is an example spec; it needs a namespace whose
-PodSecurity level allows privileged pods. `prepare.sh` installs the tooling,
+`TMPDIR=/work/tmp`. `pod.json` is an example spec; it gets KVM from the KubeVirt device plugin
+and runs under the `baseline` PodSecurity level. `prepare.sh` installs the tooling,
 downloads the competitor images and records their digests.
 
 Two helpers run on a workstation and reach the pod with `kubectl`:
