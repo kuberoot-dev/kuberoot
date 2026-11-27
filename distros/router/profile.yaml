@@ -8,8 +8,10 @@ metadata:
   name: router
 spec:
   sysctls:
-    net.ipv4.ip_forward: "1"
-    net.ipv6.conf.all.forwarding: "1"
+    # Forwarding starts off: kuberoot-router turns it on once the first
+    # ruleset is loaded, so no packet crosses the node unfiltered at boot.
+    net.ipv4.ip_forward: "0"
+    net.ipv6.conf.all.forwarding: "0"
     # Loose reverse-path filtering: drop packets from sources no route
     # leads back to, while asymmetric routes (BGP, several uplinks) work.
     net.ipv4.conf.all.rp_filter: "2"

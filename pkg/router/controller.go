@@ -57,6 +57,8 @@ type Controller struct {
 	listers               map[string]cache.GenericLister
 	// poke holds one pending signal that a resource's spec changed.
 	poke chan struct{}
+	// forwarding is set once the first ruleset is loaded and forwarding on.
+	forwarding bool
 }
 
 // Run watches the resources and reconciles on every change, and every half
@@ -217,6 +219,20 @@ func (c *Controller) reconcile(ctx context.Context) {
 			}
 		}
 	}
+	// The ruleset goes in before addresses and routes: they are what makes
+	// a path forwardable, and no packet may cross before it is filtered.
+	if err := c.applyRuleset(Ruleset(ok)); err != nil {
+		for _, kind := range []string{"NATRule", "FirewallZone", "FirewallRule"} {
+			failed[Ref{kind, "*"}] = err
+		}
+	} else if !c.forwarding {
+		// The profile boots with forwarding off; only a loaded ruleset turns it on.
+		if err := enableForwarding("/proc"); err != nil {
+			klog.Errorf("enable forwarding: %v", err)
+		} else {
+			c.forwarding = true
+		}
+	}
 	for name, err := range ApplyInterfaces(ok.Interfaces) {
 		if failed[Ref{"Interface", "*"}] == nil {
 			failed[Ref{"Interface", name}] = err
@@ -225,11 +241,6 @@ func (c *Controller) reconcile(ctx context.Context) {
 	for name, err := range ApplyRoutes(ok.Routes) {
 		if failed[Ref{"Route", "*"}] == nil {
 			failed[Ref{"Route", name}] = err
-		}
-	}
-	if err := c.applyRuleset(Ruleset(ok)); err != nil {
-		for _, kind := range []string{"NATRule", "FirewallZone", "FirewallRule"} {
-			failed[Ref{kind, "*"}] = err
 		}
 	}
 	if err := c.applyDnsmasq(DnsmasqConfig(ok, c.leaseFile())); err != nil {
@@ -304,6 +315,16 @@ func specChanged(old, updated any) bool {
 		return true
 	}
 	return o.GetGeneration() != n.GetGeneration() || (o.GetDeletionTimestamp() == nil) != (n.GetDeletionTimestamp() == nil)
+}
+
+// enableForwarding turns IPv4 and IPv6 forwarding on under procRoot.
+func enableForwarding(procRoot string) error {
+	for _, f := range []string{"sys/net/ipv4/ip_forward", "sys/net/ipv6/conf/all/forwarding"} {
+		if err := os.WriteFile(filepath.Join(procRoot, f), []byte("1\n"), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Controller) confirmedFile() string { return filepath.Join(c.StateDir, "confirmed.json") }
