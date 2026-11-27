@@ -158,7 +158,7 @@ func (s *osConfigStorage) current() *node.OSConfig {
 			Name:              s.nodeName,
 			UID:               nodeUID(),
 			CreationTimestamp: status.BootTime,
-			ResourceVersion:   resourceVersion(spec, status.Addresses, status.Hostname),
+			ResourceVersion:   resourceVersion(spec, status.Addresses, status.Hostname, storageState(status.StateStorage)),
 		},
 		Spec:   spec,
 		Status: status,
@@ -181,6 +181,7 @@ func readOSStatus() node.OSConfigStatus {
 		BootTime:      metav1.NewTime(time.Now().Add(-time.Duration(info.Uptime) * time.Second).Truncate(time.Second)),
 		MemoryTotal:   int64(info.Totalram) * int64(info.Unit),
 		MemoryFree:    int64(info.Freeram) * int64(info.Unit),
+		StateStorage:  readStateStorage(),
 	}
 	if gpus, err := gpu.Find(); err == nil {
 		for _, g := range gpus {
@@ -229,10 +230,23 @@ func (s *osConfigStorage) ConvertToTable(_ context.Context, obj kruntime.Object,
 		}
 	}
 	return table([]metav1.TableColumnDefinition{
-		col("Name", "name"), col("Distro", ""), col("Version", ""), col("Kernel", ""), col("Addresses", ""), col("Uptime", ""),
+		col("Name", "name"), col("Distro", ""), col("Version", ""), col("Kernel", ""), col("Addresses", ""), col("Storage", ""), col("Uptime", ""),
 	}, items, func(o kruntime.Object) []any {
 		c := o.(*node.OSConfig)
+		storage := ""
+		if st := c.Status.StateStorage; st != nil {
+			storage = st.State
+		}
 		return []any{c.Name, c.Status.Distro, c.Status.Version, c.Status.KernelVersion,
-			strings.Join(c.Status.Addresses, ","), age(c.Status.BootTime.Time)}
+			strings.Join(c.Status.Addresses, ","), storage, age(c.Status.BootTime.Time)}
 	}), nil
+}
+
+// storageState is what of the storage health makes a new version of the
+// OSConfig for watchers: its state, not every byte of free space.
+func storageState(s *node.StateStorage) string {
+	if s == nil {
+		return ""
+	}
+	return s.State
 }

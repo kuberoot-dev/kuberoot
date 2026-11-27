@@ -59,7 +59,10 @@ func switchRoot() error {
 		// allocates blocks at write time, and ordered mode writes them before the
 		// metadata that points at them. data=journal gave the same guarantee by
 		// writing every byte twice, which wears the flash these nodes boot from.
-		if err := unix.Mount(state, newRoot+"/var", "ext4", unix.MS_NOSUID|unix.MS_NODEV, "data=ordered,nodelalloc"); err != nil {
+		// After an I/O error the kernel makes the partition read-only: writes
+		// then fail at once and visibly, instead of going on into a journal
+		// the kernel has already given up on.
+		if err := unix.Mount(state, newRoot+"/var", "ext4", unix.MS_NOSUID|unix.MS_NODEV, stateMountOptions); err != nil {
 			return fmt.Errorf("mount state: %w", err)
 		}
 	}

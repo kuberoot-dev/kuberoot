@@ -95,6 +95,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackup":           schema_pkg_apis_node_v1alpha1_StateBackup(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupList":       schema_pkg_apis_node_v1alpha1_StateBackupList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus":     schema_pkg_apis_node_v1alpha1_StateBackupStatus(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateStorage":          schema_pkg_apis_node_v1alpha1_StateStorage(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Upgrade":               schema_pkg_apis_node_v1alpha1_Upgrade(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeList":           schema_pkg_apis_node_v1alpha1_UpgradeList(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec":           schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref),
@@ -3190,11 +3191,17 @@ func schema_pkg_apis_node_v1alpha1_OSConfigStatus(ref common.ReferenceCallback) 
 							},
 						},
 					},
+					"stateStorage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StateStorage is the health of the state partition, mounted on /var: the cluster store, the services' logs and the node's own state. It is unset on a node without one, such as one running from live media.",
+							Ref:         ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateStorage"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeGPU", v1.Time{}.OpenAPIModelName()},
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.NodeGPU", "github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateStorage", v1.Time{}.OpenAPIModelName()},
 	}
 }
 
@@ -3338,6 +3345,68 @@ func schema_pkg_apis_node_v1alpha1_StateBackupStatus(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_node_v1alpha1_StateStorage(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "StateStorage is what the node sees of its state partition, observed without writing to it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State is Healthy; Full when less than 1 % of it is free; ReadOnly when the kernel remounted it read-only after a filesystem error; Failing when reading the device fails or does not finish.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message says why the state is not Healthy.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"device": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Device is the block device of the partition.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"totalBytes": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int64",
+						},
+					},
+					"availableBytes": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int64",
+						},
+					},
+					"errors": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Errors is how many errors the filesystem recorded since it was made.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"reserveReleased": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReserveReleased: at this boot the partition was full, and the space kept in reserve for the node was freed so its services could start.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"state"},
+			},
+		},
 	}
 }
 
