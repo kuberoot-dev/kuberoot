@@ -3,7 +3,7 @@
   "kind": "Pod",
   "metadata": {
     "name": "kr-router-stand",
-    "namespace": "tenant-kuberoot"
+    "namespace": "default"
   },
   "spec": {
     "containers": [

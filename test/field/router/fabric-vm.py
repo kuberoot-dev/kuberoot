@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unprivileged equal-product fabric; run exclusively in the workshop pod."""
+"""Unprivileged equal-product fabric; run inside the stand pod."""
 import argparse,json,subprocess,time,os
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('name',choices=['client','gateway','sink']);a=p.parse_args()

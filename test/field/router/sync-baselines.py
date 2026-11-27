@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Lightweight Mac watcher: archive completed observed hours without claiming suite pass."""
+"""Workstation watcher: copy finished idle windows out of the stand without claiming a suite pass."""
 import datetime,fcntl,json,os,subprocess,time
 from pathlib import Path
-article=Path('/Users/tym83/projects/kuberoot-articles')
-env=dict(os.environ,KUBECONFIG='/Users/tym83/workshop.txt')
-cmd=['kubectl','--context','admin@workshop','-n','tenant-kuberoot','exec','kr-router-stand','--']
+article=Path(os.environ['FIELD_RESULTS'])
+env=os.environ
+cmd=['kubectl','--context',os.environ['FIELD_CONTEXT'],'-n',os.environ['FIELD_NAMESPACE'],'exec',os.environ.get('FIELD_POD','kr-router-stand'),'--']
 def get(path):
  p=subprocess.run(cmd+['cat',path],env=env,capture_output=True,timeout=30)
  return p.stdout if p.returncode==0 else None
