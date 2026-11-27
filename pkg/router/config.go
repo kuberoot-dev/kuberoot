@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
 
@@ -371,3 +373,39 @@ func checkPeerPolicy(s v1.BGPPeerSpec) error {
 	}
 	return nil
 }
+
+// bare keeps of each resource what the node runs: its name and spec. The
+// confirmed configuration is written to disk with every change; managed
+// fields, kubectl's last-applied annotation and the status made it many
+// times larger, and none of it is applied.
+func bare(c Config) Config {
+	var b Config
+	for _, x := range c.Interfaces {
+		b.Interfaces = append(b.Interfaces, v1.Interface{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.Routes {
+		b.Routes = append(b.Routes, v1.Route{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.NAT {
+		b.NAT = append(b.NAT, v1.NATRule{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.Zones {
+		b.Zones = append(b.Zones, v1.FirewallZone{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.Rules {
+		b.Rules = append(b.Rules, v1.FirewallRule{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.DHCP {
+		b.DHCP = append(b.DHCP, v1.DHCPServer{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.BGP {
+		b.BGP = append(b.BGP, v1.BGPRouter{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	for _, x := range c.Peers {
+		b.Peers = append(b.Peers, v1.BGPPeer{ObjectMeta: nameOnly(x.ObjectMeta), Spec: x.Spec})
+	}
+	b.Safeguards = c.Safeguards
+	return b
+}
+
+func nameOnly(m metav1.ObjectMeta) metav1.ObjectMeta { return metav1.ObjectMeta{Name: m.Name} }

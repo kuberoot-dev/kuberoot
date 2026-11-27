@@ -60,6 +60,11 @@ spec:
         args:
         - /usr/bin/kube-apiserver
         - --etcd-servers=unix:///run/kine/kine.sock
+        # A router runs no pods: nothing reads the kubernetes Service's
+        # endpoints or the API server's identity lease, and each was a write
+        # to the store every ten seconds, most of what an idle router wrote.
+        - --endpoint-reconciler-type=none
+        - --feature-gates=APIServerIdentity=false,UnknownVersionInteroperabilityProxy=false
         - --advertise-address={{.Node.IP}}
         - --secure-port=6443
         - --service-cluster-ip-range={{.Net.Service}}

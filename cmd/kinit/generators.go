@@ -236,6 +236,12 @@ rules:
     resources: [leases]
   - group: ""
     resources: [events]
+# The router's controller reports what the node runs in every resource's
+# status; the changes worth an audit record are to the specs.
+- level: None
+  resources:
+  - group: router.kuberoot.dev
+    resources: ["*/status"]
 - level: Metadata
 `
 
