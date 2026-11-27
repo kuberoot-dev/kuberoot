@@ -37,6 +37,12 @@ type Module struct {
 
 type Spec struct {
 	Sysctls map[string]string `json:"sysctls,omitempty"`
+	// BootRuleset is an nftables script kinit loads, when it exists, before
+	// it configures any network interface: the firewall the node last ran
+	// with, kept by the distribution's own controller, so what the node
+	// serves is filtered from the first packet rather than from the moment
+	// that controller starts.
+	BootRuleset string `json:"bootRuleset,omitempty"`
 	// Modules are loaded at boot, in order, from the out-of-tree modules
 	// built with the kernel; module loading is then disabled.
 	Modules []Module `json:"modules,omitempty"`

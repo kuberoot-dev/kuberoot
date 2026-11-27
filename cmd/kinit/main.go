@@ -61,6 +61,9 @@ func boot() error {
 	if err := applySysctls(activeProfile.Spec.Sysctls); err != nil {
 		log.Printf("sysctls: %v", err)
 	}
+	if err := loadBootRuleset(activeProfile.Spec.BootRuleset); err != nil {
+		log.Printf("boot ruleset: %v", err)
+	}
 	go watchPowerButton()
 	go probationWatchdog()
 

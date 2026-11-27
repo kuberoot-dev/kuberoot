@@ -26,6 +26,7 @@ import (
 	"k8s.io/klog/v2"
 
 	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
+	"github.com/kuberoot-dev/kuberoot/pkg/atomicfile"
 )
 
 // kinds are the router's resources, by kind and plural.
@@ -59,6 +60,8 @@ type Controller struct {
 	poke chan struct{}
 	// forwarding is set once the first ruleset is loaded and forwarding on.
 	forwarding bool
+	// bootRuleset is what was last written to the boot ruleset file.
+	bootRuleset string
 }
 
 // Run watches the resources and reconciles on every change, and every half
@@ -210,6 +213,9 @@ func (c *Controller) reconcile(ctx context.Context) {
 			klog.Errorf("keep the confirmed configuration: %v", err)
 		}
 	}
+	if err := c.keepBootRuleset(); err != nil {
+		klog.Errorf("keep the boot ruleset: %v", err)
+	}
 	failed := map[Ref]error{}
 	if running != rev {
 		undone := rolledBack{fmt.Sprintf("revision %s was not confirmed in time; the node runs the last confirmed one, %s", rev, running)}
@@ -328,6 +334,26 @@ func enableForwarding(procRoot string) error {
 }
 
 func (c *Controller) confirmedFile() string { return filepath.Join(c.StateDir, "confirmed.json") }
+
+// BootRulesetFile is where the ruleset for the next boot is kept, relative
+// to the state directory; the router profile names the same file.
+const BootRulesetFile = "boot.nft"
+
+// keepBootRuleset writes the ruleset of the confirmed configuration for kinit
+// to load at the next boot, before the network is up. It is the confirmed
+// one, not a configuration on trial: a reboot during a trial comes back to
+// the confirmed configuration, and its filter is what the node starts with.
+func (c *Controller) keepBootRuleset() error {
+	rs := Ruleset(c.trial.Confirmed)
+	if rs == c.bootRuleset {
+		return nil
+	}
+	if err := atomicfile.WriteFile(filepath.Join(c.StateDir, BootRulesetFile), []byte(rs), 0o600); err != nil {
+		return err
+	}
+	c.bootRuleset = rs
+	return nil
+}
 
 func (c *Controller) applyRuleset(rs string) error {
 	// Applied again when the table went missing, say flushed by hand.

@@ -15,6 +15,10 @@ spec:
     # Loose reverse-path filtering: drop packets from sources no route
     # leads back to, while asymmetric routes (BGP, several uplinks) work.
     net.ipv4.conf.all.rp_filter: "2"
+  # kuberoot-router keeps the ruleset of the confirmed configuration here;
+  # kinit loads it before any interface has an address, so links no zone
+  # opens stay closed while the router's controller is still starting.
+  bootRuleset: /var/lib/kuberoot/router/boot.nft
   roles:
     controlPlane:
       generators: [node, cluster]
