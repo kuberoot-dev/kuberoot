@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -138,6 +139,7 @@ func init() {
 // Run serves the node API until ctx is cancelled.
 func Run(ctx context.Context, o Options) error {
 	cfg := genericapiserver.NewRecommendedConfig(codecs)
+	configureNodeAudit(cfg, os.Stderr)
 	cfg.EffectiveVersion = basecompatibility.NewEffectiveVersionFromString("1.37", "", "")
 
 	serving := genericoptions.NewSecureServingOptions().WithLoopback()

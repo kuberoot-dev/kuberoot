@@ -125,7 +125,7 @@ func BirdConfig(c Config, routerID string) string {
 		b.WriteString("}\n")
 	}
 	// A prefix set holds one family.
-	b.WriteString("\nfilter announce {\n")
+	b.WriteString("\nfilter announce {\n\tif source != RTS_STATIC then reject;\n")
 	for _, nets := range [][]string{v4, v6} {
 		if len(nets) > 0 {
 			fmt.Fprintf(&b, "\tif net ~ [ %s ] then accept;\n", strings.Join(nets, ", "))
@@ -145,7 +145,29 @@ func BirdConfig(c Config, routerID string) string {
 		if p.Spec.Multihop > 0 {
 			fmt.Fprintf(&b, "\tmultihop %d;\n", p.Spec.Multihop)
 		}
-		fmt.Fprintf(&b, "\t%s { %s export filter announce; };\n}\n", fam, imp)
+		peerImport := imp
+		if bgp.Import != "None" && p.Spec.ImportPolicy != nil {
+			peerImport = "import " + birdPrefixPolicy(p.Spec.ImportPolicy) + ";"
+		}
+		peerExport := "export filter announce;"
+		if p.Spec.ExportPolicy != nil {
+			// Intersect with locally announced routes: policy never authorizes transit.
+			allowed := &v1.BGPPrefixPolicy{}
+			for _, prefix := range p.Spec.ExportPolicy.Prefixes {
+				for _, local := range bgp.Announce {
+					if prefix == local {
+						allowed.Prefixes = append(allowed.Prefixes, prefix)
+					}
+				}
+			}
+			peerExport = "export " + birdPrefixPolicy(allowed) + ";"
+			peerExport = strings.Replace(peerExport, "filter {", "filter { if source != RTS_STATIC then reject;", 1)
+		}
+		limit := ""
+		if p.Spec.MaxPrefixes > 0 {
+			limit = fmt.Sprintf(" import limit %d action disable;", p.Spec.MaxPrefixes)
+		}
+		fmt.Fprintf(&b, "\t%s { %s %s%s };\n}\n", fam, peerImport, peerExport, limit)
 	}
 	return b.String()
 }
@@ -197,4 +219,11 @@ func ParseProtocols(r io.Reader) map[string]PeerState {
 		}
 	}
 	return out
+}
+
+func birdPrefixPolicy(policy *v1.BGPPrefixPolicy) string {
+	if len(policy.Prefixes) == 0 {
+		return "none"
+	}
+	return "filter { if net ~ [ " + strings.Join(policy.Prefixes, ", ") + " ] then accept; reject; }"
 }
