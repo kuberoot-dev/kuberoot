@@ -23,6 +23,16 @@ func DnsmasqConfig(c Config, leaseFile string) string {
 	var b strings.Builder
 	b.WriteString("# Written by kuberoot-router from the DHCPServer resources.\n")
 	b.WriteString("keep-in-foreground\nno-hosts\nbind-dynamic\ndhcp-authoritative\nresolv-file=/etc/resolv.conf\n")
+	// The router owns the pools it serves: an address is free when no lease
+	// holds it. dnsmasq would otherwise ping every address before offering it
+	// and hold the offer for that wait, so a burst of clients after a release
+	// waits for seconds; a host with a fixed address belongs outside the pool
+	// or in a static lease.
+	b.WriteString("no-ping\n")
+	// Clients are told apart by their hardware address. Hosts cloned from one
+	// image send the same client identifier, and dnsmasq, keyed by it, gives
+	// both one address; two hosts with one MAC cannot share a link anyway.
+	b.WriteString("dhcp-ignore-clid\n")
 	fmt.Fprintf(&b, "dhcp-leasefile=%s\n", leaseFile)
 	for _, d := range c.DHCP {
 		s := d.Spec
