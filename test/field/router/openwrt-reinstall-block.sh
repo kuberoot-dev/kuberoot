@@ -25,4 +25,20 @@ done
 scene t-R5-openwrt-flows "python3 /work/field/comp.py openwrt r5"
 scene t-R6-openwrt-scale "python3 /work/field/comp.py openwrt r6 100 1000 10000"
 scene t-R7-openwrt-small "python3 /work/field/comp.py openwrt r7 10000,100000"
-echo openwrt-block-done
+echo openwrt-reruns-done
+# R3, R8, R9 need bird2 and, for R9, a fourth NIC on the transit segment; R2 last
+# (sysupgrade drops installed packages).
+python3 qmp.py openwrt system_powerdown >/dev/null; for i in $(seq 90); do [[ -e /work/vms/openwrt/pid ]] || break; sleep 1; done
+[[ -e /work/vms/openwrt/pid ]] && { python3 qmp.py openwrt quit >/dev/null; sleep 2; }
+FIELD_EXTRA_NET="-netdev socket,id=transit,mcast=230.0.0.3:12003,localaddr=127.0.0.1 -device virtio-net-pci,romfile=,netdev=transit,mac=52:54:00:30:00:04" bash fabric-competitor.sh openwrt
+for i in $(seq 100); do /work/field/openwrt-command true 2>/dev/null && break; sleep 3; done
+/work/field/openwrt-command 'ip -br link' | tee raw/openwrt-rows-links.txt
+tdev=$(/work/field/openwrt-command 'ip -br link' | awk '/52:54:00:30:00:04/{print $1}' | sed 's/@.*//')
+echo "transit device: $tdev"
+for r in r3 r8 r9 r2; do
+ ENVLINE="export OPENWRT_TRANSIT_DEV=$tdev"
+ printf "#!/bin/bash\nsource /work/field/lib.sh\n%s\nshow %q\n" "$ENVLINE" "python3 /work/field/openwrt-rows.py $r" > scene-t-${r^^}-openwrt-rows.sh
+ DEFER_RENDER=1 bash capture.sh t-${r^^}-openwrt-rows scene-t-${r^^}-openwrt-rows.sh > raw/${r^^}-openwrt-rows.capture.log 2>&1
+ echo "$r exit $(cat casts/t-${r^^}-openwrt-rows.exit 2>/dev/null)"
+done
+echo openwrt-rows-done

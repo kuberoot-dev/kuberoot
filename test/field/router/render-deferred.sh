@@ -7,7 +7,7 @@ cast=/work/field/casts/$name.retimed.cast
 [[ $(cat /work/field/casts/$name.exit) == 0 ]] || { echo "$name failed; not rendered"; exit 1; }
 len=$(python3 -c "import json;l=[json.loads(x) for x in open('$cast')][1:];print(l[-1][0] if l else 0)")
 speed=$(python3 -c "print(max(1.0, round($len/55, 2)))")
-agg --fps-cap 15 --font-size 16 --theme dracula --speed "$speed" "$cast" "/work/field/img/$name.gif"
+agg --fps-cap "${AGG_FPS:-15}" --font-size "${AGG_FONT:-16}" --theme dracula --speed "$speed" "$cast" "/work/field/img/$name.gif"
 python3 - "$name" <<'PY'
 import sys
 from PIL import Image

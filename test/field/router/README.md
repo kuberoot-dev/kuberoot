@@ -83,6 +83,10 @@ the pod's volume. `R11-kuberoot-prefill.py` fills it offline with debugfs
 `build-test-build.sh` builds a router image from a patched tree and
 `r11-test-build.py` boots it on r11 to check a fix in the field.
 
+`openwrt-rows.py` runs R2 (sysupgrade), R3, R8 and R9 (bird2 from the release
+feed) on OpenWrt; `vyos-block.sh`, `debian-block.sh` and
+`openwrt-reinstall-block.sh` run one product's remaining rows in order.
+
 `render-deferred.sh` renders a scene recorded with `DEFER_RENDER=1`, speeding
 playback up when it is longer than the GIF budget.
 

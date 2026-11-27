@@ -19,6 +19,7 @@ import json, os, signal, subprocess, time
 from pathlib import Path
 
 raw = Path('/work/field/raw'); out = {}; events = []
+SUFFIX = os.environ.get('R2_SUFFIX', '')
 NEW, OLD = '2026.11.26-0016-rolling', '2026.11.25-0017-rolling'  # image names as VyOS lists them
 URL = 'http://10.0.2.2:8091/{mode}/vyos-2026.11.26-0016.iso'
 INSTALLER = 'sudo /usr/libexec/vyos/op_mode/image_installer.py --action add --no-prompt --image-path '
@@ -52,8 +53,8 @@ def images():
 
 def ev(phase, **kw):
     events.append({'at': time.time(), 'phase': phase, **kw})
-    (raw / 'R2-vyos-events.json').write_text(json.dumps(events, indent=2) + '\n')
-    (raw / 'R2-vyos.summary.json').write_text(json.dumps(out, indent=2) + '\n')
+    (raw / f'R2-vyos{SUFFIX}-events.json').write_text(json.dumps(events, indent=2) + '\n')
+    (raw / f'R2-vyos{SUFFIX}.summary.json').write_text(json.dumps(out, indent=2) + '\n')
 
 
 def pid():
@@ -107,34 +108,35 @@ say('running', out['baseline']['running']); print(out['baseline']['images'], flu
 subprocess.run(['/work/field/guest-command', 'client', 'rm -f /tmp/R2v-fwd.txt; nohup timeout 3000 fping -D -l -p 100 198.19.0.1 >/tmp/R2v-fwd.txt 2>&1 </dev/null &'])
 time.sleep(5)
 
-# 1 interrupted download
-ev('download-disconnect'); t = time.monotonic(); p = dut(INSTALLER + URL.format(mode='disconnect'), timeout=600)
-out['download_disconnect'] = {'exit': p.returncode, 'seconds': round(time.monotonic() - t, 1), 'tail': (p.stdout + p.stderr).strip().splitlines()[-4:],
-                              'images_after': images(), 'running_after': running()}
-ev('download-disconnect-done')
-# 2 truncated image
-ev('truncated'); t = time.monotonic(); p = dut(INSTALLER + URL.format(mode='truncated'), timeout=600)
-out['truncated'] = {'exit': p.returncode, 'seconds': round(time.monotonic() - t, 1), 'tail': (p.stdout + p.stderr).strip().splitlines()[-4:],
-                    'images_after': images(), 'running_after': running()}
-ev('truncated-done')
+if os.environ.get('R2_SKIP_FAULTS') != '1':  # phases 1-3 already measured; continue from the install
+    # 1 interrupted download
+    ev('download-disconnect'); t = time.monotonic(); p = dut(INSTALLER + URL.format(mode='disconnect'), timeout=600)
+    out['download_disconnect'] = {'exit': p.returncode, 'seconds': round(time.monotonic() - t, 1), 'tail': (p.stdout + p.stderr).strip().splitlines()[-4:],
+                                  'images_after': images(), 'running_after': running()}
+    ev('download-disconnect-done')
+    # 2 truncated image
+    ev('truncated'); t = time.monotonic(); p = dut(INSTALLER + URL.format(mode='truncated'), timeout=600)
+    out['truncated'] = {'exit': p.returncode, 'seconds': round(time.monotonic() - t, 1), 'tail': (p.stdout + p.stderr).strip().splitlines()[-4:],
+                        'images_after': images(), 'running_after': running()}
+    ev('truncated-done')
 
-# 3 power cut while the image is written
-ev('cut-during-write'); args = argv()
-proc = subprocess.Popen(['/work/field/vyos-command', INSTALLER + URL.format(mode='full')], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-t = time.monotonic(); cut_at = None
-while time.monotonic() - t < 600:
-    q = dut(f'ls -d /usr/lib/live/mount/persistence/boot/{NEW} 2>/dev/null; df -m /usr/lib/live/mount/persistence | tail -1', quiet=True, timeout=15)
-    if NEW in q.stdout:
-        time.sleep(3); cut_at = round(time.monotonic() - t, 1); break
-    time.sleep(1)
-t_cut = power_cut(args); proc.kill()
-ssh = wait_ssh(); fwd = wait_forwarding(t_cut)
-out['cut_during_write'] = {'cut_after_s': cut_at, 'ssh_back_s': ssh, 'forwarding_back_s': fwd, 'running_after': running(), 'images_after': images()}
-say('cut during write:', json.dumps(out['cut_during_write'])[:500])
-ev('cut-during-write-done')
-# remove a half-written image if one is listed, so the normal install starts clean
-if NEW in out['cut_during_write']['images_after']:
-    op(f'delete system image {NEW}', timeout=120)
+    # 3 power cut while the image is written
+    ev('cut-during-write'); args = argv()
+    proc = subprocess.Popen(['/work/field/vyos-command', INSTALLER + URL.format(mode='full')], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    t = time.monotonic(); cut_at = None
+    while time.monotonic() - t < 600:
+        q = dut(f'ls -d /usr/lib/live/mount/persistence/boot/{NEW} 2>/dev/null; df -m /usr/lib/live/mount/persistence | tail -1', quiet=True, timeout=15)
+        if NEW in q.stdout:
+            time.sleep(3); cut_at = round(time.monotonic() - t, 1); break
+        time.sleep(1)
+    t_cut = power_cut(args); proc.kill()
+    ssh = wait_ssh(); fwd = wait_forwarding(t_cut)
+    out['cut_during_write'] = {'cut_after_s': cut_at, 'ssh_back_s': ssh, 'forwarding_back_s': fwd, 'running_after': running(), 'images_after': images()}
+    say('cut during write:', json.dumps(out['cut_during_write'])[:500])
+    ev('cut-during-write-done')
+    # remove a half-written image if one is listed, so the normal install starts clean
+    if NEW in out['cut_during_write']['images_after']:
+        dut(f'sudo /usr/libexec/vyos/op_mode/image_manager.py --action delete --image-name {NEW} --no-prompt', timeout=120)
 
 # 4 normal install under traffic, reboot into it
 ev('install'); t = time.monotonic(); p = dut(INSTALLER + URL.format(mode='full'), timeout=1200)
@@ -158,7 +160,7 @@ out['cut_after_selection'] = {'ssh_back_s': ssh, 'forwarding_back_s': fwd, 'runn
 say('cut after selection:', json.dumps(out['cut_after_selection'])); ev('cut-after-selection-done')
 
 # 6 rollback to the previous image
-ev('rollback'); op(f'set system image default-boot {OLD}', timeout=60); dut('sudo systemctl reboot', quiet=True, timeout=10)
+ev('rollback'); dut(f'sudo /usr/libexec/vyos/op_mode/image_manager.py --action set --image-name {OLD} --no-prompt', timeout=60); dut('sudo systemctl reboot', quiet=True, timeout=10)
 t = time.monotonic(); time.sleep(5); ssh = wait_ssh(); fwd = wait_forwarding(t)
 out['rollback'] = {'ssh_back_s': round(time.monotonic() - t, 1) if ssh is not None else None, 'forwarding_back_s': fwd, 'running_after': running(), 'images_after': images()}
 say('rollback:', json.dumps(out['rollback'])); ev('rollback-done')
@@ -167,12 +169,14 @@ out['crash_and_noforward_builds'] = 'unsupported: no health-gated promotion or a
 # --- forwarding gaps per phase ---
 subprocess.run(['/work/field/guest-command', 'client', 'pkill fping'], capture_output=True); time.sleep(1)
 data = subprocess.run(['/work/field/guest-command', 'client', 'cat /tmp/R2v-fwd.txt'], capture_output=True, text=True).stdout
-(raw / 'R2-vyos-fwd.txt').write_text(data)
+(raw / f'R2-vyos{SUFFIX}-fwd.txt').write_text(data)
 skew = float(subprocess.run(['/work/field/guest-command', 'client', 'date +%s.%N'], capture_output=True, text=True).stdout) - time.time()
 rep = [float(l[1:l.index(']')]) - skew for l in data.splitlines() if l.startswith('[') and 'bytes' in l]
 gaps = [(a, b - a) for a, b in zip(rep, rep[1:])]
 at = {e['phase']: e['at'] for e in events}
 for name in ('download-disconnect', 'truncated', 'cut-during-write', 'install', 'reboot-new', 'cut-after-selection', 'rollback'):
+    if name not in at or name + '-done' not in at:
+        continue
     a, b = at[name], at[name + '-done']
     g = [d for t, d in gaps if a - 1 <= t <= b]
     out.setdefault('forwarding_max_gap_s', {})[name] = round(max(g), 2) if g else None
