@@ -41,6 +41,50 @@ func ApplyInterfaces(ifs []v1.Interface) map[string]error {
 	return errs
 }
 
+// StaleAddresses are the addresses earlier Interfaces gave links that no
+// Interface addresses now, by link: the Interface was deleted, moved to
+// another link, or no longer names addresses. They were the router's, so
+// they go with the Interface; a link an Interface still addresses is
+// syncAddresses' to put right.
+func StaleAddresses(previous, current []v1.Interface) map[string][]string {
+	addressed := map[string]bool{}
+	for _, i := range current {
+		if len(i.Spec.Addresses) > 0 {
+			addressed[i.Spec.Link] = true
+		}
+	}
+	stale := map[string][]string{}
+	for _, i := range previous {
+		if !addressed[i.Spec.Link] && len(i.Spec.Addresses) > 0 {
+			stale[i.Spec.Link] = append(stale[i.Spec.Link], i.Spec.Addresses...)
+		}
+	}
+	return stale
+}
+
+// RemoveStaleAddresses removes the addresses of Interfaces that are gone
+// (see StaleAddresses). A link that no longer exists, such as a VLAN the
+// router removed, has nothing left to remove. Errors are per link.
+func RemoveStaleAddresses(previous, current []v1.Interface) map[string]error {
+	errs := map[string]error{}
+	for name, addrs := range StaleAddresses(previous, current) {
+		link, err := netlink.LinkByName(name)
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			addr, err := netlink.ParseAddr(a)
+			if err != nil {
+				continue
+			}
+			if err := netlink.AddrDel(link, addr); err != nil && !errors.Is(err, unix.EADDRNOTAVAIL) {
+				errs[name] = fmt.Errorf("remove %s: %w", a, err)
+			}
+		}
+	}
+	return errs
+}
+
 func applyInterface(s v1.InterfaceSpec) error {
 	link, err := netlink.LinkByName(s.Link)
 	if s.VLAN != nil {

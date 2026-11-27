@@ -62,6 +62,9 @@ type Controller struct {
 	forwarding bool
 	// bootRuleset is what was last written to the boot ruleset file.
 	bootRuleset string
+	// interfaces are the Interfaces the last pass applied, so the addresses
+	// of one that is deleted can be removed with it.
+	interfaces []v1.Interface
 }
 
 // Run watches the resources and reconciles on every change, and every half
@@ -78,6 +81,8 @@ func (c *Controller) Run(ctx context.Context) error {
 	defer c.bird.Stop()
 
 	c.trial.Load(c.confirmedFile())
+	// What the node ran before this process: the confirmed configuration.
+	c.interfaces = c.trial.Confirmed.Interfaces
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(c.Client, 10*time.Minute)
 	c.poke = make(chan struct{}, 1)
 	poke := c.poke
@@ -248,6 +253,10 @@ func (c *Controller) reconcile(ctx context.Context) {
 			failed[Ref{"Interface", name}] = err
 		}
 	}
+	for link, err := range RemoveStaleAddresses(c.interfaces, ok.Interfaces) {
+		klog.Errorf("addresses of a removed Interface on %s: %v", link, err)
+	}
+	c.interfaces = ok.Interfaces
 	for name, err := range ApplyRoutes(ok.Routes) {
 		if failed[Ref{"Route", "*"}] == nil {
 			failed[Ref{"Route", name}] = err
