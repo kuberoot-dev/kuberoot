@@ -5,11 +5,15 @@ usage: kg.py attach | detach | profile routing|nat | r4 | r5 | r7 COUNT[,COUNT] 
 attach restarts r2's QEMU with two more NICs on the G segments (LAN 13031 -> eth3,
 WAN 13032 -> eth4) and configures them through the router API. The competitor
 slot must be empty: the G addresses are the same for every DUT.
+FIELD_DUT=r11 points the profile and r5 rows at r11 (a copy of r2 put on G in
+its place) and FIELD_TAG names the build in raw file names.
 """
 import base64, ipaddress, json, os, subprocess, sys, time
 from pathlib import Path
 
-raw = Path('/work/field/raw'); KC = '/work/cluster-r2.conf'; env = dict(os.environ, KUBECONFIG=KC)
+# FIELD_DUT names another copy of r2 that took its place on G (r11), FIELD_TAG the build, for raw file names.
+DUT = os.environ.get('FIELD_DUT', 'r2'); RUN = DUT + ('-' + os.environ['FIELD_TAG'] if os.environ.get('FIELD_TAG') else '')
+raw = Path('/work/field/raw'); KC = f'/work/cluster-{DUT}.conf'; env = dict(os.environ, KUBECONFIG=KC)
 row, args = sys.argv[1], sys.argv[2:]
 
 
@@ -155,7 +159,7 @@ def row_profile():
               obj('FirewallZone', 'g-wan', {'links': ['eth4'], 'input': 'Drop', 'forwardTo': []}))
     time.sleep(8)
     kubectl(['get', 'natrules,firewallzones', '-o', 'wide'])
-    (raw / f'R-B2-r2-{prof}-state.txt').write_text(kubectl(['get', 'natrules,firewallzones,interfaces,routes', '-o', 'yaml'], quiet=True).stdout)
+    (raw / f'R-B2-{RUN}-{prof}-state.txt').write_text(kubectl(['get', 'natrules,firewallzones,interfaces,routes', '-o', 'yaml'], quiet=True).stdout)
     say('profile', prof, 'forwarding:', ping_ok())
 
 
@@ -214,7 +218,7 @@ def row_r5():
         raise SystemExit('flow sink did not listen on 32 ports; no measurement')
     summary = {}
     for count, rate in [(1000, 1000), (10000, 1000), (100000, 10000)]:
-        name = f'R5-r2-{count}-{rate}'; t0 = time.monotonic()
+        name = f'R5-{RUN}-{count}-{rate}'; t0 = time.monotonic()
         cmd = f'python3 /tmp/tcp-flows.py client --count {count} --rate {rate} --seconds 120 --hold 30'
         say('$ guest-command client', cmd)
         proc = subprocess.Popen(['/work/field/guest-command', 'client', cmd], stdout=(raw / (name + '.jsonl')).open('w'), stderr=(raw / (name + '.err')).open('w'))
@@ -231,7 +235,7 @@ def row_r5():
         summary[name] = {'completed': hold[0]['completed'] if hold else None, 'ratio': hold[0]['completion_ratio'] if hold else None,
                          'api_p99_s': lat[int(len(lat) * .99) - 1] if lat else None, 'api_failures': fails, 'api_samples': len(lat)}
         say(name, json.dumps(summary[name])); time.sleep(15)
-    save('R5-r2.summary.json', summary)
+    save(f'R5-{RUN}.summary.json', summary)
 
 
 def bgp_setup(count, ipv6):
