@@ -50,14 +50,14 @@ per-VM `-rtc`.
 | R-B2 | routed and NAT throughput | `forwarding.py`, `fabric-*.sh` |
 | R-cap | which router features each product can configure | `R-cap-*` |
 | R1 | a change that cuts off management is rolled back | `R1-*` |
-| R2 | an upgrade that breaks forwarding or crashes is rolled back | `R2-*`, `build-fault-bundle.sh`, `fault-artifact-server.py` |
+| R2 | an upgrade that breaks forwarding or crashes is rolled back | `R2-*`, `build-fault-bundle.sh`, `fault-artifact-server.py`, `fault-image-server.py` |
 | R3 | stale, conflicting and replayed configuration | `R3-*` |
-| R4 | DHCP under load, lease persistence, VLAN isolation | `R4-*.py` |
+| R4 | DHCP under load, lease persistence, VLAN isolation, release/retry, client IDs | `R4-*.py`, `dhcp-scapy.py` |
 | R5 | NAT with many concurrent sessions | `R5-*.py`, `tcp-flows.py` |
 | R6 | firewall with 100 to 10000 rules, edits, boot without leaks | `R6-*.py`, `linux-firewall-scale.py`, `tcp-port-probes.py` |
 | R7 | full BGP table on small memory | `R7-*.py`, `bgp-prefix-generator.py` |
 | R8 | DNS forwarding under load | `R8-*.py`, `dns-load.py` |
-| R9 | BGP failure detection and flapping | `R9-*.py`, `udp-probes.py` |
+| R9 | BGP failure detection, flapping, carrier loss, daemon restart | `R9-*.py`, `udp-probes.py` |
 | R10 | management API under load, RBAC, rejected unsafe changes | `R10-*` |
 | R11 | disk writes per change, slow disk, full disk, I/O errors | `R11-*.py` |
 
@@ -71,6 +71,24 @@ unsafe promotion, whatever the scenario expected.
 rejects a failed scene before rendering it to GIF. `console.py` and
 `guest-command` propagate the guest command's exit code. `DEFER_RENDER=1`
 records without rendering during benchmarks. `plot-*.py` draw the charts.
+
+### Separate state disk (r11)
+
+`r11-prepare.sh` copies r2 into r11, renames the state partition in the copy
+and moves `kuberoot-state` to a small disk that `qemu-storage-daemon` serves
+over NBD, so the state store can be filled or failed without touching r2 or
+the pod's volume. `R11-kuberoot-prefill.py` fills it offline with debugfs
+(filling it through the API runs the API server out of memory first) and
+`R11-kuberoot-state.py eio` kills the storage daemon for EIO.
+`build-test-build.sh` builds a router image from a patched tree and
+`r11-test-build.py` boots it on r11 to check a fix in the field.
+
+`openwrt-rows.py` runs R2 (sysupgrade), R3, R8 and R9 (bird2 from the release
+feed) on OpenWrt; `vyos-block.sh`, `debian-block.sh` and
+`openwrt-reinstall-block.sh` run one product's remaining rows in order.
+
+`render-deferred.sh` renders a scene recorded with `DEFER_RENDER=1`, speeding
+playback up when it is longer than the GIF budget.
 
 `result.py` appends one JSON row per measurement. A script being present does
 not mean its scenario ran: only the recorded rows and raw output say so, and

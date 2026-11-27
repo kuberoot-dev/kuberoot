@@ -3,7 +3,6 @@
 import json,subprocess,time,os
 from pathlib import Path
 raw=Path('/work/field/raw')
-while not (raw/'R4-debian-isolation.exit').exists():time.sleep(3)
 def qmp(cmd,args):
  print('$ qmp debian',cmd,json.dumps(args),flush=True)
  return subprocess.run(['python3','/work/field/qmp.py','debian',cmd,json.dumps(args)],capture_output=True,text=True,check=True).stdout

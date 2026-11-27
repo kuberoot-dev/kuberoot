@@ -33,6 +33,8 @@ case "$name" in
   [[ ! -f $d/seed.img ]] || extra=(-drive "file=$d/seed.img,format=raw,if=virtio,readonly=on");;
 esac
 # Equal userspace socket fabric; third NIC is isolated observation only.
+# FIELD_EXTRA_NET adds QEMU arguments, e.g. a NIC on the transit segment for R9.
+extra_net=(); [[ -z ${FIELD_EXTRA_NET:-} ]] || read -ra extra_net <<< "$FIELD_EXTRA_NET"
 qemu-system-x86_64 -name "$name" -enable-kvm -cpu host -smp "${DUT_VCPU:-2}" -m "${DUT_RAM_MIB:-2048}" -machine q35 -boot order=c \
  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
  -drive "if=pflash,format=raw,file=$d/vars.fd" -drive "$drive" -device virtio-blk-pci,drive=system,bootindex=1 "${extra[@]}" \
@@ -44,4 +46,4 @@ qemu-system-x86_64 -name "$name" -enable-kvm -cpu host -smp "${DUT_VCPU:-2}" -m 
  -device virtio-net-pci,romfile=,netdev=observer,mac=52:54:00:30:00:03 \
  -chardev "socket,id=ser,path=$d/serial.sock,server=on,wait=off,logfile=$d/console.log,logappend=on" \
  -serial chardev:ser -qmp "unix:$d/qmp.sock,server=on,wait=off" \
- -display none -daemonize -pidfile "$d/pid"
+ "${extra_net[@]}" -display none -daemonize -pidfile "$d/pid"

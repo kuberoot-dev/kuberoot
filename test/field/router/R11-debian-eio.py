@@ -3,7 +3,6 @@
 import json,os,re,signal,subprocess,time
 from pathlib import Path
 raw=Path('/work/field/raw');rows=[]
-while not (raw/'R11-debian-storage.exit').exists():time.sleep(3)
 def g(vm,cmd,timeout=40):
  print(time.strftime('%FT%TZ',time.gmtime()),'$ guest-command',vm,cmd,flush=True)
  p=subprocess.run(['/work/field/guest-command',vm,cmd],text=True,capture_output=True,timeout=timeout);print(p.stdout+p.stderr,flush=True);rows.append({'at':time.time(),'vm':vm,'command':cmd,'exit':p.returncode,'stdout':p.stdout,'stderr':p.stderr});return p
