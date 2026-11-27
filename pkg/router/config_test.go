@@ -121,6 +121,8 @@ func TestDnsmasqConfig(t *testing.T) {
 		"domain=home.lan,192.168.10.100,192.168.10.199\n",
 		"dhcp-host=52:54:00:aa:bb:cc,192.168.10.5,server\n",
 		"dhcp-leasefile=/var/lib/kuberoot/router/dnsmasq.leases\n",
+		"no-ping\n",
+		"dhcp-ignore-clid\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("dnsmasq config lacks %q:\n%s", want, got)
