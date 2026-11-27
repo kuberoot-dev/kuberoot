@@ -15,10 +15,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
-const pkiDir = "/var/lib/kuberoot/pki"
+// pkiDir is a variable for the tests.
+var pkiDir = "/var/lib/kuberoot/pki"
+
+// reissueBefore is how long before expiry a leaf certificate is renewed at boot.
+const reissueBefore = 30 * 24 * time.Hour
 
 type authority struct {
 	cert *x509.Certificate
@@ -258,6 +263,12 @@ func newAuthority(name string) (*authority, error) {
 }
 
 func (a *authority) issue(s certSpec) error {
+	// A boot keeps a certificate that is still what it would issue: rewriting
+	// it every boot wore the flash, and with a full state partition the node
+	// could not come up at all.
+	if a.current(s) {
+		return nil
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
@@ -280,6 +291,31 @@ func (a *authority) issue(s certSpec) error {
 		return err
 	}
 	return writeKey(s.file+".key", key)
+}
+
+// current reports whether the certificate and key on disk for s match it
+// (names, addresses, usages), are signed by a and stay valid beyond
+// reissueBefore.
+func (a *authority) current(s certSpec) bool {
+	certPEM, err := os.ReadFile(pkiPath(s.file + ".crt"))
+	if err != nil {
+		return false
+	}
+	keyPEM, err := os.ReadFile(pkiPath(s.file + ".key"))
+	if err != nil {
+		return false
+	}
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return false
+	}
+	c, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil || c.CheckSignatureFrom(a.cert) != nil || time.Until(c.NotAfter) < reissueBefore {
+		return false
+	}
+	return c.Subject.CommonName == s.commonName && slices.Equal(c.Subject.Organization, s.orgs) &&
+		slices.Equal(c.ExtKeyUsage, s.usages) && slices.Equal(c.DNSNames, s.dnsNames) &&
+		slices.EqualFunc(c.IPAddresses, s.ips, func(x, y net.IP) bool { return x.Equal(y) })
 }
 
 func serial() *big.Int {

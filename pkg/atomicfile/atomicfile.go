@@ -3,13 +3,19 @@
 package atomicfile
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 )
 
 // WriteFile writes data to a temporary file next to path, syncs it, renames it
-// over path and syncs the directory.
+// over path and syncs the directory. A file that already holds data with the
+// same permissions is left alone: rewriting it would only wear the flash,
+// and on a full filesystem the temporary copy would not fit.
 func WriteFile(path string, data []byte, perm os.FileMode) error {
+	if same(path, data, perm) {
+		return nil
+	}
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -40,4 +46,14 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// same reports whether path is a regular file holding data with permissions perm.
+func same(path string, data []byte, perm os.FileMode) bool {
+	fi, err := os.Stat(path)
+	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != perm.Perm() || fi.Size() != int64(len(data)) {
+		return false
+	}
+	old, err := os.ReadFile(path)
+	return err == nil && bytes.Equal(old, data)
 }

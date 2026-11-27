@@ -251,12 +251,15 @@ resources:
   - identity: {}
 `
 
+// writeFiles writes the generated files, leaving alone those that already
+// hold the same content: a boot that changes nothing then writes nothing to
+// the state partition, which may be full.
 func writeFiles(files map[string]string, dirs ...string) error {
 	for path, content := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		if err := atomicfile.WriteFile(path, []byte(content), 0o600); err != nil {
 			return err
 		}
 	}
