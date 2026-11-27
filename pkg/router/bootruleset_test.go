@@ -8,6 +8,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	v1 "github.com/kuberoot-dev/kuberoot/pkg/apis/router/v1alpha1"
 )
@@ -75,5 +76,38 @@ func TestRouterProfileLoadsTheBootRuleset(t *testing.T) {
 	}
 	if want := "bootRuleset: /var/lib/kuberoot/router/" + BootRulesetFile; !strings.Contains(string(raw), want) {
 		t.Fatalf("the router profile does not load the file kuberoot-router keeps (%s)", want)
+	}
+}
+
+// kuberoot-router runs the confirmed configuration itself while the API is
+// down; gated on the API server, it would not start when the API cannot.
+func TestRouterProfileStartsTheRouterWithoutTheAPI(t *testing.T) {
+	raw, err := os.ReadFile("../../distros/router/profile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p struct {
+		Spec struct {
+			Roles map[string]struct {
+				Services []struct{ Name, After string }
+			}
+		}
+	}
+	if err := yaml.Unmarshal(raw, &p); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, role := range p.Spec.Roles {
+		for _, s := range role.Services {
+			if s.Name == "kuberoot-router" {
+				found = true
+				if s.After != "" {
+					t.Errorf("kuberoot-router waits for %s", s.After)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the router profile has no kuberoot-router")
 	}
 }

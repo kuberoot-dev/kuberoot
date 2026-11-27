@@ -96,8 +96,10 @@ spec:
         - --use-service-account-credentials=true
         - --controllers=garbagecollector,namespace,serviceaccount,serviceaccount-token,root-ca-cert-publisher,clusterrole-aggregation
         - --leader-elect=false
+      # Not after the API server: the router runs its last confirmed
+      # configuration from disk at once, so the node forwards even when the
+      # API is slow to start or cannot start at all.
       - name: kuberoot-router
-        after: apiserver
         args:
         - /usr/bin/kuberoot-router
         - --kubeconfig={{kube "admin.kubeconfig"}}
