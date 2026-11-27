@@ -12,7 +12,8 @@ import base64, json, os, subprocess, sys, time
 from pathlib import Path
 
 PH = sys.argv[1] if len(sys.argv) > 1 else 'ABCD'
-raw = Path('/work/field/raw'); env = dict(os.environ, KUBECONFIG='/work/cluster-r2.conf'); out = {}
+DUT = os.environ.get('FIELD_DUT', 'r2'); RUN = DUT + ('-' + os.environ['FIELD_TAG'] if os.environ.get('FIELD_TAG') else '')
+raw = Path('/work/field/raw'); env = dict(os.environ, KUBECONFIG=f'/work/cluster-{DUT}.conf'); out = {}
 
 
 def say(*a):
@@ -59,7 +60,7 @@ def dora(tag, clients, ns=None, iface='test0', timeout=40):
         r = json.loads(p.stdout)
     except Exception:
         r = {'error': p.stdout[-500:] + p.stderr[-500:]}
-    (raw / f'R4-r2-{tag}.json').write_text(json.dumps(r, indent=2) + '\n')
+    (raw / f'R4-{RUN}-{tag}.json').write_text(json.dumps(r, indent=2) + '\n')
     say(tag, json.dumps({k: v for k, v in r.items() if k != 'results'}))
     return r
 
@@ -142,7 +143,7 @@ if 'D' in PH:
                 'status_leases_for_these_macs': [l for l in st if l['mac'].startswith('02:46')]}
     say('D', json.dumps(out['D']))
 
-(raw / f'R4-r2-extra-{PH}.summary.json').write_text(json.dumps(out, indent=2) + '\n')
+(raw / f'R4-{RUN}-extra-{PH}.summary.json').write_text(json.dumps(out, indent=2) + '\n')
 # --- restore ---
 guest('client', 'ip netns del guest20; true', quiet=True)
 kubectl(['delete', 'dhcpserver', 'g-guest', '--ignore-not-found'], quiet=True); kubectl(['delete', 'natrule', 'g-masq-guest', '--ignore-not-found'], quiet=True)

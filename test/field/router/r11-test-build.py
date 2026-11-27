@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Check a test build on r11 (root-a rewritten with /work/field7/out; see
-build-test-build.sh): phases boot, iface, full, full9.
+"""Check a test build on r11 (root-a rewritten with $FIELD_BUILD, default
+/work/field7/out; see build-test-build.sh): phases boot, iface, full, full9,
+and for later builds idle, rate, fullboot, eio. Raw files are named after
+$FIELD_TAG (default field8).
 
 R11 storage faults on kuberoot r11 (a copy of r2) whose state partition is a
 separate, small disk served by qemu-storage-daemon over NBD.
@@ -21,7 +23,10 @@ from pathlib import Path
 
 raw = Path('/work/field/raw'); d = Path('/work/vms/r11')
 env = dict(os.environ, KUBECONFIG='/work/cluster-r11.conf'); nenv = dict(os.environ, KUBECONFIG='/work/trust/admin.kubeconfig')
-phase = sys.argv[1]; out = {}; summary_file = raw / os.environ.get("R11_SUMMARY", "R11-r11-field8.summary.json")
+BUILD = os.environ.get('FIELD_BUILD', '/work/field7/out'); TAG = os.environ.get('FIELD_TAG', 'field8')
+phase = sys.argv[1]; out = {}; summary_file = raw / os.environ.get("R11_SUMMARY", f"R11-r11-{TAG}.summary.json")
+if summary_file.exists() and os.environ.get('R11_APPEND'):
+    out = json.loads(summary_file.read_text())
 
 
 def say(*a):
@@ -75,7 +80,7 @@ def argv():
                  ('52:54:00:00:02:01', '52:54:00:00:0b:01'), ('52:54:00:01:02:01', '52:54:00:01:0b:01'), ('52:54:00:02:02:01', '52:54:00:02:0b:01'),
                  ('52:54:00:30:00:12', '52:54:00:31:00:12'), ('52:54:00:30:00:11', '52:54:00:31:00:11')]:
         s = s.replace(x, y)
-    s = s.replace('/work/vms/r11/directboot/vmlinuz.efi', '/work/field7/out/amd64/vmlinuz.efi').replace('/work/vms/r11/directboot/initrd.cpio', '/work/field7/out/amd64/initrd.cpio')
+    s = s.replace('/work/vms/r11/directboot/vmlinuz.efi', f'{BUILD}/amd64/vmlinuz.efi').replace('/work/vms/r11/directboot/initrd.cpio', f'{BUILD}/amd64/initrd.cpio')
     s = s.replace('230.0.11.3:12113', '230.0.0.3:12003')  # the gateway probes eth2 from the transit segment
     a = json.loads(s)
     return a + ['-blockdev', f'driver=nbd,node-name=state,server.type=unix,server.path={d}/nbd.sock,export=state,reconnect-delay=5',
@@ -122,7 +127,7 @@ def fs_offline(tag):
          'errors_behavior': next((l.split(':')[1].strip() for l in h.splitlines() if l.startswith('Errors behavior')), None),
          'e2fsck_n_exit': f.returncode, 'e2fsck_n_tail': (f.stdout + f.stderr).strip().splitlines()[-6:]}
     r['used_pct'] = round(100 * (r['block_count'] - r['free_blocks']) / r['block_count'], 2)
-    (raw / f'R11-r11-field8-fs-{tag}.txt').write_text(h + '\n--- e2fsck -fn ---\n' + f.stdout + f.stderr)
+    (raw / f'R11-r11-{TAG}-fs-{tag}.txt').write_text(h + '\n--- e2fsck -fn ---\n' + f.stdout + f.stderr)
     say(f'offline fs {tag}:', json.dumps({k: v for k, v in r.items() if k != 'e2fsck_n_tail'}))
     return r
 
@@ -160,7 +165,7 @@ def ping_start(tag, seconds):
 def ping_collect(tag, started):
     guest('client', 'pkill fping; sleep 1')
     t = guest('client', f'cat /tmp/R11-{tag}-fwd.txt').stdout
-    (raw / f'R11-r11-field8-{tag}-fwd.txt').write_text(t)
+    (raw / f'R11-r11-{TAG}-{tag}-fwd.txt').write_text(t)
     ok = sum(1 for l in t.splitlines() if 'bytes' in l and l.startswith('['))
     expected = int((time.time() - started) / .2)
     r = {'replies': ok, 'expected_about': expected}
@@ -184,7 +189,7 @@ def watch_services(seconds, tag):
     rows = []; t0 = time.monotonic()
     while time.monotonic() - t0 < seconds:
         rows.append({'t': round(time.monotonic() - t0, 1), 'services': services()}); time.sleep(10)
-    (raw / f'R11-r11-field8-{tag}-services.json').write_text(json.dumps(rows, indent=1) + '\n')
+    (raw / f'R11-r11-{TAG}-{tag}-services.json').write_text(json.dumps(rows, indent=1) + '\n')
     return rows
 
 
@@ -202,6 +207,19 @@ def scene(name, body):
     r = subprocess.run(['bash', '/work/field/capture.sh', name, str(path)], env=dict(os.environ, DEFER_RENDER='1'), capture_output=True, text=True)
     say('scene', name, 'exit', r.returncode)
 
+
+SCENE_FULL = '''show "KUBECONFIG=/work/trust/admin.kubeconfig kubectl --server https://127.0.0.1:5021 get osconfigs -o jsonpath='{.items[0].status.stateStorage}'; echo"
+show "KUBECONFIG=/work/trust/admin.kubeconfig kubectl --server https://127.0.0.1:5021 get nodeservices"
+show "KUBECONFIG=/work/trust/admin.kubeconfig kubectl --server https://127.0.0.1:5021 get --raw /apis/node.kuberoot.dev/v1alpha1/nodeservices/kuberoot-router/log | tail -4 | cut -c1-200"
+show "timeout 20 kubectl get routes"
+show "/work/field/guest-command client 'ping -c 10 -i 0.2 -W 1 198.19.0.1 | tail -2'"
+'''
+
+SCENE_EIO = '''show "KUBECONFIG=/work/trust/admin.kubeconfig kubectl --server https://127.0.0.1:5021 get osconfigs -o jsonpath='{.items[0].status.stateStorage}'; echo"
+show "KUBECONFIG=/work/trust/admin.kubeconfig kubectl --server https://127.0.0.1:5021 get nodeservices"
+show "timeout 20 kubectl apply -f /work/field/R11-route-sample.json"
+show "/work/field/guest-command client 'ping -c 10 -i 0.2 -W 1 198.19.0.1 | tail -2'"
+'''
 
 SCENE = '''show "kubectl apply -f /work/field/R11-route-sample.json"
 show "kubectl get route field-r11 -o jsonpath='{.spec.metric}'; echo"
@@ -255,8 +273,8 @@ def write_root():
     first = int(next(l.split(':')[1].split()[0] for l in lay.splitlines() if l.startswith('First sector')))
     name = next(l.split(':', 1)[1].strip() for l in lay.splitlines() if l.startswith('Partition name'))
     assert name == "'kuberoot-root-a'", name
-    subprocess.run(f'dd if=/work/field7/out/amd64/rootfs.squashfs of={d}/sys.raw bs=1M seek={first * 512 // 1048576} conv=notrunc status=none', shell=True, check=True)
-    say('root-a of r11 now holds', open('/work/field7/out/amd64/VERSION').read().strip())
+    subprocess.run(f'dd if={BUILD}/amd64/rootfs.squashfs of={d}/sys.raw bs=1M seek={first * 512 // 1048576} conv=notrunc status=none', shell=True, check=True)
+    say('root-a of r11 now holds', open(f'{BUILD}/amd64/VERSION').read().strip())
 
 
 def fresh_state():
@@ -323,4 +341,142 @@ if phase == 'full9':
     stop_vm(); debugfs('rm /field-100.fill')
     out['fs_full9_after_recovery'] = fs_offline('full9-after-recovery'); boot('full9-recovered')
     out['verify_full9_after_recovery'] = verify('after recovery'); save()
+def blockstats():
+    """Bytes, operations and flushes written per disk of r11 (system disk and the NBD state disk)."""
+    q = json.loads(subprocess.check_output(['python3', '/work/field/qmp.py', 'r11', 'query-blockstats']))
+    return {(b.get('qdev') or b.get('device') or b.get('node-name')): {k: b['stats'][k] for k in ('wr_bytes', 'wr_operations', 'flush_operations')}
+            for b in q if b.get('qdev') or b.get('device')}
+
+
+def delta(a, b, seconds):
+    r = {dev: {k: b[dev][k] - a[dev][k] for k in a[dev]} for dev in a if dev in b}
+    total = sum(v['wr_bytes'] for v in r.values())
+    return {'seconds': round(seconds, 1), 'per_disk': r, 'wr_bytes': total, 'mb_per_hour': round(total * 3600 / seconds / 1e6, 1),
+            'gb_per_day': round(total * 86400 / seconds / 1e9, 2)}
+
+
+def storage():
+    p = kubectl(['get', 'osconfigs', '-o', 'jsonpath={.items[0].status.stateStorage}'], node=True)
+    try:
+        return json.loads(p.stdout) if p.returncode == 0 and p.stdout else {'missing': (p.stdout + p.stderr)[-200:]}
+    except ValueError:
+        return {'unparsed': p.stdout[-200:]}
+
+
+def stop_others():
+    """r2 has r11's transit address and OpenWrt the G addresses: both stop while r11 runs."""
+    for vm in ('r2', 'openwrt'):
+        f = Path(f'/work/vms/{vm}/pid')
+        proc = Path('/proc/' + f.read_text().strip()) if f.exists() else None
+        if proc and proc.exists():
+            say(f'$ qmp {vm} system_powerdown  # same addresses as r11')
+            subprocess.run(['python3', '/work/field/qmp.py', vm, 'system_powerdown'], capture_output=True)
+            for _ in range(180):
+                if not proc.exists():
+                    break
+                time.sleep(1)
+            else:
+                raise SystemExit(f'{vm} did not power down')
+            out.setdefault('stopped', []).append(vm)
+
+
+def first_reply_after(text, t0):
+    for l in text.splitlines():
+        if l.startswith('[') and 'bytes' in l:
+            return round(float(l[1:l.index(']')]) - t0, 1)
+
+
+if phase == 'start':
+    stop_others()
+    if (d / 'pid').exists():
+        stop_vm()
+    if (d / 'qsd.pid').exists():
+        qsd_kill()
+    write_root(); fresh_state()
+    boot(TAG)
+    out['version'] = kubectl(['get', 'osconfigs', '-o', 'jsonpath={.items[0].status.version}'], node=True).stdout
+    out['ping_ok'] = guest('client', 'ping -c 3 -W 1 198.19.0.1').returncode == 0
+    out['state_storage'] = storage()
+    say(TAG, 'up:', json.dumps({k: out.get(k) for k in (f'api_ready_{TAG}_s', 'version', 'ping_ok', 'state_storage')}))
+    save()
+
+if phase == 'idle':
+    seconds = int(sys.argv[2]); rows = []; t0 = time.monotonic(); b0 = blockstats(); rows.append({'t': 0, 'disks': b0})
+    while time.monotonic() - t0 < seconds:
+        time.sleep(min(60, max(1, seconds - (time.monotonic() - t0))))
+        rows.append({'t': round(time.monotonic() - t0, 1), 'disks': blockstats()})
+    (raw / f'R11-r11-{TAG}-idle.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    out['idle'] = delta(b0, rows[-1]['disks'], rows[-1]['t']); out['idle']['version'] = open(f'{BUILD}/amd64/VERSION').read().strip()
+    say('idle:', json.dumps(out['idle'])); save()
+
+if phase == 'rate':
+    seconds = int(sys.argv[2]); kubectl(['apply', '-f', '-'], route(100), quiet=False); time.sleep(5)
+    lat = []; errs = 0; n = 0; b0 = blockstats(); t0 = time.monotonic()
+    while time.monotonic() - t0 < seconds:
+        n += 1; t = time.monotonic(); p = kubectl(['apply', '-f', '-'], route(100 + n % 1000))
+        lat.append(time.monotonic() - t); errs += p.returncode != 0
+        time.sleep(max(0, t0 + n / 10 - time.monotonic()))
+    el = time.monotonic() - t0; b1 = blockstats(); lat.sort()
+    r = delta(b0, b1, el)
+    r.update(offered_per_s=10, updates=n, errors=errs, achieved_per_s=round(n / el, 2), p50_s=round(lat[len(lat) // 2], 3),
+             p99_s=round(lat[int(len(lat) * .99) - 1], 3), bytes_per_change=round(r['wr_bytes'] / max(1, n - errs)))
+    out['rate'] = r; say('rate:', json.dumps(r)); save()
+
+if phase == 'fullboot':
+    # The state filesystem is filled offline to the last block, with the space
+    # reserve (variant keep) or without it (variant none: as if it were spent).
+    variant = sys.argv[2]; key = f'fullboot_{variant}'; res = out[key] = {}
+    stop_vm()
+    if variant == 'none':
+        res['reserve_removed'] = (debugfs('rm /lib/kuberoot/space-reserve').stderr or '').strip()[-200:]
+    res['prefill'] = prefill(f'100-{variant}', 0); save()
+    guest('client', 'pkill fping; true')
+    vm_start(); t0 = time.time()
+    guest('client', f'rm -f /tmp/R11-boot-{variant}.txt; nohup timeout 330 fping -D -l -p 200 198.19.0.1 >/tmp/R11-boot-{variant}.txt 2>&1 </dev/null &')
+    res['api_ready_s'] = wait_api(240); time.sleep(10)
+    res['services'] = services(); res['state_storage'] = storage()
+    res['updates'] = updates(60, 1, f'updates on a full state ({variant})')
+    left = 330 - (time.time() - t0)
+    if left > 0:
+        time.sleep(left)
+    guest('client', 'pkill fping; sleep 1')
+    t = guest('client', f'cat /tmp/R11-boot-{variant}.txt').stdout; (raw / f'R11-r11-{TAG}-boot-{variant}-fwd.txt').write_text(t)
+    res['fwd'] = {'replies': sum(1 for l in t.splitlines() if 'bytes' in l and l.startswith('[')), 'expected_about': 330 * 5,
+                  'first_reply_after_start_s': first_reply_after(t, t0)}
+    res['logs'] = {s: log_tail(s) for s in ('kine', 'kube-apiserver', 'kuberoot-router')}
+    res['routes'] = kubectl(['get', 'routes', '-o', 'name']).stdout.split()
+    say(key, json.dumps({k: v for k, v in res.items() if k not in ('logs', 'prefill')})[:1500])
+    scene(f't-R11-kuberoot-full-{variant}-{TAG}', SCENE_FULL); save()
+    stop_vm(); debugfs(f'rm /field-100-{variant}.fill')
+    res['fs_after_recovery'] = fs_offline(f'after-recovery-{variant}'); boot(f'recovered_{variant}')
+    res['verify_after_recovery'] = verify('after recovery'); res['state_storage_after_recovery'] = storage(); save()
+
+if phase == 'eio':
+    res = out['eio'] = {}
+    res['updates_before'] = updates(30, 1, 'updates before the fault'); res['storage_before'] = storage()
+    st = ping_start('eio', 600)
+    say('$ kill -9 qemu-storage-daemon  # every state I/O now fails with EIO (werror/rerror=report)')
+    qsd_kill(); t_fault = time.time(); seen = []
+
+    def watch():
+        t = time.monotonic()
+        while time.monotonic() - t < 300:
+            seen.append({'t': round(time.time() - t_fault, 1), 'services': services(), 'state_storage': storage()}); time.sleep(10)
+    th = threading.Thread(target=watch); th.start()
+    res['updates_eio'] = updates(300, 1, 'updates during EIO'); th.join()
+    (raw / f'R11-r11-{TAG}-eio-watch.json').write_text(json.dumps(seen, indent=1) + '\n')
+    flagged = [r['t'] for r in seen if r['state_storage'].get('state') not in (None, 'Healthy')]
+    res['storage_flagged_after_s'] = flagged[0] if flagged else None; res['storage_during'] = seen[-1]['state_storage'] if seen else None
+    res['logs_eio'] = {s: log_tail(s) for s in ('kine', 'kube-apiserver', 'kuberoot-router')}
+    scene(f't-R11-kuberoot-eio-{TAG}', SCENE_EIO)
+    say('$ qemu-storage-daemon again  # storage back'); qsd_start(); res['fault_seconds'] = round(time.time() - t_fault, 1)
+    time.sleep(20); res['updates_after_restore'] = updates(60, 1, 'updates after storage returned (no reboot)')
+    res['storage_after_restore'] = storage(); res['fwd_eio'] = ping_collect('eio', st); save()
+    say('$ qmp r11 system_reset'); subprocess.run(['python3', '/work/field/qmp.py', 'r11', 'system_reset'], check=True, capture_output=True)
+    time.sleep(5); res['api_ready_after_reboot_s'] = wait_api(); time.sleep(20)
+    res['verify_after_reboot'] = verify('after reboot'); res['storage_after_reboot'] = storage()
+    res['updates_after_reboot'] = updates(20, 1, 'updates after reboot')
+    res['ping_ok_after_reboot'] = guest('client', 'ping -c 3 -W 1 198.19.0.1').returncode == 0
+    save()
+
 say('done', phase)
