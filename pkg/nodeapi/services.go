@@ -3,6 +3,7 @@ package nodeapi
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -216,8 +217,37 @@ func (s *logStream) DeepCopyObject() runtime.Object   { return &logStream{path: 
 
 func (s *logStream) InputStream(context.Context, string, string) (io.ReadCloser, bool, string, error) {
 	f, err := os.Open(s.path)
-	return f, false, "text/plain", err
+	if err != nil {
+		return nil, false, "", err
+	}
+	return &explicitReader{f: f}, false, "text/plain", nil
 }
+
+// explicitReader ends a log that cannot be read to the end with the error,
+// instead of passing it off as a shorter log: on a failing state disk the
+// log stops where the disk does.
+type explicitReader struct {
+	f    *os.File
+	tail []byte
+}
+
+func (r *explicitReader) Read(p []byte) (int, error) {
+	if r.tail != nil {
+		n := copy(p, r.tail)
+		if r.tail = r.tail[n:]; len(r.tail) == 0 {
+			return n, io.EOF
+		}
+		return n, nil
+	}
+	n, err := r.f.Read(p)
+	if err != nil && err != io.EOF {
+		r.tail = []byte(fmt.Sprintf("\n[kuberoot-node] the log cannot be read further: %v\n", err))
+		return n, nil
+	}
+	return n, err
+}
+
+func (r *explicitReader) Close() error { return r.f.Close() }
 
 func nodeUID() types.UID {
 	raw, _ := os.ReadFile("/etc/machine-id")

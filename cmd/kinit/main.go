@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 )
 
 const rootImage = "/rootfs.squashfs"
@@ -50,6 +52,9 @@ func boot() error {
 	_ = unix.Uname(&uts)
 	log.Printf("kuberoot booting, kernel %s, uptime %s", unix.ByteSliceToString(uts.Release[:]), uptime())
 
+	// Before anything writes to the state partition: certificates and the
+	// cluster store need room to start.
+	keepSpaceReserve(spaceReserveFile, supervisor.SpaceReserveReleased)
 	if err := setupZRAM(); err != nil {
 		log.Printf("zram swap: %v", err)
 	}

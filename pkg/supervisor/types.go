@@ -14,6 +14,11 @@ import (
 // Socket is where kinit listens; only root on the node can reach it.
 const Socket = "/run/kuberoot/kinit.sock"
 
+// SpaceReserveReleased is where kinit notes that it freed the state
+// partition's space reserve at this boot; it lives on /run, not on the
+// partition.
+const SpaceReserveReleased = "/run/kuberoot/space-reserve-released"
+
 // ServiceStatus is the observed state of one supervised service.
 type ServiceStatus struct {
 	Name             string    `json:"name"`

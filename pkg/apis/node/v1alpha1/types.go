@@ -38,6 +38,30 @@ type OSConfigStatus struct {
 	// GPUs the node's NVIDIA driver drives.
 	// +listType=atomic
 	GPUs []NodeGPU `json:"gpus,omitempty"`
+	// StateStorage is the health of the state partition, mounted on /var:
+	// the cluster store, the services' logs and the node's own state. It is
+	// unset on a node without one, such as one running from live media.
+	StateStorage *StateStorage `json:"stateStorage,omitempty"`
+}
+
+// StateStorage is what the node sees of its state partition, observed
+// without writing to it.
+type StateStorage struct {
+	// State is Healthy; Full when less than 1 % of it is free; ReadOnly when
+	// the kernel remounted it read-only after a filesystem error; Failing
+	// when reading the device fails or does not finish.
+	State string `json:"state"`
+	// Message says why the state is not Healthy.
+	Message string `json:"message,omitempty"`
+	// Device is the block device of the partition.
+	Device         string `json:"device,omitempty"`
+	TotalBytes     int64  `json:"totalBytes,omitempty"`
+	AvailableBytes int64  `json:"availableBytes,omitempty"`
+	// Errors is how many errors the filesystem recorded since it was made.
+	Errors int64 `json:"errors,omitempty"`
+	// ReserveReleased: at this boot the partition was full, and the space
+	// kept in reserve for the node was freed so its services could start.
+	ReserveReleased bool `json:"reserveReleased,omitempty"`
 }
 
 // NodeGPU is a GPU of the node.
