@@ -280,7 +280,7 @@ protocol bgp obs { local 192.168.10.1 as 65000; neighbor 192.168.10.2 as 65003; 
     dut('/etc/init.d/bird stop; uci delete firewall.fieldbgp; uci delete network.wan20; uci commit; /etc/init.d/network reload; fw4 reload', quiet=True)
 
 if row == 'r9':
-    tif = os.environ.get('OPENWRT_TRANSIT_DEV', 'eth3')
+    tif = os.environ.get('OPENWRT_TRANSIT_DEV') or dut("grep -l 52:54:00:30:00:04 /sys/class/net/*/address | cut -d/ -f5", quiet=True).stdout.strip() or 'eth3'
     dut(f'uci set network.transit=interface; uci set network.transit.device={tif}; uci set network.transit.proto=static; uci set network.transit.ipaddr=10.255.0.9; '
         'uci set network.transit.netmask=255.255.255.0; uci add_list firewall.@zone[1].network=transit; uci set firewall.fieldbgp=rule; uci set firewall.fieldbgp.name=fieldbgp; '
         'uci set firewall.fieldbgp.src=wan; uci set firewall.fieldbgp.proto="tcp udp"; uci set firewall.fieldbgp.dest_port="179 3784 3785"; uci set firewall.fieldbgp.target=ACCEPT; '

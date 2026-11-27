@@ -662,10 +662,10 @@ CONF
                 fib, fib6 = None, None
             rows.append({'elapsed_s': time.monotonic() - t0, 'fib4': fib, 'fib6': fib6, 'text': q.stdout})
             say(f'{time.monotonic() - t0:.0f}s fib4={fib} fib6={fib6} {" ".join(v[2:4])}')
-            if fib == count and (fib6 or 0) >= ipv6:
+            if fib is not None and fib >= count and (fib6 or 0) >= ipv6:  # the kernel table also holds a few non-BGP routes bird exports
                 break
             time.sleep(5)
-        ok = fib == count and (rows[-1]['fib6'] or 0) >= ipv6
+        ok = fib is not None and fib >= count and (rows[-1]["fib6"] or 0) >= ipv6
         addrs = [str(ipaddress.IPv4Address(int(ipaddress.IPv4Address('10.64.0.0')) + i * max(1, count // 1000))) for i in range(1000)]
         for side in (1, 2):
             pre = '' if side == 1 else 'ip netns exec upstream2 '
