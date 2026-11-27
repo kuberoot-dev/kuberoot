@@ -93,6 +93,15 @@ func (c *Controller) Run(ctx context.Context) error {
 	c.trial.Load(c.confirmedFile())
 	// What the node ran before this process: the confirmed configuration.
 	c.interfaces = c.trial.Confirmed.Interfaces
+	// The node runs it again before the API answers: the API may be slow to
+	// start, or not start at all, its store on a full or failing disk, and
+	// the network must not wait for it. Once the resources are listed, the
+	// passes below take over from there.
+	if c.trial.ConfirmedRev != "" {
+		failed := map[Ref]error{}
+		c.apply(c.trial.Confirmed, failed)
+		klog.Infof("running the confirmed configuration %s before the API answers; %d failures: %v", c.trial.ConfirmedRev, len(failed), failed)
+	}
 	factory := dynamicinformer.NewDynamicSharedInformerFactory(c.Client, 10*time.Minute)
 	c.poke = make(chan struct{}, 1)
 	poke := c.poke
@@ -244,6 +253,21 @@ func (c *Controller) reconcile(ctx context.Context) {
 			}
 		}
 	}
+	c.apply(ok, failed)
+	sessions := c.sessions(ctx)
+	leases := c.leases()
+	c.reportAll(all, func(l listed) {
+		err := failed[Ref{l.ref.Kind, "*"}]
+		if err == nil {
+			err = failed[l.ref]
+		}
+		c.report(ctx, l, problems[l.ref], err, ok, sessions, leases)
+	})
+}
+
+// apply makes the node run a configuration and records in failed what it
+// could not apply, by resource or, for a whole kind, under the name "*".
+func (c *Controller) apply(ok Config, failed map[Ref]error) {
 	// The ruleset goes in before addresses and routes: they are what makes
 	// a path forwardable, and no packet may cross before it is filtered.
 	if err := c.applyRuleset(Ruleset(ok)); err != nil {
@@ -289,15 +313,6 @@ func (c *Controller) reconcile(ctx context.Context) {
 		failed[Ref{"BGPRouter", "*"}] = birdErr
 		failed[Ref{"BGPPeer", "*"}] = birdErr
 	}
-	sessions := c.sessions(ctx)
-	leases := c.leases()
-	c.reportAll(all, func(l listed) {
-		err := failed[Ref{l.ref.Kind, "*"}]
-		if err == nil {
-			err = failed[l.ref]
-		}
-		c.report(ctx, l, problems[l.ref], err, ok, sessions, leases)
-	})
 }
 
 // reportAll writes the status of every resource, unless a spec changes on
