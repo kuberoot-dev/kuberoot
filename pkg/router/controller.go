@@ -83,6 +83,13 @@ func (c *Controller) Run(ctx context.Context) error {
 	defer c.dnsmasq.Stop()
 	defer c.bird.Stop()
 
+	// Before anything forwards: NAT for a busy network outgrows the
+	// kernel's default table long before memory runs short.
+	if n, err := SizeConntrack("/proc", "/sys"); err != nil {
+		klog.Errorf("size the connection tracking table: %v", err)
+	} else {
+		klog.Infof("connection tracking table: %d entries", n)
+	}
 	c.trial.Load(c.confirmedFile())
 	// What the node ran before this process: the confirmed configuration.
 	c.interfaces = c.trial.Confirmed.Interfaces
