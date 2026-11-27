@@ -222,6 +222,7 @@ func (c *Controller) reconcile(ctx context.Context) {
 		return
 	}
 	candidate, problems := Check(cfg)
+	candidate = bare(candidate)
 	var guard *v1.Safeguard
 	for i := range cfg.Safeguards {
 		if cfg.Safeguards[i].Name == "default" {

@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -308,5 +309,23 @@ func TestCheckReportsManagementPortConflicts(t *testing.T) {
 				t.Fatalf("unrelated port forward rejected: NAT=%v problems=%v", ok.NAT, problems)
 			}
 		})
+	}
+}
+
+func TestBareKeepsWhatTheNodeRuns(t *testing.T) {
+	c := gateway()
+	for i := range c.Routes {
+		c.Routes[i].Annotations = map[string]string{"kubectl.kubernetes.io/last-applied-configuration": strings.Repeat("x", 4096)}
+		c.Routes[i].ManagedFields = []metav1.ManagedFieldsEntry{{Manager: "kubectl"}}
+		c.Routes[i].ResourceVersion = "42"
+	}
+	ok, _ := Check(c)
+	b := bare(ok)
+	if Revision(b) != Revision(ok) || Ruleset(b) != Ruleset(ok) {
+		t.Fatal("stripping metadata changed what the node runs")
+	}
+	raw, _ := json.Marshal(b)
+	if strings.Contains(string(raw), "last-applied") || strings.Contains(string(raw), "managedFields") || strings.Contains(string(raw), `"42"`) {
+		t.Errorf("the kept configuration carries metadata: %s", raw)
 	}
 }
