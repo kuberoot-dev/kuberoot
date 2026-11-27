@@ -83,14 +83,14 @@ out['A-10-per-s'] = r; say('A', json.dumps(r))
 
 # B: IOPS throttles while forwarding is observed
 for iops in (50, 10):
-    subprocess.run(['/work/field/guest-command', 'gateway', 'pkill fping; rm -f /root/R11-fwd.txt; nohup timeout 320 fping -D -l -p 200 192.168.20.113 >/root/R11-fwd.txt 2>&1 </dev/null &'])
+    subprocess.run(['/work/field/guest-command', 'gateway', 'pkill -x ping; rm -f /root/R11-fwd.txt; nohup ping -D -i 0.2 -W 1 -w 320 192.168.20.113 >/root/R11-fwd.txt 2>&1 </dev/null &'])
     throttle(iops); say(f'== B: {iops} IOPS for 300s, 1 update/s')
     r = update_loop(300, 1, f'B{iops}')
     throttle(0); time.sleep(25)
     fwd = subprocess.run(['/work/field/guest-command', 'gateway', 'cat /root/R11-fwd.txt'], capture_output=True, text=True).stdout
     (raw / f'R11-kuberoot-iops{iops}-fwd.txt').write_text(fwd)
     st = kubectl(['get', 'route', 'field-r11', '-o', 'jsonpath={.status.conditions[0].reason} {.status.observedGeneration} {.metadata.generation}'])
-    r.update(fwd_replies=fwd.count(' bytes, '), fwd_timeouts=fwd.count('timed out') + fwd.count('unreachable'), status_after=st.stdout)
+    r.update(fwd_replies=fwd.count(' bytes from '), fwd_sent_summary=[l for l in fwd.splitlines() if 'transmitted' in l], status_after=st.stdout)
     out[f'B-iops-{iops}'] = r; say(f'B{iops}', json.dumps(r))
     (raw / 'R11-kuberoot.summary.json').write_text(json.dumps(out, indent=2) + '\n')
 

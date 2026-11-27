@@ -135,7 +135,7 @@ def start_probes(tag, seconds=7200):
     code = base64.b64encode(Path(TCP_PROBES).read_bytes()).decode()
     guest('client', f'echo {code} | base64 -d >/root/tcp-port-probes.py', quiet=True)
     guest('client', f'nohup python3 /root/tcp-port-probes.py --target 198.19.0.1 --forbidden 2399 --markers 2200-2215 '
-                    f'--seconds {seconds} --output /root/{tag}.jsonl >/root/{tag}.log 2>&1 </dev/null &')
+                    f'--seconds {seconds} --refused-is-dropped --output /root/{tag}.jsonl >/root/{tag}.log 2>&1 </dev/null &')
 
 
 def stop_probes(tag):
@@ -150,7 +150,7 @@ def stop_probes(tag):
 
 
 CHECK = ("python3 -c 'import socket\ns=socket.socket();s.settimeout(0.4)\n"
-         "try:\n s.connect((\"198.19.0.1\",%d));print(1)\nexcept ConnectionRefusedError:print(1)\nexcept Exception:print(0)'")
+         "try:\n s.connect((\"198.19.0.1\",%d));print(1)\nexcept Exception:print(0)'")
 
 
 def passes(port):
@@ -337,7 +337,9 @@ def r6_apply(n, marker):
         # Native atomic replace: load a full config whose firewall section is the new set
         # (merge refuses uncommitted changes, and delete+commit+merge would open a window).
         cur = sh('cat /config/config.boot', quiet=True).stdout
-        put_dut('/tmp/r6.boot', strip_block(cur, 'firewall') + text)
+        base = strip_block(cur, 'firewall'); cut = base.find('\n//')
+        cut = len(base) if cut < 0 else cut + 1  # the version footer must stay last
+        put_dut('/tmp/r6.boot', base[:cut] + text + base[cut:])
         return cfg(['load /tmp/r6.boot'], show=f'load /tmp/r6.boot (running config with {n} forward rules)')
     put_dut('/tmp/r6.sh', text)
     return cfg(['sh /tmp/r6.sh', 'uci commit firewall', 'fw4 reload'], show=f'sh /tmp/r6.sh ({n} uci rules); uci commit firewall; fw4 reload')
@@ -362,16 +364,22 @@ def r6_desc(n):
 
 def r6_invalid(n):
     if product == 'vyos':
-        return cfg(['set firewall ipv4 forward filter rule 9 action accept', 'set firewall ipv4 forward filter rule 9 protocol tcp',
+        return cfg(['set firewall ipv4 forward filter rule 9 action drop', 'set firewall ipv4 forward filter rule 9 protocol tcp',
                     'set firewall ipv4 forward filter rule 9 destination port 2399-99999'])
     return cfg(['uci add firewall rule >/dev/null', "uci set firewall.@rule[-1].name='r6-invalid'", "uci set firewall.@rule[-1].src='lan'",
                 "uci set firewall.@rule[-1].dest='wan'", "uci set firewall.@rule[-1].proto='tcp'", "uci set firewall.@rule[-1].dest_port='2399-99999'",
-                "uci set firewall.@rule[-1].target='ACCEPT'", 'uci commit firewall', 'fw4 reload; echo reload_exit=$?', 'uci delete firewall.@rule[-1]', 'uci commit firewall'])
+                # DROP, not ACCEPT: a partially accepted invalid rule must not open the forbidden port and
+                # contaminate the leak count (it did on VyOS); the config-state check is unchanged.
+                "uci set firewall.@rule[-1].target='DROP'", 'uci commit firewall', 'fw4 reload; echo reload_exit=$?', 'fw4 print | grep -c r6-invalid',
+                'uci delete firewall.@rule[-1]', 'uci commit firewall', 'fw4 reload'])
 
 
 def row_r6():
     sizes = [int(x) for x in args] or [100, 1000, 10000, 20000]
-    guest('sink', 'ss -ltn | head -5')
+    # The sink accepts on every probed port, so a forwarded SYN is answered by SYN-ACK and an RST can
+    # only come from the DUT rejecting it (OpenWrt rejects, VyOS and kuberoot drop).
+    put('sink', '/root/field-listen.py', 'import socket,threading,time\nfor p in list(range(2200,2216))+[2399]:\n    s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);s.bind(("0.0.0.0",p));s.listen(512)\n    threading.Thread(target=lambda s=s:[c.close() for c,_ in iter(s.accept,None)],daemon=True).start()\nwhile True:time.sleep(60)\n')
+    guest('sink', "systemctl is-active -q field-listen || systemd-run -q --unit field-listen python3 /root/field-listen.py; sleep 1; ss -ltn | grep -c ':2[23][0-9][0-9] '")
     tag = f'R6-{product}-probes'
     p, _ = r6_apply(2, 2200)
     if wait_marker(2200, True, 60) is None or passes(2201):
@@ -487,7 +495,14 @@ def row_r4():
 def row_r5():
     for vm in ['client', 'sink']:
         code = base64.b64encode(Path('/work/field/tcp-flows.py').read_bytes()).decode(); guest(vm, f'echo {code} | base64 -d >/tmp/tcp-flows.py', quiet=True)
-    guest('sink', 'pkill -f "[t]cp-flows.py server"; nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null &')
+    guest('sink', 'pkill -f "[t]cp-flows.py server"; sleep 3; true')  # separate session: the pattern must not match this shell
+    for _ in range(3):
+        guest('sink', 'nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null & sleep 3')
+        if guest('sink', 'ss -ltn | grep -c ":91[0-3][0-9] "').stdout.strip() == '32':
+            break
+        time.sleep(3)
+    else:
+        raise SystemExit('flow sink did not listen on 32 ports; no measurement')
     sh('cat /proc/sys/net/netfilter/nf_conntrack_max; grep -E "MemTotal|MemAvailable" /proc/meminfo')
     summary = {}
     for count, rate in [(1000, 1000), (10000, 1000), (100000, 10000)]:

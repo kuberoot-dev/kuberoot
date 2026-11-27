@@ -26,6 +26,13 @@ def guest(vm, cmd, timeout=90):
 def put(vm, path, data):
     subprocess.run(['/work/field/guest-command', vm, 'cat >' + path], input=data, text=True, check=True)
 
+def vcfg(lines):
+    script = 'source /opt/vyatta/etc/functions/script-template\nconfigure\n' + '\n'.join(lines) + '\ncommit\nexit\n'
+    print(time.strftime('%FT%TZ', time.gmtime()), '$ vyos-command vbash -s  # configure;', '; '.join(lines), '; commit', flush=True)
+    p = subprocess.run(['/work/field/vyos-command', 'vbash', '-s'], input=script, capture_output=True, text=True, timeout=300)
+    print((p.stdout + p.stderr)[-800:], flush=True)
+    return p
+
 def vtysh(script):
     # script: list of vtysh -c arguments
     args = ' '.join(f"-c '{c}'" for c in script)
@@ -35,14 +42,16 @@ while not (raw / 'vyos-fabric-setup.exit').exists():
     time.sleep(3)
 guest('client', 'ip route replace 10.64.0.0/12 via 192.168.10.1')
 # second upstream VLAN on the WAN interface, native CLI
-dut("configure; set interfaces ethernet eth1 vif 20 address 198.18.20.1/24; commit; exit")
-dut("ip -6 addr add fd42:1::1/64 dev eth1 2>/dev/null; ip -6 addr add fd42:2::1/64 dev eth1.20 2>/dev/null; true")
+vcfg(['set interfaces ethernet eth1 vif 20 address 198.18.20.1/24', 'set interfaces ethernet eth1 address fd42:1::1/64', 'set interfaces ethernet eth1 vif 20 address fd42:2::1/64'])
+dut("ip -br addr show eth1.20; ip -6 -br addr show eth1")
 guest('gateway', 'systemctl stop bird; ip netns add upstream2 2>/dev/null; ip link add link test0 name upstream2 type vlan id 20 2>/dev/null; ip link set upstream2 netns upstream2 2>/dev/null; ip netns exec upstream2 ip link set lo up; ip netns exec upstream2 ip addr add 198.18.20.2/24 dev upstream2 2>/dev/null; ip netns exec upstream2 ip link set upstream2 up; ip netns exec upstream2 ip route add default via 198.18.20.1 2>/dev/null; ip -6 addr add fd42:1::2/64 dev test0 2>/dev/null; ip netns exec upstream2 ip -6 addr add fd42:2::2/64 dev upstream2 2>/dev/null; mkdir -p /run/field-bird')
 # enable bgpd via native CLI, then peers via vtysh (same FRR as the debian leg)
-dut("configure; set protocols bgp system-as 65000; set protocols bgp router-id 198.18.0.1; commit; exit")
+vcfg(['set protocols bgp system-as 65000', 'set protocols bgp parameters router-id 198.18.0.1'])
 vtysh(['configure terminal', 'router bgp 65000', 'no bgp ebgp-requires-policy', 'no bgp network import-check',
        'neighbor 198.18.0.2 remote-as 65001', 'neighbor 198.18.0.2 timers 3 9',
        'neighbor 198.18.20.2 remote-as 65002', 'neighbor 198.18.20.2 timers 3 9',
+       'neighbor fd42:1::2 remote-as 65001', 'neighbor fd42:1::2 timers 3 9', 'neighbor fd42:2::2 remote-as 65002', 'neighbor fd42:2::2 timers 3 9',
+       'address-family ipv6 unicast', 'neighbor fd42:1::2 activate', 'neighbor fd42:2::2 activate', 'exit-address-family',
        'address-family ipv4 unicast', 'neighbor 198.18.0.2 activate', 'neighbor 198.18.20.2 activate',
        'exit-address-family'])
 
@@ -58,7 +67,7 @@ for count in [int(x) for x in os.environ.get('FIELD_PREFIX_COUNTS', '10000,10000
     start = time.monotonic(); rows = []
     while time.monotonic() - start < 300:
         t = time.monotonic()
-        p = dut("vtysh -c 'show bgp ipv4 unicast summary json'; ip -4 route show proto bgp | wc -l; head -3 /proc/meminfo", 30)
+        p = dut("vtysh -c 'show bgp ipv4 unicast summary json'; ip -6 route show proto bgp | wc -l; ip -4 route show proto bgp | wc -l; head -3 /proc/meminfo", 60)
         rows.append({'elapsed_s': time.monotonic() - start, 'observer_ssh_s': time.monotonic() - t, 'exit': p.returncode, 'text': p.stdout, 'stderr': p.stderr})
         lines = p.stdout.strip().splitlines()
         fib = int(lines[-4]) if len(lines) >= 4 and lines[-4].isdigit() else None

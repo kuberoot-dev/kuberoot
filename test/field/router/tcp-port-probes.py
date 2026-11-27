@@ -13,6 +13,7 @@ p.add_argument('--rate', type=int, default=100)
 p.add_argument('--seconds', type=float, required=True)
 p.add_argument('--output', required=True)
 p.add_argument('--timeout', type=float, default=0.4)
+p.add_argument('--refused-is-dropped', action='store_true', help='target listens on every probed port: RST comes from the DUT rejecting')
 a = p.parse_args()
 first, last = (int(x) for x in a.markers.split('-'))
 markers = list(range(first, last + 1))
@@ -27,7 +28,7 @@ def probe(port, kind, sent):
         s.connect((a.target, port))
         result = 'answered'
     except ConnectionRefusedError:
-        result = 'answered'
+        result = 'refused' if a.refused_is_dropped else 'answered'
     except (socket.timeout, TimeoutError):
         result = 'dropped'
     except OSError as e:

@@ -88,8 +88,21 @@ def restart(argv):
     raise SystemExit('r2 restart failed')
 
 
-G = ['-netdev', 'socket,id=glan,mcast=230.31.0.31:13031,localaddr=127.0.0.1', '-device', 'virtio-net-pci,romfile=,netdev=glan,mac=52:54:00:30:00:12',
-     '-netdev', 'socket,id=gwan,mcast=230.31.0.32:13032,localaddr=127.0.0.1', '-device', 'virtio-net-pci,romfile=,netdev=gwan,mac=52:54:00:30:00:11']
+G = ['-netdev', 'socket,id=glan,mcast=230.31.0.31:13031,localaddr=127.0.0.1', '-device', 'virtio-net-pci,romfile=,netdev=glan,mac=52:54:00:30:00:12,addr=0x6',
+     '-netdev', 'socket,id=gwan,mcast=230.31.0.32:13032,localaddr=127.0.0.1', '-device', 'virtio-net-pci,romfile=,netdev=gwan,mac=52:54:00:30:00:11,addr=0x7']
+
+
+def pin_disk(argv):
+    # `-drive if=virtio` gets the first free PCI slot after the explicit devices (0x5 here);
+    # the UEFI boot entries of both kuberoot slots name that path, so keep the disk at 0x5.
+    out = []
+    for a in argv:
+        if a.startswith('file=/work/vms/r2/sys.qcow2') and 'if=virtio' in a:
+            out.append(a.replace('if=virtio', 'if=none,id=sysdisk'))
+            out += ['-device', 'virtio-blk-pci,drive=sysdisk,addr=0x5']
+            continue
+        out.append(a)
+    return out
 
 
 def row_attach():
@@ -97,8 +110,9 @@ def row_attach():
         f = Path(f'/work/vms/{other}/pid')
         if f.exists() and Path('/proc/' + f.read_text().strip()).exists():
             raise SystemExit(f'competitor {other} is running; G addresses are taken')
-    argv = r2_argv()
-    if 'glan' in ' '.join(argv):
+    base = Path('/work/vms/r2/launch-base.json')
+    argv = json.loads(base.read_text())['argv'] if base.exists() else r2_argv()
+    if 'glan' in ' '.join(r2_argv()) and 'sysdisk' in ' '.join(r2_argv()):
         say('r2 already attached to G')
     else:
         ram = os.environ.get('R2_RAM_MIB')
@@ -106,7 +120,7 @@ def row_attach():
             argv[argv.index('-m') + 1] = ram
         Path('/work/vms/r2/launch-base.json').write_text(json.dumps({'argv': argv}))
         say('$ restart r2 with two more NICs: G LAN 230.31.0.31:13031 (eth3), G WAN 230.31.0.32:13032 (eth4)')
-        restart(argv + G)
+        restart(pin_disk(argv) + G)
     wait_api(); time.sleep(10)
     apply(obj('Interface', 'g-lan', {'link': 'eth3', 'addresses': ['192.168.10.1/24']}),
           obj('Interface', 'g-wan', {'link': 'eth4', 'addresses': ['198.18.0.1/24']}),
@@ -128,7 +142,7 @@ def row_detach():
     kubectl(['delete', 'natrule', 'g-masq', '--ignore-not-found']); kubectl(['delete', 'dhcpserver', 'g-lan', '--ignore-not-found'])
     kubectl(['delete', 'bgppeer', 'g-u1', 'g-u2', 'g-u1v6', 'g-u2v6', '--ignore-not-found'])
     kubectl(['patch', 'bgprouter', 'default', '--type=merge', '-p', '{"spec":{"asn":65002}}'])
-    restart(base); wait_api(); say('r2 back on the phase-1 topology only')
+    say('G objects removed; the extra NICs stay (r2 boots its field.6 kernel directly, see launch-directboot.json)')
 
 
 def row_profile():
@@ -190,7 +204,14 @@ def row_r4():
 def row_r5():
     for vm in ['client', 'sink']:
         code = base64.b64encode(Path('/work/field/tcp-flows.py').read_bytes()).decode(); guest(vm, f'echo {code} | base64 -d >/tmp/tcp-flows.py', quiet=True)
-    guest('sink', 'pkill -f "[t]cp-flows.py server"; nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null &')
+    guest('sink', 'pkill -f "[t]cp-flows.py server"; sleep 3; true')  # separate session: the pattern must not match this shell
+    for _ in range(3):
+        guest('sink', 'nohup python3 /tmp/tcp-flows.py server --seconds 1500 >/tmp/R5-server.json 2>/tmp/R5-server.err </dev/null & sleep 3')
+        if guest('sink', 'ss -ltn | grep -c ":91[0-3][0-9] "').stdout.strip() == '32':
+            break
+        time.sleep(3)
+    else:
+        raise SystemExit('flow sink did not listen on 32 ports; no measurement')
     summary = {}
     for count, rate in [(1000, 1000), (10000, 1000), (100000, 10000)]:
         name = f'R5-r2-{count}-{rate}'; t0 = time.monotonic()
@@ -253,7 +274,7 @@ def samples(count, tag):
         guest('gateway', f'sh /tmp/R7-r2-samples-{side}.sh', quiet=True)
     guest('client', 'ip route replace 10.64.0.0/10 via 192.168.10.1', quiet=True)
     put('client', '/tmp/R7-samples.txt', '\n'.join(addrs) + '\n')
-    p = guest('client', 'fping -c 1 -t 1000 -i 2 -f /tmp/R7-samples.txt 2>&1 | tail -3', 90)
+    p = guest('client', 'fping -c 1 -t 1000 -i 2 -f /tmp/R7-samples.txt > /tmp/R7-fping.txt 2>&1; printf "answered %s of %s\\n" $(grep -c "1/1/0%" /tmp/R7-fping.txt) $(wc -l < /tmp/R7-samples.txt)', 120)
     (raw / f'R7-r2-{tag}-samples.txt').write_text(p.stdout + p.stderr)
     return p.stdout
 

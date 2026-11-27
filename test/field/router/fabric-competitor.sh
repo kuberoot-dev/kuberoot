@@ -22,7 +22,7 @@ case "$name" in
    qemu-img info -f raw "$d/sys.img.partial" >/dev/null
    mv "$d/sys.img.partial" "$d/sys.img"
   fi
-  drive="file=$d/sys.img,format=raw,if=none,id=system,cache=none";;
+  drive="file=$d/sys.img,format=raw,if=none,id=system,cache=writeback";;  # image size is not 4 KiB aligned, O_DIRECT refuses it
  vyos)
   [[ -f $d/sys.qcow2 ]] || qemu-img create -q -f qcow2 "$d/sys.qcow2" 12G
   drive="file=$d/sys.qcow2,format=qcow2,if=none,id=system,cache=none"
