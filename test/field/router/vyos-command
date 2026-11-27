@@ -1,0 +1,10 @@
+#!/bin/bash
+# SSH to the VyOS competitor. Default: isolated observer NIC (never through DUT).
+# `vyos-command production ...` uses the production WAN path via the sink jump.
+set -euo pipefail
+mode=observer
+if [[ ${1:-} == production ]]; then mode=production; shift; fi
+if [[ $mode == production ]]; then
+  exec ssh -F /work/field/private/production-ssh.conf vyos-production "$@"
+fi
+exec ssh -o BatchMode=yes -o ConnectTimeout=5 -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /work/field/private/id_ed25519 -p 2222 vyos@127.0.0.1 "$@"

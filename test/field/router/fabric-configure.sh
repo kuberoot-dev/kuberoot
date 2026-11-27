@@ -1,0 +1,33 @@
+#!/bin/bash
+# Configure only the dedicated Linux endpoint VMs over their observer SSH NIC.
+set -euo pipefail
+name=${1:?client or gateway}
+case $name in client) port=2231; address=192.168.10.2/24; direct=198.18.33.1/24;; gateway) port=2232; address=198.18.0.2/24; direct=198.18.34.1/24;; sink) port=2233; address=198.18.34.2/24; direct=198.18.33.2/24;; *) exit 2;; esac
+ssh -o ConnectTimeout=5 -i /work/field/private/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$port" root@127.0.0.1 bash -s -- "$name" "$address" "$direct" <<'GUEST'
+set -euo pipefail
+hostname "$1"
+systemctl disable --now dnsmasq frr nftables || true
+nft flush ruleset
+ip address flush dev test0
+ip address add "$2" dev test0
+ip link set test0 up
+ip address replace "$3" dev direct0
+ip link set direct0 up
+sysctl -w net.ipv4.ip_forward=1
+if [[ $1 == client ]]; then
+ ip route replace 198.18.0.0/24 via 192.168.10.1
+ ip route replace 198.19.0.1/32 via 192.168.10.1
+elif [[ $1 == gateway ]]; then
+ ip address del 198.19.0.1/32 dev lo 2>/dev/null || true
+ ip route replace 192.168.10.0/24 via 198.18.0.1
+ ip route replace 198.19.0.1/32 via 198.18.34.2
+ pkill -x iperf3 || true
+else
+ ip address replace 198.19.0.1/32 dev lo
+ ip route replace 192.168.10.0/24 via 198.18.34.1
+ ip route replace 198.18.0.0/24 via 198.18.34.1
+ iperf3 -s -D
+fi
+ip -br addr
+ip route
+GUEST
