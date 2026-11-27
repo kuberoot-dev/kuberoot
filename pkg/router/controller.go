@@ -85,7 +85,7 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	// Before anything forwards: NAT for a busy network outgrows the
 	// kernel's default table long before memory runs short.
-	if n, err := SizeConntrack("/proc", "/sys"); err != nil {
+	if n, err := SizeConntrack("/proc", "/sys", "/var/lib/kuberoot/osconfig.json"); err != nil {
 		klog.Errorf("size the connection tracking table: %v", err)
 	} else {
 		klog.Infof("connection tracking table: %d entries", n)

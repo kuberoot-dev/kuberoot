@@ -2,6 +2,7 @@ package router
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,17 +36,30 @@ func ConntrackSize(memTotal uint64) int {
 	return n
 }
 
+// conntrackSysctl is the size an operator can choose instead, through the
+// node's OSConfig (spec.sysctls); the node API applies it at boot.
+const conntrackSysctl = "net.netfilter.nf_conntrack_max"
+
 // SizeConntrack grows the connection tracking table and its hash table to
 // ConntrackSize for the node's memory under procRoot and sysRoot. It never
-// shrinks them: a larger size set by hand stays.
-func SizeConntrack(procRoot, sysRoot string) (int, error) {
+// shrinks them, and leaves the table alone when the node's OSConfig, kept
+// in osConfig, sets its size: that is the operator's choice. It returns the
+// size the table has.
+func SizeConntrack(procRoot, sysRoot, osConfig string) (int, error) {
+	maxFile := filepath.Join(procRoot, "sys/net/netfilter/nf_conntrack_max")
+	if raw, err := os.ReadFile(osConfig); err == nil {
+		var spec struct{ Sysctls map[string]string }
+		if json.Unmarshal(raw, &spec) == nil && spec.Sysctls[conntrackSysctl] != "" {
+			return readInt(maxFile)
+		}
+	}
 	mem, err := memTotal(filepath.Join(procRoot, "meminfo"))
 	if err != nil {
 		return 0, err
 	}
 	n := ConntrackSize(mem)
 	for _, f := range []string{
-		filepath.Join(procRoot, "sys/net/netfilter/nf_conntrack_max"),
+		maxFile,
 		// One bucket per entry, as the kernel sizes it itself.
 		filepath.Join(sysRoot, "module/nf_conntrack/parameters/hashsize"),
 	} {

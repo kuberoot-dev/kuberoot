@@ -44,7 +44,7 @@ func TestSizeConntrackGrowsAndNeverShrinks(t *testing.T) {
 	write(filepath.Join(proc, "meminfo"), "MemTotal:        2097152 kB\nMemFree:          100000 kB\n")
 	write(max, "65536\n")
 	write(hash, "1048576\n")
-	n, err := SizeConntrack(proc, sys)
+	n, err := SizeConntrack(proc, sys, filepath.Join(root, "none.json"))
 	if err != nil || n != 262144 {
 		t.Fatalf("SizeConntrack = %d, %v", n, err)
 	}
@@ -54,5 +54,31 @@ func TestSizeConntrackGrowsAndNeverShrinks(t *testing.T) {
 	}
 	if read(hash) != "1048576" {
 		t.Errorf("hashsize set by hand shrank to %s", read(hash))
+	}
+}
+
+func TestSizeConntrackLeavesTheOperatorsChoice(t *testing.T) {
+	root := t.TempDir()
+	proc, sys := filepath.Join(root, "proc"), filepath.Join(root, "sys")
+	max := filepath.Join(proc, "sys/net/netfilter/nf_conntrack_max")
+	for path, s := range map[string]string{
+		filepath.Join(proc, "meminfo"): "MemTotal: 8388608 kB\n",
+		max:                            "32768\n",
+		filepath.Join(sys, "module/nf_conntrack/parameters/hashsize"): "32768\n",
+		filepath.Join(root, "osconfig.json"):                          `{"sysctls":{"net.netfilter.nf_conntrack_max":"32768"}}`,
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := SizeConntrack(proc, sys, filepath.Join(root, "osconfig.json"))
+	if err != nil || n != 32768 {
+		t.Fatalf("SizeConntrack = %d, %v; want the 32768 the OSConfig sets", n, err)
+	}
+	if b, _ := os.ReadFile(max); strings.TrimSpace(string(b)) != "32768" {
+		t.Errorf("nf_conntrack_max = %s", b)
 	}
 }
