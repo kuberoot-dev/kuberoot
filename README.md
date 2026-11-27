@@ -502,7 +502,7 @@ What it does not do yet: the center acts on a node as a node admin, so whoever h
 
 ## Node API
 
-The state partition, mounted on `/var`, holds the cluster store, the services' logs and the node's own state. kinit keeps 5 % of it, at most 64 MiB, in reserve; a node that boots with the partition full frees the reserve first, so the store and the API start and the API can be used to make room, and lays it out again once there is room. After an I/O error the kernel makes the partition read-only, so writes fail at once with an error instead of hanging, and the node API says so in `osconfigs` and in the services' logs.
+The state partition, mounted on `/var`, holds the cluster store, the services' logs and the node's own state. kinit keeps 5 % of it, at most 64 MiB, in reserve; a node that boots with the partition full frees the reserve first, so the store and the API start and the API can be used to make room, and lays it out again once there is room. After an I/O error the kernel makes the partition read-only, so writes fail with an error instead of going on into a journal the kernel gave up on, and the node API says so in `osconfigs` and in the services' logs.
 
 | Resource | What it does |
 |---|---|
