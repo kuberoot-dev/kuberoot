@@ -97,6 +97,28 @@ func TestRulesetReplacesTheTableAndFilters(t *testing.T) {
 	}
 }
 
+func TestManagementAndLoopbackAreNotTracked(t *testing.T) {
+	ok, _ := Check(gateway())
+	got := Ruleset(ok)
+	for _, want := range []string{
+		"chain untracked_in {\n\t\ttype filter hook prerouting priority raw; policy accept;\n\t\tiif \"lo\" notrack\n",
+		`iifname { "eth0" } fib daddr type local tcp dport { 6443, 50000 } notrack`,
+		"chain untracked_out {\n\t\ttype filter hook output priority raw; policy accept;\n\t\toif \"lo\" notrack\n",
+		`oifname { "eth0" } tcp sport { 6443, 50000 } notrack`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ruleset lacks %q:\n%s", want, got)
+		}
+	}
+	// Untracked, the API is let in by its port, not as an established flow.
+	if !strings.Contains(got, `iifname { "eth0" } tcp dport { 6443, 50000 } accept`) {
+		t.Error("the input chain does not accept the management ports")
+	}
+	if Ruleset(Config{}) != "table inet kuberoot_router\ndelete table inet kuberoot_router\ntable inet kuberoot_router {\n}\n" {
+		t.Errorf("an unconfigured router has chains:\n%s", Ruleset(Config{}))
+	}
+}
+
 func TestNoZonesNoFilter(t *testing.T) {
 	c := gateway()
 	c.Zones, c.Rules = nil, nil

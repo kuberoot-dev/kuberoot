@@ -20,12 +20,41 @@ var ManagementPorts = []int{6443, 50000}
 func Ruleset(c Config) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "table inet %s\ndelete table inet %s\ntable inet %s {\n", Table, Table, Table)
+	if len(c.Zones) > 0 || len(c.NAT) > 0 {
+		writeUntracked(&b, c)
+	}
 	if len(c.Zones) > 0 {
 		writeFilter(&b, c)
 	}
 	writeNAT(&b, c)
 	b.WriteString("}\n")
 	return b.String()
+}
+
+// writeUntracked keeps the router's own management out of connection
+// tracking: traffic on loopback, between the node's services, and the API
+// and node API on management zones. When forwarded sessions fill the
+// conntrack table, the kernel drops every packet that needs a new entry;
+// these do not need one, so administrators still reach the router. The
+// input chain accepts them by port, as it does tracked ones.
+func writeUntracked(b *strings.Builder, c Config) {
+	var mgmt []string
+	for _, z := range c.Zones {
+		if z.Spec.Management {
+			mgmt = append(mgmt, z.Spec.Links...)
+		}
+	}
+	b.WriteString("\tchain untracked_in {\n\t\ttype filter hook prerouting priority raw; policy accept;\n\t\tiif \"lo\" notrack\n")
+	if len(mgmt) > 0 {
+		// Only what is addressed to the node: the same ports forwarded
+		// through it stay tracked.
+		fmt.Fprintf(b, "\t\tiifname %s fib daddr type local tcp dport %s notrack\n", quoteSet(mgmt), portSet(ManagementPorts))
+	}
+	b.WriteString("\t}\n\tchain untracked_out {\n\t\ttype filter hook output priority raw; policy accept;\n\t\toif \"lo\" notrack\n")
+	if len(mgmt) > 0 {
+		fmt.Fprintf(b, "\t\toifname %s tcp sport %s notrack\n", quoteSet(mgmt), portSet(ManagementPorts))
+	}
+	b.WriteString("\t}\n")
 }
 
 func writeFilter(b *strings.Builder, c Config) {
