@@ -213,8 +213,12 @@ func (c *Controller) reconcile(ctx context.Context) {
 			klog.Errorf("keep the confirmed configuration: %v", err)
 		}
 	}
-	if err := c.keepBootRuleset(); err != nil {
-		klog.Errorf("keep the boot ruleset: %v", err)
+	// The confirmed configuration only changes when decide says so; render
+	// its ruleset then, and once at start, not on every pass.
+	if changed || c.bootRuleset == "" {
+		if err := c.keepBootRuleset(); err != nil {
+			klog.Errorf("keep the boot ruleset: %v", err)
+		}
 	}
 	failed := map[Ref]error{}
 	if running != rev {
