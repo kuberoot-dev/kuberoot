@@ -2,7 +2,6 @@
 import json,subprocess,time
 from pathlib import Path
 raw=Path('/work/field/raw')
-while not (raw/'R11-debian-hour.exit').exists():time.sleep(3)
 def guest(vm,cmd):
  print(time.strftime('%FT%TZ',time.gmtime()),'$ guest-command',vm,cmd,flush=True)
  p=subprocess.run(['/work/field/guest-command',vm,cmd],capture_output=True,text=True,timeout=30);print(p.stdout+p.stderr,flush=True);return p
