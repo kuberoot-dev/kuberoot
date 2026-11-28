@@ -50,7 +50,7 @@ const (
 
 func ValidateHealthChecks(checks []HealthCheck) error {
 	if len(checks) > maxHealthChecks {
-		return fmt.Errorf("at most %d health checks are allowed", maxHealthChecks)
+		return fmt.Errorf("healthChecks: at most %d checks are allowed", maxHealthChecks)
 	}
 	for i, c := range checks {
 		if (c.URL == "") == (c.Pods == nil) {
