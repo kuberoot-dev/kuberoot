@@ -371,8 +371,10 @@ def stop_others():
         if proc and proc.exists():
             say(f'$ qmp {vm} system_powerdown  # same addresses as r11')
             subprocess.run(['python3', '/work/field/qmp.py', vm, 'system_powerdown'], capture_output=True)
+            # QEMU removes its pidfile on exit; an unreaped QEMU stays a
+            # zombie in this pod, so /proc is no test.
             for _ in range(180):
-                if not proc.exists():
+                if not f.exists():
                     break
                 time.sleep(1)
             else:

@@ -72,6 +72,19 @@ rejects a failed scene before rendering it to GIF. `console.py` and
 `guest-command` propagate the guest command's exit code. `DEFER_RENDER=1`
 records without rendering during benchmarks. `plot-*.py` draw the charts.
 
+### Building the stand from scratch
+
+`pod-setup.sh` installs the pod's tools, `build-in-pod.sh` builds the router
+image from the checked-out tree (Go binaries in the pod, the root filesystem
+with `scripts/build-rootfs.sh` in an Alpine chroot, the kernel from the
+release, since `kernel/` did not change), and `linux-tools-base.sh` makes the
+endpoints' base image. `r2-directboot.sh` lays out r2's disk the way the
+installer does and boots it with the build's kernel, `r2-access.sh` fetches
+its credentials (the node-admin kubeconfig a `kuberoot.dev` boot prints on
+the console, the cluster admin from the node API), and `r2-config.yaml` is
+its configuration on topology G. Then `fabric-vm.py` and
+`fabric-configure.sh` for client, gateway and sink, and `r11-prepare.sh`.
+
 ### Separate state disk (r11)
 
 `r11-prepare.sh` copies r2 into r11, renames the state partition in the copy
