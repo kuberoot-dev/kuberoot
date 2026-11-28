@@ -165,7 +165,11 @@ func applyAddons(ctx context.Context, cfg bootConfig, node nodeInfo) {
 		return
 	}
 	log.Printf("add-ons applied")
-	labelControlPlane(ctx, node)
+	// Without a kubelet there is no Node object to label: a router would
+	// retry, and log the failure, every five seconds for as long as it runs.
+	if runsKubelet(activeRole) {
+		labelControlPlane(ctx, node)
+	}
 	if activeRole.Packages {
 		installDistro(ctx, cfg)
 	}
@@ -296,4 +300,13 @@ func printNodeKubeconfig() {
 		return
 	}
 	os.Stdout.WriteString("-----BEGIN KUBEROOT KUBECONFIG-----\n" + base64.StdEncoding.EncodeToString(raw) + "\n-----END KUBEROOT KUBECONFIG-----\n")
+}
+
+func runsKubelet(r roleSpec) bool {
+	for _, s := range r.Services {
+		if s.Name == "kubelet" {
+			return true
+		}
+	}
+	return false
 }
