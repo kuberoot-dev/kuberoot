@@ -23,7 +23,7 @@ func probationWatchdog() {
 		if reason == "" {
 			continue
 		}
-		reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses))
+		reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses), upgrade.CrashLoopService(statuses))
 		if err != nil {
 			log.Printf("boot watchdog: %v", err)
 			continue

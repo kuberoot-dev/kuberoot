@@ -321,7 +321,7 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 		}
 		good, reason := assessment.Observe(time.Now(), ready, statuses)
 		if reason != "" {
-			reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses))
+			reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses), upgrade.CrashLoopService(statuses))
 			if err != nil {
 				klog.Errorf("boot assessment: record failure: %v", err)
 				return

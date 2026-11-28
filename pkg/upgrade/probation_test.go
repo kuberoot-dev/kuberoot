@@ -80,7 +80,7 @@ func TestFailedAttemptPersistence(t *testing.T) {
 			writeEntry(t, dir, "kuberoot-a.conf", "old", "1")
 			writeEntry(t, dir, file, "new", "2")
 			reason := "service broken: 5 unrequested exits; last exit: code 1\nsecond line"
-			reboot, err := failAttemptIn(dir, "b", reason)
+			reboot, err := failAttemptIn(dir, "b", reason, "")
 			if err != nil || !reboot {
 				t.Fatalf("%v %v", reboot, err)
 			}
@@ -97,7 +97,7 @@ func TestFailedAttemptPersistence(t *testing.T) {
 			if _, err := markGoodIn(dir, "b"); err == nil {
 				t.Fatal("failed attempt was blessed by racing assessor")
 			}
-			if _, err := failAttemptIn(dir, "b", "watchdog deadline"); err != nil {
+			if _, err := failAttemptIn(dir, "b", "watchdog deadline", ""); err != nil {
 				t.Fatal(err)
 			}
 			entries, _ = readEntriesIn(dir, "b")
@@ -120,7 +120,7 @@ func TestFailedAttemptDoesNotRebootGoodOrWithoutFallback(t *testing.T) {
 	for _, file := range []string{"kuberoot-b.conf", "kuberoot-b+0-3.conf"} {
 		dir := t.TempDir()
 		writeEntry(t, dir, file, "new", "2")
-		reboot, err := failAttemptIn(dir, "b", "failure")
+		reboot, err := failAttemptIn(dir, "b", "failure", "")
 		if reboot || err != nil {
 			t.Fatalf("%s: %v %v", file, reboot, err)
 		}
@@ -144,7 +144,7 @@ func TestFailureLogIsBoundedAndSurvivesEncoding(t *testing.T) {
 		t.Fatalf("bad tail: len=%d", len(details))
 	}
 	writeEntry(t, dir, "kuberoot-b+2-1.conf", "new", "2")
-	if _, err := failAttemptIn(dir, "b", details); err != nil {
+	if _, err := failAttemptIn(dir, "b", details, ""); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := readEntriesIn(dir, "b")
@@ -161,7 +161,7 @@ func TestPreferStartsFreshAssessment(t *testing.T) {
 	dir := t.TempDir()
 	writeEntry(t, dir, "kuberoot-a.conf", "old", "1")
 	writeEntry(t, dir, "kuberoot-b+2-1.conf", "new", "2")
-	if _, err := failAttemptIn(dir, "b", "crash"); err != nil {
+	if _, err := failAttemptIn(dir, "b", "crash", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := preferIn(dir, "b", "a"); err != nil {
@@ -172,5 +172,79 @@ func TestPreferStartsFreshAssessment(t *testing.T) {
 	}
 	if good, err := markGoodIn(dir, "b"); err != nil || !good {
 		t.Fatalf("%v %v", good, err)
+	}
+}
+
+// A release whose service crash-loops on two boots in a row returns to the
+// Good slot at once; one crash-looping boot alone keeps the other attempts.
+func TestRepeatedCrashLoopGivesUpRemainingAttempts(t *testing.T) {
+	dir := t.TempDir()
+	writeEntry(t, dir, "kuberoot-a.conf", "old", "1")
+	writeEntry(t, dir, "kuberoot-b+2-1.conf", "new", "2")
+	if reboot, err := failAttemptIn(dir, "b", "service broken: 5 unrequested exits", "broken"); err != nil || !reboot {
+		t.Fatalf("%v %v", reboot, err)
+	}
+	if got := files(t, dir); got != "kuberoot-a.conf kuberoot-b+2-1.conf" {
+		t.Fatalf("first crash loop spent the remaining attempts: %s", got)
+	}
+	// systemd-boot spends the second attempt.
+	if err := os.Rename(filepath.Join(dir, "kuberoot-b+2-1.conf"), filepath.Join(dir, "kuberoot-b+1-2.conf")); err != nil {
+		t.Fatal(err)
+	}
+	if reboot, err := failAttemptIn(dir, "b", "service broken: 5 unrequested exits", "broken"); err != nil || !reboot {
+		t.Fatalf("%v %v", reboot, err)
+	}
+	if got := files(t, dir); got != "kuberoot-a.conf kuberoot-b+0-2.conf" {
+		t.Fatalf("repeated crash loop kept attempts: %s", got)
+	}
+	entries, err := readEntriesIn(dir, "b")
+	if err != nil || entries[0].State != StateBad || !entries[1].Default || !strings.Contains(entries[0].Failure, "attempt 1 too; 1 remaining attempts given up") {
+		t.Fatalf("%+v %v", entries, err)
+	}
+	if _, err := markGoodIn(dir, "b"); err == nil {
+		t.Fatal("given-up slot was marked Good")
+	}
+}
+
+func TestDifferentOrNonCrashFailuresKeepAttempts(t *testing.T) {
+	for _, tt := range []struct{ name, first, second string }{
+		{"different services", "kubelet", "containerd"},
+		{"deadline then crash", "", "broken"},
+		{"crash then deadline", "broken", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeEntry(t, dir, "kuberoot-a.conf", "old", "1")
+			writeEntry(t, dir, "kuberoot-b+2-1.conf", "new", "2")
+			if _, err := failAttemptIn(dir, "b", "first", tt.first); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(filepath.Join(dir, "kuberoot-b+2-1.conf"), filepath.Join(dir, "kuberoot-b+1-2.conf")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := failAttemptIn(dir, "b", "second", tt.second); err != nil {
+				t.Fatal(err)
+			}
+			if got := files(t, dir); got != "kuberoot-a.conf kuberoot-b+1-2.conf" {
+				t.Fatalf("attempts given up: %s", got)
+			}
+		})
+	}
+}
+
+func TestRepeatedCrashLoopWithoutFallbackStaysUp(t *testing.T) {
+	dir := t.TempDir()
+	writeEntry(t, dir, "kuberoot-b+2-1.conf", "new", "2")
+	if _, err := failAttemptIn(dir, "b", "crash", "broken"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(dir, "kuberoot-b+2-1.conf"), filepath.Join(dir, "kuberoot-b+1-2.conf")); err != nil {
+		t.Fatal(err)
+	}
+	if reboot, err := failAttemptIn(dir, "b", "crash", "broken"); err != nil || reboot {
+		t.Fatalf("%v %v", reboot, err)
+	}
+	if got := files(t, dir); got != "kuberoot-b+1-2.conf" {
+		t.Fatalf("slot without fallback was made Bad: %s", got)
 	}
 }
