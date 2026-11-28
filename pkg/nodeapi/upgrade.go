@@ -81,8 +81,8 @@ func (s bootEntryStorage) List(ctx context.Context, _ *metainternalversion.ListO
 	return list, nil
 }
 
-func (s bootEntryStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s bootEntryStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 func (s bootEntryStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo,
@@ -247,8 +247,8 @@ func (s *upgradeStorage) List(ctx context.Context, _ *metainternalversion.ListOp
 	return list, nil
 }
 
-func (s *upgradeStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s *upgradeStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 func (s *upgradeStorage) ConvertToTable(_ context.Context, obj runtime.Object, _ runtime.Object) (*metav1.Table, error) {

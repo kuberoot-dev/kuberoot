@@ -97,8 +97,8 @@ func (s etcdRotationStorage) Get(ctx context.Context, name string, _ *metav1.Get
 	return r, nil
 }
 
-func (s etcdRotationStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s etcdRotationStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 // Create starts a rotation; the control planes take it from there.

@@ -68,8 +68,8 @@ func (s diskStorage) List(context.Context, *metainternalversion.ListOptions) (ru
 	return list, nil
 }
 
-func (s diskStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, func(context.Context) (map[string]runtime.Object, error) { return s.snapshot(), nil }), nil
+func (s diskStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, func(context.Context) (map[string]runtime.Object, error) { return s.snapshot(), nil }), nil
 }
 
 func (diskStorage) ConvertToTable(_ context.Context, obj runtime.Object, _ runtime.Object) (*metav1.Table, error) {
@@ -219,8 +219,8 @@ func (s *installationStorage) List(ctx context.Context, _ *metainternalversion.L
 	return list, nil
 }
 
-func (s *installationStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s *installationStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 func (s *installationStorage) ConvertToTable(_ context.Context, obj runtime.Object, _ runtime.Object) (*metav1.Table, error) {

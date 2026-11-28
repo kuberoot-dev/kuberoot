@@ -87,8 +87,8 @@ func (s enrollmentStorage) snapshot(context.Context) (map[string]runtime.Object,
 	return out, nil
 }
 
-func (s enrollmentStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s enrollmentStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 func (s enrollmentStorage) Create(ctx context.Context, obj runtime.Object, _ rest.ValidateObjectFunc, _ *metav1.CreateOptions) (runtime.Object, error) {

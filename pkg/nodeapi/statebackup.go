@@ -236,8 +236,8 @@ func (s *stateBackupStorage) List(ctx context.Context, _ *metainternalversion.Li
 	return list, nil
 }
 
-func (s *stateBackupStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s *stateBackupStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 // Create takes a backup now, named after the time unless a name is given.
