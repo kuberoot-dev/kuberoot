@@ -51,7 +51,8 @@ func writeAggregation(node nodeInfo) error {
 	if err := os.MkdirAll(generatedAddonsDir, 0o755); err != nil {
 		return err
 	}
-	manifest := fmt.Sprintf(aggregationTemplate, node.name, node.ip, node.name, base64.StdEncoding.EncodeToString(ca))
+	bundle := base64.StdEncoding.EncodeToString(ca)
+	manifest := fmt.Sprintf(aggregationTemplate, node.name, node.ip, node.name, bundle, bundle)
 	if err := os.WriteFile(generatedAddonsDir+"/node-api.yaml", []byte(manifest), 0o644); err != nil {
 		return err
 	}
@@ -137,6 +138,32 @@ spec:
     namespace: kube-system
     name: kuberoot-node
     port: 50000
+---
+# With its state partition read-only or failing, the node refuses changes
+# to the router's resources at once and says why; kine would hold each write
+# until the API server timed it out.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kuberoot-node-state-storage
+webhooks:
+- name: state-storage.node.kuberoot.dev
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Ignore
+  timeoutSeconds: 2
+  clientConfig:
+    caBundle: %s
+    service:
+      namespace: kube-system
+      name: kuberoot-node
+      port: 50000
+      path: /admission/state-storage
+  rules:
+  - apiGroups: [router.kuberoot.dev]
+    apiVersions: ["*"]
+    operations: [CREATE, UPDATE, DELETE]
+    resources: ["*/*"]
 `
 
 // applyAddons waits for the API server, applies the bundled cluster add-ons

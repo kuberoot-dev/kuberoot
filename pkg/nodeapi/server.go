@@ -258,6 +258,7 @@ func Run(ctx context.Context, o Options) error {
 	if err := server.InstallAPIGroup(&group); err != nil {
 		return err
 	}
+	server.Handler.NonGoRestfulMux.HandleFunc(StorageAdmissionPath, serveStorageAdmission)
 	go assessBoot(ctx, kinit, o.NodeName)
 	if storages["fleetenrollments"] != nil {
 		go agent.Run(ctx)
@@ -351,7 +352,7 @@ func configureAuth(cfg *genericapiserver.RecommendedConfig, o Options) error {
 		authorizers = append(authorizers, authorizerunion.NamedAuthorizer{AuthorizerName: "cluster", Authorizer: delegated})
 	}
 	cfg.SecureServing.ClientCA = dynamiccertificates.NewUnionCAContentProvider(clientCAs...)
-	cfg.Authentication.Authenticator = union.New(authenticators...)
+	cfg.Authentication.Authenticator = union.New(append(authenticators, admissionCaller)...)
 	authz, err := authorizerunion.New(authorizers...)
 	if err != nil {
 		return err
@@ -395,7 +396,7 @@ func authorize(_ context.Context, a authorizer.Attributes) (authorizer.Decision,
 			return authorizer.DecisionAllow, "", nil
 		}
 	}
-	if aggregatorReadsOpenAPI(a) {
+	if aggregatorReadsOpenAPI(a) || admissionAllowed(a) {
 		return authorizer.DecisionAllow, "", nil
 	}
 	return authorizer.DecisionNoOpinion, "not a node admin", nil

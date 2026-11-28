@@ -19,6 +19,13 @@ const Socket = "/run/kuberoot/kinit.sock"
 // partition.
 const SpaceReserveReleased = "/run/kuberoot/space-reserve-released"
 
+// SpaceReserveSize is the space kinit keeps in reserve on a state partition
+// of total bytes: 5 %, at most 64 MiB, in whole MiB. Less than that free is
+// a full partition: the cluster store cannot start in it.
+func SpaceReserveSize(total int64) int64 {
+	return min(total/20, 64<<20) &^ (1<<20 - 1)
+}
+
 // ServiceStatus is the observed state of one supervised service.
 type ServiceStatus struct {
 	Name             string    `json:"name"`

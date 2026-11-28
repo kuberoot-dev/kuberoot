@@ -16,6 +16,8 @@ func TestParseMountInfo(t *testing.T) {
 		{"36 25 254:17 / /var rw,nosuid,nodev,relatime shared:12 - ext4 /dev/vdb1 rw,errors=remount-ro,nodelalloc", mount{"/dev/vdb1", "ext4", false}, true},
 		{"36 25 254:17 / /var ro,nosuid,nodev,relatime shared:12 - ext4 /dev/vdb1 ro,errors=remount-ro", mount{"/dev/vdb1", "ext4", true}, true},
 		{"30 25 0:27 / /var rw,nosuid,nodev - tmpfs tmpfs rw,mode=755", mount{"tmpfs", "tmpfs", false}, true},
+		// Remounted read-only by the kernel after an error: only the superblock says so.
+		{"36 25 254:17 / /var rw,nosuid,nodev,relatime shared:12 - ext4 /dev/vdb1 ro,errors=remount-ro,nodelalloc", mount{"/dev/vdb1", "ext4", true}, true},
 		{"36 25 254:17 / /var/lib rw - ext4 /dev/vdb1 rw", mount{}, false},
 	} {
 		got, ok := parseMountInfo(c.line, "/var")
