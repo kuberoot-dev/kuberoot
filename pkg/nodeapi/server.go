@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -394,7 +395,27 @@ func authorize(_ context.Context, a authorizer.Attributes) (authorizer.Decision,
 			return authorizer.DecisionAllow, "", nil
 		}
 	}
+	if aggregatorReadsOpenAPI(a) {
+		return authorizer.DecisionAllow, "", nil
+	}
 	return authorizer.DecisionNoOpinion, "not a node admin", nil
+}
+
+// aggregatorReadsOpenAPI tells the cluster API server's aggregator fetching
+// the node API's OpenAPI document. It comes through the front proxy as
+// system:aggregator with no groups, which the cluster's RBAC grants nothing,
+// and on every refused try the API server logged the whole response:
+// megabytes an hour on a router's flash, and no schema for kubectl explain.
+func aggregatorReadsOpenAPI(a authorizer.Attributes) bool {
+	if a.IsResourceRequest() || a.GetVerb() != "get" || a.GetUser().GetName() != "system:aggregator" {
+		return false
+	}
+	via := false
+	for _, g := range a.GetUser().GetGroups() {
+		via = via || g == viaClusterGroup
+	}
+	p := a.GetPath()
+	return via && (p == "/openapi/v2" || p == "/openapi/v3" || strings.HasPrefix(p, "/openapi/v3/"))
 }
 
 func withRequestHost(h http.Handler) http.Handler {
