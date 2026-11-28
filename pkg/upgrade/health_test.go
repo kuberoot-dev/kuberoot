@@ -195,7 +195,7 @@ func TestHealthPolicyFollowsSlotEntry(t *testing.T) {
 	if !reflect.DeepEqual(read("b")[0].HealthChecks, checks) {
 		t.Fatal("policy lost after boot-counter rename")
 	}
-	if _, err := failAttemptIn(dir, "b", "workloads unhealthy"); err != nil {
+	if _, err := failAttemptIn(dir, "b", "workloads unhealthy", ""); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(read("b")[0].HealthChecks, checks) {
