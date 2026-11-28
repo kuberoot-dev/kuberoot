@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: List
+items:
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: FirewallZone, metadata: {name: wan}, spec: {links: [eth0], input: Drop, management: true}}
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: FirewallZone, metadata: {name: transit}, spec: {links: [eth2], input: Accept}}
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: Interface, metadata: {name: g-lan}, spec: {link: eth3, addresses: [192.168.10.1/24]}}
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: Interface, metadata: {name: g-wan}, spec: {link: eth4, addresses: [198.18.0.1/24]}}
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: Route, metadata: {name: g-sink}, spec: {destination: 198.19.0.0/24, gateway: 198.18.0.2, link: eth4}}
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: FirewallZone, metadata: {name: g-lan}, spec: {links: [eth3], input: Accept, forwardTo: [g-wan]}}
+- {apiVersion: router.kuberoot.dev/v1alpha1, kind: FirewallZone, metadata: {name: g-wan}, spec: {links: [eth4], input: Accept, forwardTo: [g-lan]}}
