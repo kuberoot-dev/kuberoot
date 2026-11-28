@@ -3357,7 +3357,7 @@ func schema_pkg_apis_node_v1alpha1_StateStorage(ref common.ReferenceCallback) co
 				Properties: map[string]spec.Schema{
 					"state": {
 						SchemaProps: spec.SchemaProps{
-							Description: "State is Healthy; Full when less than 1 % of it is free; ReadOnly when the kernel remounted it read-only after a filesystem error; Failing when reading the device fails or does not finish.",
+							Description: "State is Healthy; Full when less is free than the space reserve (5 %, at most 64 MiB); ReadOnly when the kernel remounted it read-only after a filesystem error; Failing when reading the device fails or does not finish.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",

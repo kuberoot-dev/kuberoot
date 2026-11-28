@@ -178,15 +178,39 @@ func supervise(ctx context.Context, s service, verbose bool) {
 	}
 }
 
+// keepGoing writes to w and never fails. With the output copied through a
+// pipe, a failed write to the log file stopped the copy, and the service
+// died of SIGPIPE on its next line: a read-only state partition took the
+// API server down with it.
+type keepGoing struct{ w io.Writer }
+
+func (k keepGoing) Write(p []byte) (int, error) {
+	_, _ = k.w.Write(p)
+	return len(p), nil
+}
+
+// openLog opens a service's log. When the state partition cannot take it
+// (read-only after an I/O error, or gone), the service still starts, its
+// output discarded: a service that cannot log is better than none, and the
+// node API reports the partition's state.
+func openLog(name string) (*os.File, error) {
+	f, err := os.OpenFile(logPath(name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err == nil {
+		return f, nil
+	}
+	log.Printf("%s: %v; starting it without a log", name, err)
+	return os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+}
+
 func runService(ctx context.Context, s service, choice string, verbose bool) (unix.WaitStatus, error) {
-	logFile, err := os.OpenFile(logPath(s.name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := openLog(s.name)
 	if err != nil {
 		return 0, err
 	}
 	defer logFile.Close()
 	var out io.Writer = logFile
 	if verbose {
-		out = io.MultiWriter(logFile, &prefixWriter{prefix: "[" + s.name + "] ", w: os.Stdout})
+		out = io.MultiWriter(keepGoing{logFile}, &prefixWriter{prefix: "[" + s.name + "] ", w: os.Stdout})
 	}
 	args := s.args
 	if s.alt != nil {

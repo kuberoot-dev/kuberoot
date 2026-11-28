@@ -47,7 +47,7 @@ type OSConfigStatus struct {
 // StateStorage is what the node sees of its state partition, observed
 // without writing to it.
 type StateStorage struct {
-	// State is Healthy; Full when less than 1 % of it is free; ReadOnly when
+	// State is Healthy; Full when less is free than the space reserve (5 %, at most 64 MiB); ReadOnly when
 	// the kernel remounted it read-only after a filesystem error; Failing
 	// when reading the device fails or does not finish.
 	State string `json:"state"`

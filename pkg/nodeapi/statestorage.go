@@ -49,8 +49,18 @@ func readStateStorage() *node.StateStorage {
 		// The node's services run as root: root's reserved blocks are theirs.
 		s.TotalBytes, s.AvailableBytes = int64(st.Blocks)*st.Bsize, int64(st.Bfree)*st.Bsize
 	}
-	if raw, err := os.ReadFile(filepath.Join("/sys/fs/ext4", filepath.Base(m.source), "errors_count")); err == nil {
+	sysfs := filepath.Join("/sys/fs/ext4", filepath.Base(m.source))
+	if raw, err := os.ReadFile(filepath.Join(sysfs, "errors_count")); err == nil {
 		s.Errors, _ = strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64)
+	}
+	// Since Linux 6.10 an error makes ext4 refuse writes without marking the
+	// mount read-only (EXT4_FLAGS_EMERGENCY_RO): an error recorded since
+	// boot, on a partition mounted errors=remount-ro, is the only sign.
+	errorSinceBoot := false
+	if raw, err := os.ReadFile(filepath.Join(sysfs, "last_error_time")); err == nil {
+		if t, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64); err == nil && t > 0 {
+			errorSinceBoot = time.Unix(t, 0).After(bootTime())
+		}
 	}
 	_, err = os.Stat(supervisor.SpaceReserveReleased)
 	s.ReserveReleased = err == nil
@@ -58,10 +68,10 @@ func readStateStorage() *node.StateStorage {
 	switch {
 	case readErr != nil:
 		s.State, s.Message = StorageFailing, readErr.Error()
-	case m.readOnly:
+	case m.readOnly || errorSinceBoot:
 		s.State, s.Message = StorageReadOnly, "the kernel remounted "+stateMount+" read-only after a filesystem error; writes fail until the node is repaired"
-	case s.TotalBytes > 0 && s.AvailableBytes < s.TotalBytes/100:
-		s.State, s.Message = StorageFull, fmt.Sprintf("%d of %d bytes free", s.AvailableBytes, s.TotalBytes)
+	case s.TotalBytes > 0 && s.AvailableBytes < supervisor.SpaceReserveSize(s.TotalBytes):
+		s.State, s.Message = StorageFull, fmt.Sprintf("%d of %d bytes free, less than the %d the cluster store needs to start", s.AvailableBytes, s.TotalBytes, supervisor.SpaceReserveSize(s.TotalBytes))
 	}
 	if s.State != StorageHealthy && s.Errors > 0 {
 		s.Message += fmt.Sprintf("; the filesystem recorded %d errors", s.Errors)
@@ -113,7 +123,13 @@ func parseMountInfo(line, target string) (mount, bool) {
 		return mount{}, false
 	}
 	m := mount{source: fields[sep+2], fstype: fields[sep+1]}
-	for _, o := range strings.Split(fields[5], ",") {
+	// The per-mount options, and the filesystem's own: after an error the
+	// kernel makes the filesystem read-only, and only its options say so.
+	opts := fields[5]
+	if sep+3 < len(fields) {
+		opts += "," + fields[sep+3]
+	}
+	for _, o := range strings.Split(opts, ",") {
 		m.readOnly = m.readOnly || o == "ro"
 	}
 	return m, true
@@ -180,4 +196,12 @@ func readDirect(dev string) error {
 		return errors.New("read " + dev + ": short read")
 	}
 	return nil
+}
+
+func bootTime() time.Time {
+	var info unix.Sysinfo_t
+	if unix.Sysinfo(&info) != nil {
+		return time.Time{}
+	}
+	return time.Now().Add(-time.Duration(info.Uptime) * time.Second)
 }

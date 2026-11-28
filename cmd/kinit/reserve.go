@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/kuberoot-dev/kuberoot/pkg/supervisor"
 )
 
 // stateMountOptions are the state partition's mount options.
@@ -19,10 +21,7 @@ const spaceReserveFile = "/var/lib/kuberoot/space-reserve"
 
 const ext4Magic = 0xef53
 
-// spaceReserveSize is 5 % of the partition, at most 64 MiB, in whole MiB.
-func spaceReserveSize(total int64) int64 {
-	return min(total/20, 64<<20) &^ (1<<20 - 1)
-}
+func spaceReserveSize(total int64) int64 { return supervisor.SpaceReserveSize(total) }
 
 // keepSpaceReserve frees the reserve when less than its size is free and
 // lays it out again, at a later boot, once four times its size is free.
