@@ -128,7 +128,7 @@ func TestStagingRetiresTheOldEntryAndAddsOneOnProbation(t *testing.T) {
 		t.Fatalf("after retiring: %q", got)
 	}
 	a := bootdisk.Artifacts{Version: "0.1.2"}
-	if err := addProbationEntry(dir, bootdisk.SlotEntry(a, "b", ""), "a"); err != nil {
+	if err := addProbationEntry(dir, bootdisk.SlotEntry(a, "b", ""), "a", nil); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := readEntriesIn(dir, "a")

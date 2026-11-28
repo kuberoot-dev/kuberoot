@@ -528,6 +528,29 @@ A node boots from media (`mkimage` writes a disk image with the kernel, the init
 
 An `Upgrade` downloads a signed release bundle, writes it to the inactive slot and boots it on probation. Every service must stay running without restarts and the node must stay Ready for 30 seconds within five minutes. A service that exits five times without a requested restart (about a minute of crashing, given kinit's growing backoff) fails the attempt immediately, even if the node API cannot start. One crash-looping boot keeps the other attempts, since a dependency or the hardware can recover by the next boot; when the same service crash-loops on the next boot too, the fault comes with the release, the slot gives up the attempts it has left and the node returns to the previous Good slot right away. Otherwise systemd-boot returns to it after the third failed attempt. Slow starts still get five minutes. If the node API never assesses the boot, kinit provides an eight-minute backstop. Without another Good slot, the node stays up for repair.
 
+Services that stay up do not prove that the workloads work: pod networking can be down, or an application can serve the wrong content, while the node is Ready. `spec.healthChecks` adds the workloads to the probation. With any check set, the node must also be Ready in the cluster, and every check must pass in the same 30-second window as the services; a check that does not pass within the five minutes fails the attempt (`status.failure` of the boot entry names the last failing check), and after the last attempt the node returns to its Good slot. A check is either a URL, fetched with GET from the node (no proxy, client credentials or redirects; HTTPS against the system roots; one three-second budget per round) and compared with `statusCode` (200 by default) and, when set, the SHA256 of the whole body (at most 1 MiB), or `pods`: the pods matching `selector` in `namespace` that are scheduled on this node must all be Ready, and at least `minReady` of them (1 by default). At most eight checks are allowed.
+
+```yaml
+apiVersion: node.kuberoot.dev/v1alpha1
+kind: Upgrade
+metadata:
+  name: to-0.2.0
+spec:
+  url: https://releases.example/edge-0.2.0.tar
+  sha256: <bundle sha256>
+  reboot: true
+  healthChecks:
+  - url: http://10.78.0.11:30080/http
+    bodySHA256: 46efa8ba88ef0f5afd690e05d0cd86e7d6c3d4dac84d7cfcd2c8d9621f294a0d
+  - url: http://10.78.0.11:30081/health
+  - pods:
+      namespace: shop
+      selector: app=web
+      minReady: 2
+```
+
+The checks are kept in the new slot's boot entry, so they hold across its reboots and need no API to be read. The release that boots must know the field (a release from before it ignores the checks), and the running release must know it to accept the `Upgrade`. A rollback returns the operating system, not data a release already rewrote: a check that catches an incompatible state migration stops the release from being kept, but the data it changed stays as it is.
+
 `kubectl get bootentries -o yaml` shows `status.failure`: the last failed attempt, the service, its exit count, last exit result and up to 2 KiB of its log, or the expired deadline. The reason survives reboot and rollback; staging a new release clears it.
 
 Control planes of a cluster on etcd take an upgrade one at a time, and the cluster keeps answering while they do. `hack/e2e/etcd-ha.sh` checks this on three QEMU machines, run by the `e2e-etcd` workflow on GitHub's runners for every pull request that changes the image's components, the store, or how nodes install, upgrade and back up: three control planes installed from the previous image take the current one with an `Upgrade` each, one after the other, while a marker object is written through one API server and read back through another every two seconds; one of them is rolled back to its old slot and forward again, and comes back as the same member of the store; then a `StateBackup` of the first is uploaded encrypted, the cluster is lost, and the first control plane is installed from it on a blank disk with the marker as it was at the backup. The move from etcd 3.7.2 to 3.7.3 (Kubernetes 1.37.1 to 1.37.2) passed it without a failed write or read.

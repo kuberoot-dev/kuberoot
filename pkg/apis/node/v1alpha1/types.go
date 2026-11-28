@@ -278,6 +278,45 @@ type UpgradeSpec struct {
 	Sha256 string `json:"sha256,omitempty"`
 	// Reboot into the new slot when staged.
 	Reboot bool `json:"reboot,omitempty"`
+	// HealthChecks gate the new slot's probation on its workloads. When any
+	// is set, the node must be Ready and every check must pass together for
+	// the whole 30-second healthy window before the slot becomes Good; a
+	// check that never passes within the five-minute probation fails the
+	// attempt, and after the last attempt the node returns to its Good slot.
+	// The checks are stored in the new slot's boot entry, so the release that
+	// boots must understand them: an older one ignores them.
+	// +listType=atomic
+	// +optional
+	HealthChecks []UpgradeHealthCheck `json:"healthChecks,omitempty"`
+}
+
+// UpgradeHealthCheck is one workload check: set url, or pods.
+type UpgradeHealthCheck struct {
+	// URL is fetched with GET from the node itself, without proxy, client
+	// credentials or redirects; HTTPS verifies against the system roots.
+	// +optional
+	URL string `json:"url,omitempty"`
+	// StatusCode the URL must answer with; 200 when unset.
+	// +optional
+	StatusCode int32 `json:"statusCode,omitempty"`
+	// BodySHA256 is the SHA256 of the complete response body (at most 1 MiB).
+	// +optional
+	BodySHA256 string `json:"bodySHA256,omitempty"`
+	// Pods must be Ready.
+	// +optional
+	Pods *UpgradePodsCheck `json:"pods,omitempty"`
+}
+
+// UpgradePodsCheck requires the selected pods scheduled on this node to be
+// Ready: all of them, and at least minReady.
+type UpgradePodsCheck struct {
+	Namespace string `json:"namespace"`
+	// Selector is a label selector, such as "app=web,tier!=batch".
+	Selector string `json:"selector"`
+	// MinReady is how many selected pods on this node must exist and be
+	// Ready; 1 when unset.
+	// +optional
+	MinReady int32 `json:"minReady,omitempty"`
 }
 
 type UpgradeStatus struct {

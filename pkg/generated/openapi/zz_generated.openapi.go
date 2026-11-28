@@ -97,7 +97,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateBackupStatus":     schema_pkg_apis_node_v1alpha1_StateBackupStatus(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.StateStorage":          schema_pkg_apis_node_v1alpha1_StateStorage(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Upgrade":               schema_pkg_apis_node_v1alpha1_Upgrade(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeHealthCheck":    schema_pkg_apis_node_v1alpha1_UpgradeHealthCheck(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeList":           schema_pkg_apis_node_v1alpha1_UpgradeList(ref),
+		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradePodsCheck":      schema_pkg_apis_node_v1alpha1_UpgradePodsCheck(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeSpec":           schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeStatus":         schema_pkg_apis_node_v1alpha1_UpgradeStatus(ref),
 		"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.Volume":                schema_pkg_apis_node_v1alpha1_Volume(ref),
@@ -3457,6 +3459,48 @@ func schema_pkg_apis_node_v1alpha1_Upgrade(ref common.ReferenceCallback) common.
 	}
 }
 
+func schema_pkg_apis_node_v1alpha1_UpgradeHealthCheck(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UpgradeHealthCheck is one workload check: set url, or pods.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL is fetched with GET from the node itself, without proxy, client credentials or redirects; HTTPS verifies against the system roots.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"statusCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StatusCode the URL must answer with; 200 when unset.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"bodySHA256": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BodySHA256 is the SHA256 of the complete response body (at most 1 MiB).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pods": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pods must be Ready.",
+							Ref:         ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradePodsCheck"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradePodsCheck"},
+	}
+}
+
 func schema_pkg_apis_node_v1alpha1_UpgradeList(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3504,6 +3548,42 @@ func schema_pkg_apis_node_v1alpha1_UpgradeList(ref common.ReferenceCallback) com
 	}
 }
 
+func schema_pkg_apis_node_v1alpha1_UpgradePodsCheck(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UpgradePodsCheck requires the selected pods scheduled on this node to be Ready: all of them, and at least minReady.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"selector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Selector is a label selector, such as \"app=web,tier!=batch\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"minReady": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinReady is how many selected pods on this node must exist and be Ready; 1 when unset.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"namespace", "selector"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3532,10 +3612,30 @@ func schema_pkg_apis_node_v1alpha1_UpgradeSpec(ref common.ReferenceCallback) com
 							Format:      "",
 						},
 					},
+					"healthChecks": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HealthChecks gate the new slot's probation on its workloads. When any is set, the node must be Ready and every check must pass together for the whole 30-second healthy window before the slot becomes Good; a check that never passes within the five-minute probation fails the attempt, and after the last attempt the node returns to its Good slot. The checks are stored in the new slot's boot entry, so the release that boots must understand them: an older one ignores them.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeHealthCheck"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"url"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/kuberoot-dev/kuberoot/pkg/apis/node/v1alpha1.UpgradeHealthCheck"},
 	}
 }
 

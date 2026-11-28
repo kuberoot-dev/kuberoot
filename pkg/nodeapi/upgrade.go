@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
 	"github.com/kuberoot-dev/kuberoot/pkg/apis/node"
@@ -139,6 +140,9 @@ func (s *upgradeStorage) Create(_ context.Context, obj runtime.Object, _ rest.Va
 	if u.Name == "" || u.Spec.URL == "" {
 		return nil, apierrors.NewBadRequest("metadata.name and spec.url are required")
 	}
+	if err := upgrade.ValidateHealthChecks(upgradeHealthChecks(u.Spec)); err != nil {
+		return nil, apierrors.NewBadRequest("spec." + err.Error())
+	}
 	if upgrade.CurrentSlot() == "" {
 		return nil, apierrors.NewBadRequest("not an installed system: install first")
 	}
@@ -199,7 +203,7 @@ func (s *upgradeStorage) run(name string, spec node.UpgradeSpec) {
 		return
 	}
 	s.set(name, func(st *node.UpgradeStatus) { st.Phase, st.Release = "Writing", a.Version })
-	slot, err := upgrade.Stage(a, func(done, total int64) {
+	slot, err := upgrade.Stage(a, upgradeHealthChecks(spec), func(done, total int64) {
 		s.set(name, func(st *node.UpgradeStatus) {
 			st.Message = fmt.Sprintf("writing the inactive slot: %d of %d MiB", done>>20, total>>20)
 			st.Progress = 50 + int32(45*done/max(total, 1))
@@ -269,8 +273,10 @@ func (s *upgradeStorage) ConvertToTable(_ context.Context, obj runtime.Object, _
 }
 
 // assessBoot decides whether a slot on probation stays. Healthy means every
-// service running without restarts and the cluster API answering, for a full
-// window; otherwise the node reboots and systemd-boot spends another attempt.
+// service running without restarts and the cluster API answering, and, when
+// the slot was staged with health checks, the node Ready and every check
+// passing, for a full window; otherwise the node reboots and systemd-boot
+// spends another attempt.
 func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) {
 	if upgrade.CurrentSlot() == "" {
 		return
@@ -284,6 +290,19 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 	if !onProbation {
 		return
 	}
+	var checks []upgrade.HealthCheck
+	var policyErr error
+	for _, e := range entries {
+		if e.Booted {
+			checks, policyErr = e.HealthChecks, e.HealthCheckError
+		}
+	}
+	controlPlane := true
+	if m, _ := membership.Load(); m != nil && m.Role != membership.RoleControlPlane {
+		controlPlane = false
+	}
+	var client kubernetes.Interface
+	unhealthy := "" // the last reason the workloads were not healthy
 	klog.Infof("boot assessment: slot %s is on probation", upgrade.CurrentSlot())
 	assessment := upgrade.Assessment{Start: time.Now()}
 	deadlineCtx, cancel := context.WithTimeout(ctx, upgrade.ProbationDeadline)
@@ -301,7 +320,7 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 			statuses, err = kinit.Services(deadlineCtx)
 			// Check crash evidence before a potentially slow readiness request.
 			if err == nil && upgrade.CrashLoop(statuses) == "" {
-				if m, _ := membership.Load(); m != nil && m.Role != membership.RoleControlPlane {
+				if !controlPlane {
 					ready = memberReady(deadlineCtx, nodeName)
 				} else {
 					ready = clusterReady(deadlineCtx)
@@ -319,7 +338,28 @@ func assessBoot(ctx context.Context, kinit *supervisor.Client, nodeName string) 
 				}
 			}
 		}
+		if ready && (policyErr != nil || len(checks) > 0) {
+			err := policyErr
+			if err == nil {
+				if client == nil {
+					client = probationClient(controlPlane)
+				}
+				err = workloadHealth(deadlineCtx, client, nodeName, checks)
+			}
+			if err != nil {
+				ready = false
+				if why := err.Error(); why != unhealthy {
+					klog.Warningf("boot assessment: workload health: %s", why)
+					unhealthy = why
+				}
+			} else {
+				unhealthy = ""
+			}
+		}
 		good, reason := assessment.Observe(time.Now(), ready, statuses)
+		if reason != "" && unhealthy != "" && upgrade.CrashLoop(statuses) == "" {
+			reason += "; last health check: " + unhealthy
+		}
 		if reason != "" {
 			reboot, err := upgrade.FailAttempt(upgrade.FailureDetails(reason, statuses), upgrade.CrashLoopService(statuses))
 			if err != nil {
