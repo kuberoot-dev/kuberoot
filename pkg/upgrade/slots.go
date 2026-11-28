@@ -39,6 +39,7 @@ const (
 type Entry struct {
 	Failure       string
 	failedAttempt int
+	failedService string
 	Slot          string
 	File          string // file name, including any boot counter
 	Version       int    // sort version: the highest good-or-trying entry boots by default
@@ -146,7 +147,7 @@ func readEntriesIn(dir, current string) ([]Entry, error) {
 			if v, ok := strings.CutPrefix(line, failurePrefix); ok {
 				var f attemptFailure
 				if json.Unmarshal([]byte(v), &f) == nil {
-					e.Failure, e.failedAttempt = f.Message, f.Attempt
+					e.Failure, e.failedAttempt, e.failedService = f.Message, f.Attempt, f.Service
 				}
 			}
 			if v, ok := strings.CutPrefix(line, "version "); ok {

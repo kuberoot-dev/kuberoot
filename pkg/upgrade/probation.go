@@ -28,12 +28,27 @@ const (
 // CrashLoop counts unrequested exits, including exit zero and spawn failures:
 // supervised services are expected to stay up. Explicit restarts do not count.
 func CrashLoop(statuses []supervisor.ServiceStatus) string {
-	for _, s := range statuses {
-		if s.UnrequestedExits >= CrashLoopExits {
-			return fmt.Sprintf("service %s: %d unrequested exits; last exit: %s", s.Name, s.UnrequestedExits, s.LastExit)
-		}
+	if s := crashLooping(statuses); s != nil {
+		return fmt.Sprintf("service %s: %d unrequested exits; last exit: %s", s.Name, s.UnrequestedExits, s.LastExit)
 	}
 	return ""
+}
+
+// CrashLoopService names the service whose crash loop fails the attempt, or "".
+func CrashLoopService(statuses []supervisor.ServiceStatus) string {
+	if s := crashLooping(statuses); s != nil {
+		return s.Name
+	}
+	return ""
+}
+
+func crashLooping(statuses []supervisor.ServiceStatus) *supervisor.ServiceStatus {
+	for i := range statuses {
+		if statuses[i].UnrequestedExits >= CrashLoopExits {
+			return &statuses[i]
+		}
+	}
+	return nil
 }
 
 // Assessment uses caller-supplied times, so no clock or sleeps enter the policy.
@@ -81,21 +96,29 @@ const failurePrefix = "# kuberoot-failure "
 type attemptFailure struct {
 	Attempt int
 	Message string
+	// Service is the crash-looping service, when that is what failed.
+	Service string `json:",omitempty"`
 }
 
 // FailAttempt records the failure before reboot. systemd-boot already consumed
 // this attempt when it booted: never decrement the counter a second time.
 // Recheck Good and fallback under the same lock as MarkGood.
-func FailAttempt(reason string) (reboot bool, err error) {
+//
+// crashed names the service whose crash loop failed this attempt, if any.
+// When the same service crash-looped in the previous attempt as well, the
+// fault comes with the release, not with this boot: the slot gives up the
+// attempts it has left and the node returns to its Good slot now, instead of
+// spending another boot on the same crash.
+func FailAttempt(reason, crashed string) (reboot bool, err error) {
 	err = withESP(func() error {
 		var err error
-		reboot, err = failAttemptIn(entriesDir, CurrentSlot(), reason)
+		reboot, err = failAttemptIn(entriesDir, CurrentSlot(), reason, crashed)
 		return err
 	})
 	return
 }
 
-func failAttemptIn(dir, current, reason string) (bool, error) {
+func failAttemptIn(dir, current, reason, crashed string) (bool, error) {
 	entries, err := readEntriesIn(dir, current)
 	if err != nil {
 		return false, err
@@ -123,9 +146,23 @@ func failAttemptIn(dir, current, reason string) (bool, error) {
 		if e.Failure != "" && e.failedAttempt == e.Done {
 			return fallback, nil
 		}
-		data, _ := json.Marshal(attemptFailure{e.Done, fmt.Sprintf("attempt %d: %s", e.Done, reason)})
+		message := fmt.Sprintf("attempt %d: %s", e.Done, reason)
+		repeated := crashed != "" && e.failedService == crashed && e.failedAttempt == e.Done-1
+		giveUp := repeated && fallback && e.Left > 0
+		if giveUp {
+			message = fmt.Sprintf("attempt %d: service %s crash-looped in attempt %d too; %d remaining attempts given up: %s", e.Done, crashed, e.Done-1, e.Left, reason)
+		}
+		data, _ := json.Marshal(attemptFailure{Attempt: e.Done, Message: message, Service: crashed})
 		lines = append(lines, failurePrefix+string(data))
-		return fallback, atomicfile.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+		if err := atomicfile.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+			return false, err
+		}
+		if giveUp {
+			// No attempts left: systemd-boot skips the slot and boots the Good one.
+			bad := fmt.Sprintf("kuberoot-%s+0-%d.conf", e.Slot, e.Done)
+			return fallback, os.Rename(path, filepath.Join(dir, bad))
+		}
+		return fallback, nil
 	}
 	return false, nil
 }
