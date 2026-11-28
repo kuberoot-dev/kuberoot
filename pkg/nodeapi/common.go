@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"sort"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -24,14 +27,40 @@ func resourceVersion(parts ...any) string {
 	return fmt.Sprintf("%d", h.Sum64()>>1)
 }
 
+// initialEventsEnd marks the bookmark that ends a watch's initial events.
+const initialEventsEnd = "k8s.io/initial-events-end"
+
 // pollWatch turns a list function into a watch: it emits MODIFIED, ADDED and
 // DELETED events as polled snapshots differ. Node state has no change feed.
-func pollWatch(ctx context.Context, list func(context.Context) (map[string]runtime.Object, error)) watch.Interface {
+//
+// A watch that asks for the initial events (sendInitialEvents, how informers
+// list since Kubernetes 1.32) gets every object as ADDED and then the
+// bookmark that says they are all there. Without it the cluster's
+// controllers waited for that bookmark in vain and started over, logging a
+// warning every few seconds for every resource of the node API.
+func pollWatch(ctx context.Context, opts *metainternalversion.ListOptions, newObj func() runtime.Object, list func(context.Context) (map[string]runtime.Object, error)) watch.Interface {
 	events := make(chan watch.Event)
 	w := watch.NewProxyWatcher(events)
 	go func() {
 		defer close(events)
 		prev, _ := list(ctx)
+		if opts != nil && opts.SendInitialEvents != nil && *opts.SendInitialEvents {
+			names := make([]string, 0, len(prev))
+			for name := range prev {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				if !send(ctx, w, events, watch.Event{Type: watch.Added, Object: prev[name]}) {
+					return
+				}
+			}
+			if bookmark := initialEventsBookmark(newObj()); bookmark != nil && opts.AllowWatchBookmarks {
+				if !send(ctx, w, events, watch.Event{Type: watch.Bookmark, Object: bookmark}) {
+					return
+				}
+			}
+		}
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -64,6 +93,29 @@ func pollWatch(ctx context.Context, list func(context.Context) (map[string]runti
 		}
 	}()
 	return w
+}
+
+// send delivers an event unless the watch ends first.
+func send(ctx context.Context, w *watch.ProxyWatcher, events chan<- watch.Event, e watch.Event) bool {
+	select {
+	case events <- e:
+		return true
+	case <-ctx.Done():
+	case <-w.StopChan():
+	}
+	return false
+}
+
+// initialEventsBookmark makes obj, an empty object of the watched kind,
+// the bookmark that ends the initial events.
+func initialEventsBookmark(obj runtime.Object) runtime.Object {
+	m, err := meta.Accessor(obj)
+	if err != nil {
+		return nil
+	}
+	m.SetAnnotations(map[string]string{initialEventsEnd: "true"})
+	m.SetResourceVersion("1")
+	return obj
 }
 
 func versionOf(obj runtime.Object) string {

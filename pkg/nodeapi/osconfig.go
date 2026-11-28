@@ -81,8 +81,8 @@ func (s *osConfigStorage) List(_ context.Context, _ *metainternalversion.ListOpt
 	return &node.OSConfigList{Items: []node.OSConfig{*s.current()}}, nil
 }
 
-func (s *osConfigStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, func(context.Context) (map[string]kruntime.Object, error) {
+func (s *osConfigStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, func(context.Context) (map[string]kruntime.Object, error) {
 		return map[string]kruntime.Object{s.nodeName: s.current()}, nil
 	}), nil
 }

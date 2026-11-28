@@ -337,7 +337,7 @@ func (s *fleetStorage) Watch(ctx context.Context, opts *metainternalversion.List
 	if !viaCluster(ctx) {
 		return s.local.(rest.Watcher).Watch(ctx, opts)
 	}
-	return pollWatch(ctx, s.snapshot), nil
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 func (s *fleetStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo,

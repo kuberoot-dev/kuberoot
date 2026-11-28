@@ -101,8 +101,8 @@ func (s modelServerStorage) snapshot(context.Context) (map[string]runtime.Object
 	return out, nil
 }
 
-func (s modelServerStorage) Watch(ctx context.Context, _ *metainternalversion.ListOptions) (watch.Interface, error) {
-	return pollWatch(ctx, s.snapshot), nil
+func (s modelServerStorage) Watch(ctx context.Context, opts *metainternalversion.ListOptions) (watch.Interface, error) {
+	return pollWatch(ctx, opts, s.New, s.snapshot), nil
 }
 
 func validModelServer(spec node.ModelServerSpec) error {
